@@ -378,6 +378,58 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .anexo-upload-form { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .anexo-upload-form input[type="file"] { font-size: 12px; max-width: 220px; }
 
+/* ---------- Diálogo interno (comentários por nota) ---------- */
+.comentarios-lista {
+  max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  padding: 4px 2px 8px;
+}
+.comentario-item {
+  max-width: 85%; align-self: flex-start; background: var(--surface-1);
+  border: 1px solid var(--grid); border-radius: 8px; padding: 7px 10px; font-size: 12.5px;
+}
+.comentario-item.own { align-self: flex-end; background: rgba(245, 196, 51, 0.10); border-color: var(--accent-dim); }
+.comentario-autor { font-weight: 600; font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); }
+.comentario-para { font-size: 10.5px; color: var(--accent); font-family: var(--font-mono); margin-top: 1px; }
+.comentario-texto { white-space: pre-wrap; word-break: break-word; line-height: 1.45; margin-top: 2px; }
+.comentario-hora { font-size: 10px; color: var(--text-muted); margin-top: 4px; text-align: right; font-family: var(--font-mono); }
+.comentario-excluir { background: none; border: none; color: var(--text-muted); font-size: 10px; cursor: pointer; padding: 0; margin-left: 8px; text-decoration: underline; }
+.comentario-excluir:hover { color: var(--text-secondary); }
+.comentario-form { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.comentario-form-row { display: flex; gap: 8px; align-items: flex-end; }
+.comentario-form select {
+  font-size: 11.5px; padding: 6px 8px; background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text-secondary); font-family: var(--font-mono); max-width: 100%;
+}
+.comentario-form textarea {
+  flex: 1; min-height: 42px; max-height: 140px; resize: vertical; font-family: inherit; font-size: 12.5px;
+  padding: 8px 10px; background: var(--surface-1); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary);
+}
+.comentario-form textarea:focus { outline: none; border-color: var(--accent); }
+
+/* ---------- Sininho de mensagens sem resposta (topbar) ---------- */
+.msg-badge {
+  display: inline-flex; align-items: center; gap: 5px; background: var(--surface-1);
+  border: 1px solid var(--baseline); color: var(--text-secondary); border-radius: 999px;
+  padding: 4px 10px; font-size: 12px; cursor: pointer; font-family: var(--font-mono);
+}
+.msg-badge.has-pending { border-color: var(--accent-dim); color: var(--text-primary); }
+.msg-badge-count {
+  background: var(--accent); color: #1A1E24; border-radius: 999px; min-width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; padding: 0 5px;
+}
+.msg-panel {
+  position: fixed; top: 62px; right: 24px; width: 340px; max-height: 420px; overflow-y: auto;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.5); z-index: 60; padding: 6px;
+}
+.msg-panel-item { padding: 9px 10px; border-bottom: 1px solid var(--grid); cursor: pointer; font-size: 12px; border-radius: 6px; }
+.msg-panel-item:hover { background: var(--surface-1); }
+.msg-panel-item:last-child { border-bottom: none; }
+.msg-panel-nota { font-weight: 600; font-family: var(--font-mono); font-size: 11px; color: var(--text-secondary); }
+.msg-panel-autor { color: var(--accent); font-weight: 600; }
+.msg-panel-texto { margin-top: 3px; color: var(--text-primary); white-space: pre-wrap; }
+.msg-panel-vazio { padding: 16px 10px; text-align: center; color: var(--text-muted); font-size: 12px; }
+
 .filters-row { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 14px; flex-wrap: wrap; }
 .filters-row .field { margin-bottom: 0; min-width: 140px; }
 
@@ -464,10 +516,14 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
       <div class="user-chip">
         <span id="userName"></span>
         <span class="role-badge" id="userRoleBadge"></span>
+        <button type="button" class="msg-badge hidden" id="msgBadgeBtn" title="Mensagens sem resposta direcionadas a você">
+          💬 <span class="msg-badge-count" id="msgBadgeCount">0</span>
+        </button>
         <button class="btn secondary small" id="minhaContaBtn">Minha conta</button>
         <button class="btn secondary small" id="logoutBtn">Sair</button>
       </div>
     </header>
+    <div id="msgPanel" class="msg-panel hidden"></div>
     <div class="roadline"></div>
 
     <div class="app-body">
@@ -1210,6 +1266,28 @@ async function apiGet(path) {
     return { user: { id: perfil.id, name: perfil.name, email: perfil.email, role: perfil.role, coluna: perfil.coluna } };
   }
 
+  if (pathname === '/api/comentarios/pendentes') {
+    const { data: authData } = await supabaseClient.auth.getUser();
+    if (!authData || !authData.user) fail(401, 'Não autenticado.');
+    const { data, error } = await supabaseClient
+      .from('nota_comentarios')
+      .select('id, nota_id, mensagem, created_at, autor_id, notas(numero, fornecedor)')
+      .eq('destinatario_id', authData.user.id)
+      .is('lida_em', null)
+      .order('created_at', { ascending: false })
+      .limit(50);
+    throwSupabaseError(error);
+    const nomes = await buscarNomes((data || []).map((c) => c.autor_id));
+    return {
+      pendentes: (data || []).map((c) => ({
+        id: c.id, notaId: c.nota_id, mensagem: c.mensagem, createdAt: c.created_at,
+        autorNome: c.autor_id ? (nomes[c.autor_id] || null) : null,
+        notaNumero: c.notas ? c.notas.numero : null,
+        notaFornecedor: c.notas ? c.notas.fornecedor : null,
+      })),
+    };
+  }
+
   if (pathname === '/api/notas') {
     const { data, error } = await supabaseClient.from('notas').select('*').order('created_at', { ascending: false });
     throwSupabaseError(error);
@@ -1220,18 +1298,42 @@ async function apiGet(path) {
     const id = Number(seg[2]);
     const { data: nota, error } = await supabaseClient.from('notas').select('*').eq('id', id).maybeSingle();
     if (error || !nota) fail(404, 'Nota fiscal não encontrada.');
-    const [{ data: movs }, { data: anexos }] = await Promise.all([
+    const [{ data: movs }, { data: anexos }, { data: comentarios }] = await Promise.all([
       supabaseClient.from('movements').select('*').eq('nota_id', id).order('moved_at', { ascending: true }),
       supabaseClient.from('anexos').select('*').eq('nota_id', id).order('uploaded_at', { ascending: false }),
+      supabaseClient.from('nota_comentarios').select('*').eq('nota_id', id).order('created_at', { ascending: true }),
     ]);
     const nomes = await buscarNomes([
       ...(movs || []).flatMap((m) => [m.moved_by, m.assigned_to]),
       ...(anexos || []).map((a) => a.uploaded_by),
+      ...(comentarios || []).flatMap((c) => [c.autor_id, c.destinatario_id]),
     ]);
     const historico = (movs || []).map((m) => ({ ...m, moved_by_name: nomes[m.moved_by] || null, assigned_to_name: m.assigned_to ? (nomes[m.assigned_to] || null) : null }));
     const anexosComNome = (anexos || []).map((a) => ({ ...a, uploaded_by_name: a.uploaded_by ? (nomes[a.uploaded_by] || null) : null }));
+    const comentariosComNome = (comentarios || []).map((c) => ({
+      ...c,
+      autor_nome: c.autor_id ? (nomes[c.autor_id] || null) : null,
+      destinatario_nome: c.destinatario_id ? (nomes[c.destinatario_id] || null) : null,
+    }));
     const [notaFormatada] = await shapeNotas([nota]);
-    return { nota: notaFormatada, historico, anexos: anexosComNome };
+    return { nota: notaFormatada, historico, anexos: anexosComNome, comentarios: comentariosComNome };
+  }
+
+  // Rota leve, usada pelo polling do diálogo interno enquanto o modal de
+  // detalhe está aberto — evita recarregar nota/histórico/anexos a cada
+  // atualização da conversa.
+  if (seg[1] === 'notas' && seg[3] === 'comentarios' && seg.length === 4) {
+    const id = Number(seg[2]);
+    const { data: comentarios, error } = await supabaseClient.from('nota_comentarios').select('*').eq('nota_id', id).order('created_at', { ascending: true });
+    throwSupabaseError(error, 'Sem permissão para ver o diálogo desta nota.');
+    const nomes = await buscarNomes((comentarios || []).flatMap((c) => [c.autor_id, c.destinatario_id]));
+    return {
+      comentarios: (comentarios || []).map((c) => ({
+        ...c,
+        autor_nome: c.autor_id ? (nomes[c.autor_id] || null) : null,
+        destinatario_nome: c.destinatario_id ? (nomes[c.destinatario_id] || null) : null,
+      })),
+    };
   }
 
   if (seg[1] === 'notas' && seg[3] === 'anexos') {
@@ -1477,6 +1579,30 @@ async function apiPost(path, body) {
     return { user: fmtUserRow(data) };
   }
 
+  if (seg[1] === 'notas' && seg[3] === 'comentarios' && seg.length === 4) {
+    const texto = (body.mensagem || '').trim();
+    if (!texto) fail(400, 'Escreva uma mensagem antes de enviar.');
+    const { data: authData } = await supabaseClient.auth.getUser();
+    const { data, error } = await supabaseClient.from('nota_comentarios').insert({
+      nota_id: Number(seg[2]), autor_id: authData.user.id, mensagem: texto,
+      destinatario_id: body.destinatarioId || null,
+    }).select().single();
+    throwSupabaseError(error, 'Não foi possível enviar a mensagem nesta nota.');
+    return { comentario: { ...data, autor_nome: CURRENT_USER.name } };
+  }
+
+  // Chamado quando a pessoa abre (ou já está com aberto) o diálogo de uma
+  // nota — marca como lidas as mensagens direcionadas a ela nessa nota, o
+  // que atualiza o contador do sininho no topo.
+  if (seg[1] === 'notas' && seg[3] === 'comentarios' && seg[4] === 'marcar-lidas') {
+    const { data: authData } = await supabaseClient.auth.getUser();
+    const { error } = await supabaseClient.from('nota_comentarios')
+      .update({ lida_em: new Date().toISOString() })
+      .eq('nota_id', Number(seg[2])).eq('destinatario_id', authData.user.id).is('lida_em', null);
+    throwSupabaseError(error);
+    return { ok: true };
+  }
+
   if (path === '/api/obras') {
     const { data: obra, error } = await supabaseClient.from('obras').insert({ nome: body.nome, codigo: body.codigo || null }).select().single();
     throwSupabaseError(error, 'Já existe uma obra cadastrada com esse nome.');
@@ -1559,6 +1685,11 @@ async function apiDelete(path) {
   if (seg[0] === 'api' && seg[1] === 'users') {
     const { error } = await supabaseClient.rpc('rpc_excluir_usuario', { p_user_id: seg[2] });
     throwSupabaseError(error);
+    return { ok: true };
+  }
+  if (seg[0] === 'api' && seg[1] === 'comentarios') {
+    const { error } = await supabaseClient.from('nota_comentarios').delete().eq('id', Number(seg[2]));
+    throwSupabaseError(error, 'Sem permissão para excluir esta mensagem.');
     return { ok: true };
   }
   if (seg[0] === 'api' && seg[1] === 'notas') {
@@ -1679,6 +1810,14 @@ async function init() {
   document.getElementById('loginForm').addEventListener('submit', onLoginSubmit);
   document.getElementById('logoutBtn').addEventListener('click', onLogout);
   document.getElementById('minhaContaBtn').addEventListener('click', openChangePasswordModal);
+  document.getElementById('msgBadgeBtn').addEventListener('click', toggleMsgPanel);
+  document.addEventListener('click', (ev) => {
+    const panel = document.getElementById('msgPanel');
+    const btn = document.getElementById('msgBadgeBtn');
+    if (panel.classList.contains('hidden')) return;
+    if (panel.contains(ev.target) || btn.contains(ev.target)) return;
+    panel.classList.add('hidden');
+  });
   document.getElementById('esqueciSenhaLink').addEventListener('click', (ev) => {
     ev.preventDefault();
     openEsqueciSenhaModal();
@@ -1741,6 +1880,10 @@ async function onLoginSubmit(ev) {
 async function onLogout() {
   await logoutSupabaseAuth();
   CURRENT_USER = null;
+  if (MSG_BADGE_POLL) { clearInterval(MSG_BADGE_POLL); MSG_BADGE_POLL = null; }
+  PENDENTES_CACHE = [];
+  document.getElementById('msgBadgeBtn').classList.add('hidden');
+  document.getElementById('msgPanel').classList.add('hidden');
   document.getElementById('loginPassword').value = '';
   showLogin();
 }
@@ -1751,6 +1894,10 @@ function afterLogin(user) {
   document.getElementById('appShell').classList.remove('hidden');
   document.getElementById('userName').textContent = user.name;
   document.getElementById('userRoleBadge').textContent = ROLE_LABELS[user.role] + (user.coluna ? ' · ' + COLUNA_LABELS[user.coluna] : '');
+
+  atualizarBadgeMensagens();
+  if (MSG_BADGE_POLL) clearInterval(MSG_BADGE_POLL);
+  MSG_BADGE_POLL = setInterval(atualizarBadgeMensagens, 20000);
 
   const isAdmin = user.role === 'admin';
   const isSupervisor = user.role === 'supervisor';
@@ -2572,9 +2719,143 @@ async function visualizarAnexoLocal(anexoId, notaIdParaVoltar) {
   document.getElementById('visualizarBaixar').addEventListener('click', () => baixarAnexoLocal(anexoId));
 }
 
+// ID do controle de setInterval do polling do diálogo interno — guardado
+// fora da função para que closeModal() consiga cancelá-lo de qualquer lugar,
+// mesmo se o modal for fechado clicando fora dele.
+let COMENTARIOS_POLL = null;
+let COMENTARIOS_POLL_NOTA_ID = null;
+
+// Sininho de "mensagens sem resposta" no topo da aplicação — independe de
+// qual modal/aba está aberta, por isso tem seu próprio polling.
+let MSG_BADGE_POLL = null;
+let PENDENTES_CACHE = [];
+
+async function atualizarBadgeMensagens() {
+  const btn = document.getElementById('msgBadgeBtn');
+  if (!btn) return;
+  try {
+    const { pendentes } = await api.get('/api/comentarios/pendentes');
+    PENDENTES_CACHE = pendentes;
+    document.getElementById('msgBadgeCount').textContent = pendentes.length;
+    btn.classList.remove('hidden');
+    btn.classList.toggle('has-pending', pendentes.length > 0);
+    const panel = document.getElementById('msgPanel');
+    if (panel && !panel.classList.contains('hidden')) renderMsgPanel();
+  } catch (e) { /* melhor esforço — não interrompe o uso do sistema */ }
+}
+
+function renderMsgPanel() {
+  const panel = document.getElementById('msgPanel');
+  if (!PENDENTES_CACHE.length) {
+    panel.innerHTML = '<div class="msg-panel-vazio">Nenhuma mensagem sem resposta.</div>';
+    return;
+  }
+  panel.innerHTML = PENDENTES_CACHE.map((p) => `
+    <div class="msg-panel-item" data-nota-id="${p.notaId}">
+      <div class="msg-panel-nota">NF ${escapeHtml(p.notaNumero || '—')} · ${escapeHtml(p.notaFornecedor || '')}</div>
+      <div><span class="msg-panel-autor">${escapeHtml(p.autorNome || '—')}</span> · ${fmtDateTime(p.createdAt)}</div>
+      <div class="msg-panel-texto">${escapeHtml(p.mensagem)}</div>
+    </div>`).join('');
+  panel.querySelectorAll('.msg-panel-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      panel.classList.add('hidden');
+      openDetalheModal(Number(el.dataset.notaId));
+    });
+  });
+}
+
+function toggleMsgPanel() {
+  const panel = document.getElementById('msgPanel');
+  const abrir = panel.classList.contains('hidden');
+  if (abrir) renderMsgPanel();
+  panel.classList.toggle('hidden', !abrir);
+}
+
+function renderComentariosList(comentarios) {
+  if (!comentarios || comentarios.length === 0) {
+    return '<p class="legend-note">Nenhuma mensagem ainda. Comece a conversa com quem também está tratando esta nota.</p>';
+  }
+  return comentarios.map((c) => {
+    const own = CURRENT_USER && c.autor_id === CURRENT_USER.id;
+    const podeExcluir = own || (CURRENT_USER && CURRENT_USER.role === 'admin');
+    return `
+    <div class="comentario-item${own ? ' own' : ''}" data-comentario-id="${c.id}">
+      <div class="comentario-autor">${escapeHtml(c.autor_nome || '—')}</div>
+      ${c.destinatario_nome ? `<div class="comentario-para">Para: ${escapeHtml(c.destinatario_nome)}</div>` : ''}
+      <div class="comentario-texto">${escapeHtml(c.mensagem)}</div>
+      <div class="comentario-hora">${fmtDateTime(c.created_at)}${podeExcluir ? ` · <button type="button" class="comentario-excluir" data-action="excluir-comentario" data-comentario-id="${c.id}">excluir</button>` : ''}</div>
+    </div>`;
+  }).join('');
+}
+
+// Reúne quem já participa da nota (responsável atual, quem cadastrou, quem
+// homologou/validou o lançamento e quem já comentou na thread) para compor
+// a lista de "direcionar mensagem para" — evita ter que digitar e-mail/nome
+// e evita listar todo mundo do sistema, só quem já tem relação com a nota.
+function participantesDaNota(nota, comentarios) {
+  const mapa = new Map();
+  const add = (id, nome) => { if (id && nome && (!CURRENT_USER || id !== CURRENT_USER.id) && !mapa.has(id)) mapa.set(id, nome); };
+  add(nota.assignedTo, nota.assignedToName);
+  add(nota.createdBy, nota.createdByName);
+  add(nota.homologadoPor, nota.homologadoPorNome);
+  add(nota.lancamentoValidadoPor, nota.lancamentoValidadoPorNome);
+  (comentarios || []).forEach((c) => add(c.autor_id, c.autor_nome));
+  return [...mapa.entries()].map(([id, nome]) => ({ id, nome }));
+}
+
+function wireComentariosExcluir(notaId) {
+  document.querySelectorAll('[data-action="excluir-comentario"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Excluir esta mensagem? Essa ação não pode ser desfeita.')) return;
+      try {
+        await api.delete(`/api/comentarios/${btn.dataset.comentarioId}`);
+        await atualizarComentarios(notaId);
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
+  });
+}
+
+// Marca como lidas as mensagens direcionadas a mim nesta nota (chamado ao
+// abrir o modal e a cada atualização do diálogo) e atualiza o sininho do
+// topo. Melhor esforço — uma falha aqui não deve travar a visualização.
+async function marcarComentariosComoLidos(notaId) {
+  try {
+    await api.post(`/api/notas/${notaId}/comentarios/marcar-lidas`, {});
+    atualizarBadgeMensagens();
+  } catch (e) { /* melhor esforço */ }
+}
+
+// Recarrega só a lista de mensagens (sem redesenhar o modal inteiro, o que
+// preservaria o rascunho não enviado no textarea).
+async function atualizarComentarios(notaId) {
+  const lista = document.getElementById('comentariosLista');
+  if (!lista) return; // modal já foi fechado
+  try {
+    const { comentarios } = await api.get(`/api/notas/${notaId}/comentarios`);
+    lista.innerHTML = renderComentariosList(comentarios);
+    lista.scrollTop = lista.scrollHeight;
+    wireComentariosExcluir(notaId);
+    marcarComentariosComoLidos(notaId);
+  } catch (e) {
+    // Falha silenciosa no polling — não interrompe quem está digitando.
+  }
+}
+
+function iniciarPollingComentarios(notaId) {
+  pararPollingComentarios();
+  COMENTARIOS_POLL_NOTA_ID = notaId;
+  COMENTARIOS_POLL = setInterval(() => atualizarComentarios(notaId), 6000);
+}
+
+function pararPollingComentarios() {
+  if (COMENTARIOS_POLL) { clearInterval(COMENTARIOS_POLL); COMENTARIOS_POLL = null; COMENTARIOS_POLL_NOTA_ID = null; }
+}
+
 async function openDetalheModal(id) {
   try {
-    const { nota, historico, anexos } = await api.get(`/api/notas/${id}`);
+    const { nota, historico, anexos, comentarios } = await api.get(`/api/notas/${id}`);
     const linhas = historico.map((m) => `
       <div style="padding:8px 0;border-bottom:1px solid var(--grid);font-size:12.5px;">
         <div><strong>${fmtDateTime(m.moved_at)}</strong> — ${COLUNA_LABELS[m.from_status] || 'novo'} → ${COLUNA_LABELS[m.to_status]}</div>
@@ -2640,12 +2921,60 @@ async function openDetalheModal(id) {
       </form>
       ` : ''}
 
+      <div class="modal-section-title">Diálogo interno</div>
+      <div class="comentarios-lista" id="comentariosLista">${renderComentariosList(comentarios)}</div>
+      <form id="comentarioForm" class="comentario-form">
+        <div class="comentario-form-row">
+          <select id="comentarioDestinatario">
+            <option value="">Mensagem geral (todos os participantes)</option>
+            ${participantesDaNota(nota, comentarios).map((p) => `<option value="${p.id}">Direcionar para: ${escapeHtml(p.nome)}</option>`).join('')}
+          </select>
+        </div>
+        <div class="comentario-form-row">
+          <textarea id="comentarioInput" placeholder="Escreva uma mensagem para quem também está tratando esta nota…" maxlength="4000"></textarea>
+          <button type="submit" class="btn small">Enviar</button>
+        </div>
+      </form>
+      <span id="comentarioMsg" class="legend-note"></span>
+
       <div class="modal-section-title">Histórico</div>
       <div style="max-height:220px;overflow-y:auto;">${linhas || '<p class="legend-note">Sem histórico.</p>'}</div>
       <div class="form-actions"><button class="btn secondary" id="modalCloseBtn">Fechar</button></div>
     `, { wide: true });
 
     document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+
+    // Diálogo interno: envio de mensagem + atualização automática enquanto
+    // o modal estiver aberto, para simular uma conversa entre os
+    // participantes que estão tratando a nota (sem depender de recarregar
+    // o modal inteiro, o que perderia o que a pessoa já digitou).
+    const comentarioForm = document.getElementById('comentarioForm');
+    comentarioForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const input = document.getElementById('comentarioInput');
+      const destSelect = document.getElementById('comentarioDestinatario');
+      const msg = document.getElementById('comentarioMsg');
+      const texto = input.value.trim();
+      msg.textContent = '';
+      if (!texto) { msg.textContent = 'Escreva uma mensagem antes de enviar.'; return; }
+      try {
+        await api.post(`/api/notas/${id}/comentarios`, { mensagem: texto, destinatarioId: destSelect.value || null });
+        input.value = '';
+        await atualizarComentarios(id);
+      } catch (e) {
+        msg.textContent = e.message;
+      }
+    });
+    // Enter envia, Shift+Enter quebra linha — igual à maioria dos chats.
+    document.getElementById('comentarioInput').addEventListener('keydown', (ev) => {
+      if (ev.key === 'Enter' && !ev.shiftKey) {
+        ev.preventDefault();
+        comentarioForm.requestSubmit();
+      }
+    });
+    wireComentariosExcluir(id);
+    marcarComentariosComoLidos(id);
+    iniciarPollingComentarios(id);
 
     document.getElementById('anexoUploadForm').addEventListener('submit', async (ev) => {
       ev.preventDefault();
@@ -3489,6 +3818,7 @@ function showModal(innerHtml, opts) {
   });
 }
 function closeModal() {
+  pararPollingComentarios();
   document.getElementById('modalRoot').innerHTML = '';
 }
 
