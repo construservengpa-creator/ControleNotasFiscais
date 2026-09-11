@@ -433,6 +433,10 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
   background: var(--accent); color: #1A1E24; border-radius: 999px; min-width: 18px; height: 18px;
   display: inline-flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 700; padding: 0 5px;
 }
+/* Sininho de "notas atribuídas" usa o mesmo estilo do de mensagens, só troca
+   a cor de destaque para diferenciar os dois de relance. */
+.atr-badge.has-pending { border-color: #7CB3E8; color: var(--text-primary); }
+.atr-badge.has-pending .msg-badge-count { background: #7CB3E8; }
 .msg-panel {
   position: fixed; top: 62px; right: 24px; width: 340px; max-height: 420px; overflow-y: auto;
   background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px;
@@ -532,6 +536,9 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
       <div class="user-chip">
         <span id="userName"></span>
         <span class="role-badge" id="userRoleBadge"></span>
+        <button type="button" class="msg-badge atr-badge hidden" id="atrBadgeBtn" title="Notas atribuídas a você que ainda não foram abertas">
+          🗂️ <span class="msg-badge-count" id="atrBadgeCount">0</span>
+        </button>
         <button type="button" class="msg-badge hidden" id="msgBadgeBtn" title="Mensagens sem resposta direcionadas a você">
           💬 <span class="msg-badge-count" id="msgBadgeCount">0</span>
         </button>
@@ -539,6 +546,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
         <button class="btn secondary small" id="logoutBtn">Sair</button>
       </div>
     </header>
+    <div id="atrPanel" class="msg-panel hidden"></div>
     <div id="msgPanel" class="msg-panel hidden"></div>
     <div class="roadline"></div>
 
@@ -1128,6 +1136,7 @@ function fmtNotaRow(n, nomes, obras) {
     pedidoCompras: n.pedido_compras, vencimento: n.vencimento, formaPagamento: n.forma_pagamento,
     frete: n.frete || 'nao', obra: n.obra_id ? (obras[n.obra_id] || null) : null, obraId: n.obra_id || null,
     prioridade: n.prioridade || 'media', origem: n.origem || 'manual',
+    assignedSeenAt: n.assigned_seen_at || null,
     chaveAcesso: n.chave_acesso || null, destinatario: n.destinatario || null, cnpjDestinatario: n.cnpj_destinatario || null,
     homologadoPor: n.homologado_por || null, homologadoPorNome: n.homologado_por ? (nomes[n.homologado_por] || null) : null,
     homologadoEm: n.homologado_em || null, homologacaoObs: n.homologacao_obs || null,
@@ -1300,6 +1309,28 @@ async function apiGet(path) {
         autorNome: c.autor_id ? (nomes[c.autor_id] || null) : null,
         notaNumero: c.notas ? c.notas.numero : null,
         notaFornecedor: c.notas ? c.notas.fornecedor : null,
+      })),
+    };
+  }
+
+  // Notas atribuídas ao usuário logado que ele ainda não abriu (sininho de
+  // "atribuições" no topo) — mesma lógica do sininho de mensagens, mas
+  // baseada em assigned_seen_at em vez de nota_comentarios.lida_em.
+  if (pathname === '/api/notas/atribuicoes-pendentes') {
+    const { data: authData } = await supabaseClient.auth.getUser();
+    if (!authData || !authData.user) fail(401, 'Não autenticado.');
+    const { data, error } = await supabaseClient
+      .from('notas')
+      .select('id, numero, fornecedor, assigned_at')
+      .eq('assigned_to', authData.user.id)
+      .is('assigned_seen_at', null)
+      .in('status', COLUNAS_DISTRIBUIVEIS)
+      .order('assigned_at', { ascending: false })
+      .limit(50);
+    throwSupabaseError(error);
+    return {
+      pendentes: (data || []).map((n) => ({
+        notaId: n.id, notaNumero: n.numero, notaFornecedor: n.fornecedor, assignedAt: n.assigned_at,
       })),
     };
   }
@@ -1834,6 +1865,14 @@ async function init() {
     if (panel.contains(ev.target) || btn.contains(ev.target)) return;
     panel.classList.add('hidden');
   });
+  document.getElementById('atrBadgeBtn').addEventListener('click', toggleAtrPanel);
+  document.addEventListener('click', (ev) => {
+    const panel = document.getElementById('atrPanel');
+    const btn = document.getElementById('atrBadgeBtn');
+    if (panel.classList.contains('hidden')) return;
+    if (panel.contains(ev.target) || btn.contains(ev.target)) return;
+    panel.classList.add('hidden');
+  });
   document.getElementById('esqueciSenhaLink').addEventListener('click', (ev) => {
     ev.preventDefault();
     openEsqueciSenhaModal();
@@ -1900,6 +1939,10 @@ async function onLogout() {
   PENDENTES_CACHE = [];
   document.getElementById('msgBadgeBtn').classList.add('hidden');
   document.getElementById('msgPanel').classList.add('hidden');
+  if (ATR_BADGE_POLL) { clearInterval(ATR_BADGE_POLL); ATR_BADGE_POLL = null; }
+  ATRIBUICOES_CACHE = [];
+  document.getElementById('atrBadgeBtn').classList.add('hidden');
+  document.getElementById('atrPanel').classList.add('hidden');
   document.getElementById('loginPassword').value = '';
   showLogin();
 }
@@ -1914,6 +1957,10 @@ function afterLogin(user) {
   atualizarBadgeMensagens();
   if (MSG_BADGE_POLL) clearInterval(MSG_BADGE_POLL);
   MSG_BADGE_POLL = setInterval(atualizarBadgeMensagens, 20000);
+
+  atualizarBadgeAtribuicoes();
+  if (ATR_BADGE_POLL) clearInterval(ATR_BADGE_POLL);
+  ATR_BADGE_POLL = setInterval(atualizarBadgeAtribuicoes, 20000);
 
   const isAdmin = user.role === 'admin';
   const isSupervisor = user.role === 'supervisor';
@@ -2770,8 +2817,67 @@ function renderMsgPanel() {
 function toggleMsgPanel() {
   const panel = document.getElementById('msgPanel');
   const abrir = panel.classList.contains('hidden');
+  document.getElementById('atrPanel').classList.add('hidden'); // fecha o outro sininho, se aberto
   if (abrir) renderMsgPanel();
   panel.classList.toggle('hidden', !abrir);
+}
+
+// Sininho de "notas atribuídas a você" — mesmo padrão do sininho de
+// mensagens acima (polling próprio, painel próprio), mas para avisar
+// quando uma nota é atribuída ao usuário logado e ele ainda não abriu.
+let ATR_BADGE_POLL = null;
+let ATRIBUICOES_CACHE = [];
+
+async function atualizarBadgeAtribuicoes() {
+  const btn = document.getElementById('atrBadgeBtn');
+  if (!btn) return;
+  try {
+    const { pendentes } = await api.get('/api/notas/atribuicoes-pendentes');
+    ATRIBUICOES_CACHE = pendentes;
+    document.getElementById('atrBadgeCount').textContent = pendentes.length;
+    btn.classList.remove('hidden');
+    btn.classList.toggle('has-pending', pendentes.length > 0);
+    const panel = document.getElementById('atrPanel');
+    if (panel && !panel.classList.contains('hidden')) renderAtrPanel();
+  } catch (e) { /* melhor esforço — não interrompe o uso do sistema */ }
+}
+
+function renderAtrPanel() {
+  const panel = document.getElementById('atrPanel');
+  if (!ATRIBUICOES_CACHE.length) {
+    panel.innerHTML = '<div class="msg-panel-vazio">Nenhuma nota nova atribuída a você.</div>';
+    return;
+  }
+  panel.innerHTML = ATRIBUICOES_CACHE.map((p) => `
+    <div class="msg-panel-item" data-nota-id="${p.notaId}">
+      <div class="msg-panel-nota">NF ${escapeHtml(p.notaNumero || '—')} · ${escapeHtml(p.notaFornecedor || '')}</div>
+      <div class="msg-panel-texto">Atribuída a você em ${fmtDateTime(p.assignedAt)}</div>
+    </div>`).join('');
+  panel.querySelectorAll('.msg-panel-item').forEach((el) => {
+    el.addEventListener('click', () => {
+      panel.classList.add('hidden');
+      openDetalheModal(Number(el.dataset.notaId));
+    });
+  });
+}
+
+function toggleAtrPanel() {
+  const panel = document.getElementById('atrPanel');
+  const abrir = panel.classList.contains('hidden');
+  document.getElementById('msgPanel').classList.add('hidden'); // fecha o outro sininho, se aberto
+  if (abrir) renderAtrPanel();
+  panel.classList.toggle('hidden', !abrir);
+}
+
+// Marca como vista a atribuição desta nota (só se ela estiver atribuída ao
+// usuário logado e ainda não tiver sido vista) — some do sininho na próxima
+// atualização. Melhor esforço: chamado ao abrir o detalhe/edição da nota.
+async function marcarAtribuicaoComoVista(nota) {
+  if (!nota || !CURRENT_USER || nota.assignedTo !== CURRENT_USER.id || nota.assignedSeenAt) return;
+  try {
+    await supabaseClient.from('notas').update({ assigned_seen_at: new Date().toISOString() }).eq('id', nota.id);
+    atualizarBadgeAtribuicoes();
+  } catch (e) { /* melhor esforço */ }
 }
 
 function renderComentariosList(comentarios) {
@@ -3013,6 +3119,7 @@ function pararPollingComentarios() {
 async function openDetalheModal(id) {
   try {
     const { nota, historico, anexos, comentarios } = await api.get(`/api/notas/${id}`);
+    marcarAtribuicaoComoVista(nota); // melhor esforço, não bloqueia a abertura do modal
     const linhas = historico.map((m) => `
       <div style="padding:8px 0;border-bottom:1px solid var(--grid);font-size:12.5px;">
         <div><strong>${fmtDateTime(m.moved_at)}</strong> — ${COLUNA_LABELS[m.from_status] || 'novo'} → ${COLUNA_LABELS[m.to_status]}</div>
@@ -3082,6 +3189,7 @@ async function openDetalheModal(id) {
 async function openEditModal(id) {
   try {
     const { nota, anexos, comentarios } = await api.get(`/api/notas/${id}`);
+    marcarAtribuicaoComoVista(nota); // melhor esforço, não bloqueia a abertura do modal
     const statusOptions = ['importadas_sienge', 'entradas', 'lancamento', 'financeiro_cx', 'pendencias', 'concluido']
       .map((s) => `<option value="${s}" ${s === nota.status ? 'selected' : ''}>${COLUNA_LABELS[s]}</option>`).join('');
     const formasPagamento = ['Boleto', 'PIX', 'Transferência', 'Cartão', 'Depósito', 'Cheque', 'Outro'];
