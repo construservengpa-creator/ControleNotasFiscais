@@ -159,6 +159,13 @@ header.topbar {
   background: var(--surface-2);
 }
 header.topbar .brand { display: flex; align-items: center; gap: 10px; }
+.sidebar-toggle-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; flex-shrink: 0; border: 1px solid var(--baseline); border-radius: 6px;
+  background: var(--surface-1); color: var(--text-secondary); cursor: pointer; font-size: 13px;
+  font-family: var(--font-mono);
+}
+.sidebar-toggle-btn:hover { color: var(--text-primary); border-color: var(--accent-dim); }
 header.topbar .brand .logo {
   width: 32px; height: 32px; border-radius: 6px;
   background: var(--accent); color: #1A1E24;
@@ -177,7 +184,8 @@ header.topbar .brand span.tag { font-size: 11px; color: var(--text-muted); font-
 nav.tabs {
   display: flex; flex-direction: column; gap: 2px; padding: 16px 10px;
   background: var(--surface-2); border-right: 1px solid var(--border);
-  width: 200px; flex-shrink: 0; overflow-y: auto;
+  width: 200px; flex-shrink: 0; overflow-y: auto; overflow-x: hidden;
+  transition: width 0.18s ease, padding 0.18s ease;
 }
 nav.tabs button {
   border: none; border-left: 3px solid transparent; background: none; padding: 10px 12px;
@@ -190,7 +198,20 @@ nav.tabs button:hover { color: var(--text-primary); }
 
 .app-body { display: flex; flex: 1; min-height: 0; }
 
-main.content { flex: 1; padding: 20px 24px 40px; max-width: 1400px; width: 100%; margin: 0 auto; min-width: 0; }
+main.content {
+  flex: 1; padding: 20px 24px 40px; max-width: 1400px; width: 100%; margin: 0 auto; min-width: 0;
+  transition: max-width 0.18s ease;
+}
+
+/* Menu recolhível: o botão no topo alterna a classe abaixo, que zera a
+   largura do menu lateral e libera a área útil para o quadro/telas
+   (o max-width do conteúdo é removido para os elementos gráficos ocuparem
+   o espaço que sobrou). Só se aplica no layout de desktop — no mobile o
+   menu já vira abas horizontais compactas no topo. */
+@media (min-width: 901px) {
+  .app-body.nav-collapsed nav.tabs { width: 0; padding-left: 0; padding-right: 0; border-right: none; }
+  .app-body.nav-collapsed main.content { max-width: none; }
+}
 
 .view { display: none; }
 .view.active { display: block; }
@@ -462,6 +483,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
 @media (max-width: 900px) {
+  .sidebar-toggle-btn { display: none; } /* no mobile o menu já é compacto (abas no topo) — recolher não se aplica */
   .app-body { flex-direction: column; }
   nav.tabs {
     flex-direction: row; width: auto; flex-shrink: 0;
@@ -527,6 +549,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
   <div id="appShell" class="hidden">
     <header class="topbar">
       <div class="brand">
+        <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Recolher menu">☰</button>
         <div class="logo">AM</div>
         <div>
           <h1>Notas Fiscais — Sede AMETA</h1>
@@ -550,7 +573,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
     <div id="msgPanel" class="msg-panel hidden"></div>
     <div class="roadline"></div>
 
-    <div class="app-body">
+    <div class="app-body" id="appBody">
     <nav class="tabs" id="tabs">
       <button data-view="quadro" class="active">Quadro</button>
       <button data-view="cadastro" id="tabCadastro">Cadastrar Nota</button>
@@ -1848,6 +1871,33 @@ function showConfigError(message) {
     </div>`;
 }
 
+// Menu lateral recolhível: ao recolher, o quadro/telas ganham o espaço que
+// o menu ocupava (o CSS remove o limite de largura do conteúdo nesse
+// estado — ver ".app-body.nav-collapsed" no <style>). A preferência fica
+// salva no navegador para não precisar recolher de novo a cada acesso.
+const SIDEBAR_PREF_KEY = 'ameta_sidebar_collapsed_v1';
+
+function toggleSidebar() {
+  const appBody = document.getElementById('appBody');
+  const collapsed = appBody.classList.toggle('nav-collapsed');
+  atualizarBotaoSidebar(collapsed);
+  try { localStorage.setItem(SIDEBAR_PREF_KEY, collapsed ? '1' : '0'); } catch (e) { /* modo privado etc. — sem persistência, sem problema */ }
+}
+
+function atualizarBotaoSidebar(collapsed) {
+  const btn = document.getElementById('sidebarToggleBtn');
+  if (!btn) return;
+  btn.textContent = collapsed ? '»' : '☰';
+  btn.title = collapsed ? 'Expandir menu' : 'Recolher menu';
+}
+
+function restaurarPreferenciaSidebar() {
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(SIDEBAR_PREF_KEY) === '1'; } catch (e) { /* ignora */ }
+  document.getElementById('appBody').classList.toggle('nav-collapsed', collapsed);
+  atualizarBotaoSidebar(collapsed);
+}
+
 async function init() {
   if (!SUPABASE_CONFIGURADO) {
     showConfigError('Este arquivo ainda não foi configurado com os dados do projeto Supabase (SUPABASE_URL / SUPABASE_ANON_KEY).');
@@ -1857,6 +1907,8 @@ async function init() {
   document.getElementById('loginForm').addEventListener('submit', onLoginSubmit);
   document.getElementById('logoutBtn').addEventListener('click', onLogout);
   document.getElementById('minhaContaBtn').addEventListener('click', openChangePasswordModal);
+  document.getElementById('sidebarToggleBtn').addEventListener('click', toggleSidebar);
+  restaurarPreferenciaSidebar();
   document.getElementById('msgBadgeBtn').addEventListener('click', toggleMsgPanel);
   document.addEventListener('click', (ev) => {
     const panel = document.getElementById('msgPanel');
