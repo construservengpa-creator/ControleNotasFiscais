@@ -378,9 +378,25 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .anexo-upload-form { display: flex; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 .anexo-upload-form input[type="file"] { font-size: 12px; max-width: 220px; }
 
+/* ---------- Layout em duas colunas dos modais de nota (formulário/dados
+   à esquerda, chat fixo à direita) — usado no modal de detalhe e no de
+   edição, para não precisar rolar tanto para ver os dois ao mesmo tempo. ---------- */
+.modal-two-col { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 0 24px; align-items: start; }
+.modal-main-col { min-width: 0; }
+.modal-chat-col {
+  min-width: 0; position: sticky; top: 0; align-self: start;
+  display: flex; flex-direction: column;
+  border-left: 1px solid var(--grid); padding-left: 24px;
+}
+.modal-chat-col .modal-section-title { margin-top: 0; }
+@media (max-width: 820px) {
+  .modal-two-col { grid-template-columns: 1fr; }
+  .modal-chat-col { position: static; border-left: none; padding-left: 0; margin-top: 8px; border-top: 1px solid var(--grid); padding-top: 12px; }
+}
+
 /* ---------- Diálogo interno (comentários por nota) ---------- */
 .comentarios-lista {
-  max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
+  max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;
   padding: 4px 2px 8px;
 }
 .comentario-item {
@@ -2677,46 +2693,33 @@ function renderAnexosList(anexos, podeExcluir) {
 }
 
 // Visualizador de documentos anexados (a nota fiscal em si, comprovantes,
-// CT-e etc.) — abre um modal grande mostrando o arquivo inline quando o
-// navegador consegue renderizá-lo (imagens e PDF); para os demais tipos
-// (Word, Excel, etc.) mostra um aviso e o botão de baixar, já que o
-// navegador não tem como exibir esses formatos diretamente.
-async function visualizarAnexoLocal(anexoId, notaIdParaVoltar) {
-  let anexo, url;
+// CT-e etc.) — abre o arquivo em uma nova aba do navegador (imagens e PDF
+// são exibidos direto pela própria aba; os demais tipos, como Word/Excel,
+// o navegador decide se exibe ou baixa). Isso mantém o modal de detalhe da
+// nota — com o diálogo interno (chat) e a lista de anexos — aberto e intacto
+// por trás, sem precisar recarregá-lo ao fechar a visualização.
+async function visualizarAnexoLocal(anexoId) {
+  // Abre a aba já no clique (síncrono com o gesto do usuário) para evitar
+  // que o navegador bloqueie o pop-up; o endereço é preenchido assim que o
+  // link assinado do Supabase Storage estiver pronto.
+  const novaAba = window.open('', '_blank');
   try {
-    const { data, error } = await supabaseClient.from('anexos').select('*').eq('id', anexoId).single();
-    if (error || !data) { toast('Documento não encontrado.', 'error'); return; }
-    anexo = data;
-    url = await getAnexoUrl(anexo);
+    const { data: anexo, error } = await supabaseClient.from('anexos').select('*').eq('id', anexoId).single();
+    if (error || !anexo) {
+      toast('Documento não encontrado.', 'error');
+      if (novaAba) novaAba.close();
+      return;
+    }
+    const url = await getAnexoUrl(anexo);
+    if (novaAba) {
+      novaAba.location.href = url;
+    } else {
+      toast('O navegador bloqueou a nova aba. Permita pop-ups para este site ou use "Baixar".', 'error');
+    }
   } catch (e) {
+    if (novaAba) novaAba.close();
     toast(e.message, 'error');
-    return;
   }
-  const mime = anexo.mime_type || '';
-  let previewHtml;
-  if (mime.startsWith('image/')) {
-    previewHtml = `<div style="text-align:center;max-height:75vh;overflow:auto;background:var(--surface-1);border-radius:8px;padding:8px;">
-      <img src="${url}" alt="${escapeHtml(anexo.nome_original)}" style="max-width:100%;height:auto;border-radius:4px;" />
-    </div>`;
-  } else if (mime === 'application/pdf') {
-    previewHtml = `<iframe src="${url}" style="width:100%;height:75vh;border:1px solid var(--border);border-radius:8px;"></iframe>`;
-  } else {
-    previewHtml = `<p class="legend-note">Pré-visualização não disponível para este tipo de arquivo (${escapeHtml(mime || 'desconhecido')}). Use "Baixar" para abrir no seu computador.</p>`;
-  }
-  showModal(`
-    <h3>${escapeHtml(anexo.nome_original)}</h3>
-    <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">${fmtBytes(anexo.tamanho)} · enviado em ${fmtDateTime(anexo.uploaded_at)}</p>
-    ${previewHtml}
-    <div class="form-actions">
-      <button type="button" class="btn secondary" id="visualizarFechar">Fechar</button>
-      <button type="button" class="btn" id="visualizarBaixar">Baixar</button>
-    </div>
-  `, { xl: true });
-  document.getElementById('visualizarFechar').addEventListener('click', () => {
-    if (notaIdParaVoltar) openDetalheModal(notaIdParaVoltar);
-    else closeModal();
-  });
-  document.getElementById('visualizarBaixar').addEventListener('click', () => baixarAnexoLocal(anexoId));
 }
 
 // ID do controle de setInterval do polling do diálogo interno — guardado
@@ -2817,6 +2820,160 @@ function wireComentariosExcluir(notaId) {
   });
 }
 
+// Regra de quem pode excluir um anexo desta nota — compartilhada entre o
+// modal de detalhe e o de edição, já que os dois mostram a mesma lista.
+function podeExcluirAnexoParaNota(nota) {
+  return CURRENT_USER.role === 'admin' ||
+    (CURRENT_USER.role === 'supervisor' && (nota.status === 'entradas' || nota.status === 'importadas_sienge' || nota.status === CURRENT_USER.coluna));
+}
+
+// HTML da seção "Documentos anexados" (+ frete) — fica na coluna principal
+// (esquerda) do modal, ao lado do chat.
+function renderAnexosSectionHtml(nota, anexos) {
+  const podeExcluirAnexo = podeExcluirAnexoParaNota(nota);
+  const anexosNota = anexos.filter((a) => a.categoria !== 'frete');
+  const anexosFrete = anexos.filter((a) => a.categoria === 'frete');
+  const temFreteSecao = nota.frete === 'sim';
+  return `
+    <div class="modal-section-title">Documentos anexados</div>
+    <div id="anexosLista">${renderAnexosList(anexosNota, podeExcluirAnexo)}</div>
+    <form id="anexoUploadForm" class="anexo-upload-form">
+      <input type="file" id="anexoInput" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt" />
+      <button type="submit" class="btn secondary small">Anexar documento</button>
+      <span id="anexoMsg" class="legend-note"></span>
+    </form>
+
+    ${temFreteSecao ? `
+    <div class="modal-section-title">Documentos do frete (CT-e etc.)</div>
+    <div id="anexosFreteLista">${renderAnexosList(anexosFrete, podeExcluirAnexo)}</div>
+    <form id="anexoFreteUploadForm" class="anexo-upload-form">
+      <input type="file" id="anexoFreteInput" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt" />
+      <button type="submit" class="btn secondary small">Anexar documento do frete</button>
+      <span id="anexoFreteMsg" class="legend-note"></span>
+    </form>
+    ` : ''}
+  `;
+}
+
+// HTML da seção "Diálogo interno" (chat) — fica na coluna da direita,
+// ao lado do formulário/dados da nota, para uma visão mais eficiente
+// (dá para acompanhar a conversa sem perder de vista os campos/anexos).
+function renderChatSectionHtml(nota, comentarios) {
+  return `
+    <div class="modal-section-title">Diálogo interno</div>
+    <div class="comentarios-lista" id="comentariosLista">${renderComentariosList(comentarios)}</div>
+    <form id="comentarioForm" class="comentario-form">
+      <div class="comentario-form-row">
+        <select id="comentarioDestinatario">
+          <option value="">Mensagem geral (todos os participantes)</option>
+          ${participantesDaNota(nota, comentarios).map((p) => `<option value="${p.id}">Direcionar para: ${escapeHtml(p.nome)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="comentario-form-row">
+        <textarea id="comentarioInput" placeholder="Escreva uma mensagem para quem também está tratando esta nota…" maxlength="4000"></textarea>
+        <button type="submit" class="btn small">Enviar</button>
+      </div>
+    </form>
+    <span id="comentarioMsg" class="legend-note"></span>
+  `;
+}
+
+// Liga os eventos das seções acima (upload/visualizar/baixar/excluir anexo
+// e o formulário do diálogo interno). `onRefresh` decide qual modal recarregar
+// depois de uma ação — o de detalhe ou o de edição, conforme o caso.
+function wireAnexosEChatSection(id, onRefresh) {
+  const comentarioForm = document.getElementById('comentarioForm');
+  comentarioForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const input = document.getElementById('comentarioInput');
+    const destSelect = document.getElementById('comentarioDestinatario');
+    const msg = document.getElementById('comentarioMsg');
+    const texto = input.value.trim();
+    msg.textContent = '';
+    if (!texto) { msg.textContent = 'Escreva uma mensagem antes de enviar.'; return; }
+    try {
+      await api.post(`/api/notas/${id}/comentarios`, { mensagem: texto, destinatarioId: destSelect.value || null });
+      input.value = '';
+      await atualizarComentarios(id);
+    } catch (e) {
+      msg.textContent = e.message;
+    }
+  });
+  // Enter envia, Shift+Enter quebra linha — igual à maioria dos chats.
+  document.getElementById('comentarioInput').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.shiftKey) {
+      ev.preventDefault();
+      comentarioForm.requestSubmit();
+    }
+  });
+  wireComentariosExcluir(id);
+  marcarComentariosComoLidos(id);
+  iniciarPollingComentarios(id);
+
+  document.getElementById('anexoUploadForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const input = document.getElementById('anexoInput');
+    const msg = document.getElementById('anexoMsg');
+    msg.textContent = '';
+    if (!input.files || input.files.length === 0) {
+      msg.textContent = 'Selecione um arquivo primeiro.';
+      return;
+    }
+    try {
+      await uploadAnexoLocal(id, input.files[0], 'nota');
+      toast('Documento anexado.', 'success');
+      onRefresh(); // recarrega o modal com a lista atualizada
+      loadBoard();
+    } catch (e) {
+      msg.textContent = e.message;
+    }
+  });
+
+  const anexoFreteForm = document.getElementById('anexoFreteUploadForm');
+  if (anexoFreteForm) {
+    anexoFreteForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const input = document.getElementById('anexoFreteInput');
+      const msg = document.getElementById('anexoFreteMsg');
+      msg.textContent = '';
+      if (!input.files || input.files.length === 0) {
+        msg.textContent = 'Selecione um arquivo primeiro.';
+        return;
+      }
+      try {
+        await uploadAnexoLocal(id, input.files[0], 'frete');
+        toast('Documento do frete anexado.', 'success');
+        onRefresh();
+        loadBoard();
+      } catch (e) {
+        msg.textContent = e.message;
+      }
+    });
+  }
+
+  document.querySelectorAll('[data-action="visualizar-anexo"]').forEach((btn) => {
+    btn.addEventListener('click', () => visualizarAnexoLocal(Number(btn.dataset.anexoId)));
+  });
+
+  document.querySelectorAll('[data-action="baixar-anexo"]').forEach((btn) => {
+    btn.addEventListener('click', () => baixarAnexoLocal(Number(btn.dataset.anexoId)));
+  });
+
+  document.querySelectorAll('[data-action="excluir-anexo"]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      if (!confirm('Excluir este documento anexado? Essa ação não pode ser desfeita.')) return;
+      try {
+        await api.delete(`/api/anexos/${btn.dataset.anexoId}`);
+        toast('Documento excluído.', 'success');
+        onRefresh();
+        loadBoard();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
+  });
+}
+
 // Marca como lidas as mensagens direcionadas a mim nesta nota (chamado ao
 // abrir o modal e a cada atualização do diálogo) e atualiza o sininho do
 // topo. Melhor esforço — uma falha aqui não deve travar a visualização.
@@ -2863,181 +3020,57 @@ async function openDetalheModal(id) {
         ${m.note ? `<div style="color:var(--text-muted)">${escapeHtml(m.note)}</div>` : ''}
       </div>`).join('');
 
-    const podeExcluirAnexo = CURRENT_USER.role === 'admin' ||
-      (CURRENT_USER.role === 'supervisor' && (nota.status === 'entradas' || nota.status === 'importadas_sienge' || nota.status === CURRENT_USER.coluna));
-
-    const anexosNota = anexos.filter((a) => a.categoria !== 'frete');
-    const anexosFrete = anexos.filter((a) => a.categoria === 'frete');
     const temFreteDetalhe = nota.frete === 'sim';
 
     showModal(`
       <h3>NF ${escapeHtml(nota.numero)} — ${escapeHtml(nota.fornecedor)}</h3>
-      <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">
-        Valor: ${fmtMoney(nota.valor)} · Status atual: ${COLUNA_LABELS[nota.status]} · Prioridade: ${PRIORIDADE_LABELS[nota.prioridade] || 'Média'}<br/>
-        Origem: ${nota.origem === 'sienge' ? 'Importada do SIENGE' : 'Cadastro manual'}<br/>
-        ${nota.chaveAcesso ? 'Chave de acesso: ' + escapeHtml(nota.chaveAcesso) + '<br/>' : ''}
-        ${nota.destinatario ? 'Destinatário: ' + escapeHtml(nota.destinatario) + '<br/>' : ''}
-        ${nota.cnpjDestinatario ? 'CNPJ destinatário: ' + escapeHtml(nota.cnpjDestinatario) + '<br/>' : ''}
-        ${nota.obra ? 'Obra: ' + escapeHtml(nota.obra) + '<br/>' : ''}
-        ${nota.numeroTitulo ? '🧾 Nº do título: ' + escapeHtml(nota.numeroTitulo) + '<br/>' : ''}
-        ${nota.homologadoPor
-          ? '✅ Recebimento homologado por ' + escapeHtml(nota.homologadoPorNome || '—') + ' em ' + fmtDateTime(nota.homologadoEm) + (nota.homologacaoObs ? ' — ' + escapeHtml(nota.homologacaoObs) : '') + '<br/>'
-          : (nota.origem === 'sienge' && nota.status === 'pendencias' ? '🔒 Recebimento do material ainda não homologado.<br/>' : '')}
-        ${nota.lancamentoValidadoPor
-          ? '✅ Lançamento validado e encerrado por ' + escapeHtml(nota.lancamentoValidadoPorNome || '—') + ' em ' + fmtDateTime(nota.lancamentoValidadoEm) + (nota.lancamentoValidadoObs ? ' — ' + escapeHtml(nota.lancamentoValidadoObs) : '') + '<br/>'
-          : (nota.status === 'concluido' ? '🔒 Lançamento ainda não validado.<br/>' : '')}
-        ${nota.pedidoCompras ? 'Pedido de compras: ' + escapeHtml(nota.pedidoCompras) + '<br/>' : ''}
-        ${nota.vencimento ? 'Vencimento: ' + fmtDate(nota.vencimento) + (isVencida(nota) ? ' (vencida)' : '') + '<br/>' : ''}
-        ${nota.formaPagamento ? 'Forma de pagamento: ' + escapeHtml(nota.formaPagamento) + '<br/>' : ''}
-        Frete: ${nota.frete === 'sim' ? 'Sim' : 'Não'}<br/>
-        ${temFreteDetalhe && nota.freteCte ? '&nbsp;&nbsp;Nº do CT-e: ' + escapeHtml(nota.freteCte) + '<br/>' : ''}
-        ${temFreteDetalhe && nota.freteTransportador ? '&nbsp;&nbsp;Transportador: ' + escapeHtml(nota.freteTransportador) + '<br/>' : ''}
-        ${temFreteDetalhe && nota.freteValor ? '&nbsp;&nbsp;Valor do frete: ' + fmtMoney(nota.freteValor) + '<br/>' : ''}
-        ${temFreteDetalhe && nota.freteFormaPagamento ? '&nbsp;&nbsp;Forma de pagamento do frete: ' + escapeHtml(nota.freteFormaPagamento) + '<br/>' : ''}
-        ${temFreteDetalhe && nota.freteVencimento ? '&nbsp;&nbsp;Vencimento do frete: ' + fmtDate(nota.freteVencimento) + '<br/>' : ''}
-        ${nota.assignedToName ? 'Responsável: ' + escapeHtml(nota.assignedToName) : 'Sem responsável atribuído'}<br/>
-        ${nota.assignedAt ? 'Atribuída em: ' + fmtDateTime(nota.assignedAt) + '<br/>' : ''}
-        ${nota.completedAt
-          ? 'Concluída em: ' + fmtDateTime(nota.completedAt) + ' · Tempo de tratamento: ' + fmtDuration(new Date(nota.completedAt) - new Date(nota.assignedAt)) + '<br/>'
-          : (nota.assignedAt ? 'Tempo em aberto desde a atribuição: ' + fmtDuration(new Date() - new Date(nota.assignedAt)) + '<br/>' : '')}
-        ${nota.descricao ? 'Obs: ' + escapeHtml(nota.descricao) : ''}
+      <div class="modal-two-col">
+        <div class="modal-main-col">
+          <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">
+            Valor: ${fmtMoney(nota.valor)} · Status atual: ${COLUNA_LABELS[nota.status]} · Prioridade: ${PRIORIDADE_LABELS[nota.prioridade] || 'Média'}<br/>
+            Origem: ${nota.origem === 'sienge' ? 'Importada do SIENGE' : 'Cadastro manual'}<br/>
+            ${nota.chaveAcesso ? 'Chave de acesso: ' + escapeHtml(nota.chaveAcesso) + '<br/>' : ''}
+            ${nota.destinatario ? 'Destinatário: ' + escapeHtml(nota.destinatario) + '<br/>' : ''}
+            ${nota.cnpjDestinatario ? 'CNPJ destinatário: ' + escapeHtml(nota.cnpjDestinatario) + '<br/>' : ''}
+            ${nota.obra ? 'Obra: ' + escapeHtml(nota.obra) + '<br/>' : ''}
+            ${nota.numeroTitulo ? '🧾 Nº do título: ' + escapeHtml(nota.numeroTitulo) + '<br/>' : ''}
+            ${nota.homologadoPor
+              ? '✅ Recebimento homologado por ' + escapeHtml(nota.homologadoPorNome || '—') + ' em ' + fmtDateTime(nota.homologadoEm) + (nota.homologacaoObs ? ' — ' + escapeHtml(nota.homologacaoObs) : '') + '<br/>'
+              : (nota.origem === 'sienge' && nota.status === 'pendencias' ? '🔒 Recebimento do material ainda não homologado.<br/>' : '')}
+            ${nota.lancamentoValidadoPor
+              ? '✅ Lançamento validado e encerrado por ' + escapeHtml(nota.lancamentoValidadoPorNome || '—') + ' em ' + fmtDateTime(nota.lancamentoValidadoEm) + (nota.lancamentoValidadoObs ? ' — ' + escapeHtml(nota.lancamentoValidadoObs) : '') + '<br/>'
+              : (nota.status === 'concluido' ? '🔒 Lançamento ainda não validado.<br/>' : '')}
+            ${nota.pedidoCompras ? 'Pedido de compras: ' + escapeHtml(nota.pedidoCompras) + '<br/>' : ''}
+            ${nota.vencimento ? 'Vencimento: ' + fmtDate(nota.vencimento) + (isVencida(nota) ? ' (vencida)' : '') + '<br/>' : ''}
+            ${nota.formaPagamento ? 'Forma de pagamento: ' + escapeHtml(nota.formaPagamento) + '<br/>' : ''}
+            Frete: ${nota.frete === 'sim' ? 'Sim' : 'Não'}<br/>
+            ${temFreteDetalhe && nota.freteCte ? '&nbsp;&nbsp;Nº do CT-e: ' + escapeHtml(nota.freteCte) + '<br/>' : ''}
+            ${temFreteDetalhe && nota.freteTransportador ? '&nbsp;&nbsp;Transportador: ' + escapeHtml(nota.freteTransportador) + '<br/>' : ''}
+            ${temFreteDetalhe && nota.freteValor ? '&nbsp;&nbsp;Valor do frete: ' + fmtMoney(nota.freteValor) + '<br/>' : ''}
+            ${temFreteDetalhe && nota.freteFormaPagamento ? '&nbsp;&nbsp;Forma de pagamento do frete: ' + escapeHtml(nota.freteFormaPagamento) + '<br/>' : ''}
+            ${temFreteDetalhe && nota.freteVencimento ? '&nbsp;&nbsp;Vencimento do frete: ' + fmtDate(nota.freteVencimento) + '<br/>' : ''}
+            ${nota.assignedToName ? 'Responsável: ' + escapeHtml(nota.assignedToName) : 'Sem responsável atribuído'}<br/>
+            ${nota.assignedAt ? 'Atribuída em: ' + fmtDateTime(nota.assignedAt) + '<br/>' : ''}
+            ${nota.completedAt
+              ? 'Concluída em: ' + fmtDateTime(nota.completedAt) + ' · Tempo de tratamento: ' + fmtDuration(new Date(nota.completedAt) - new Date(nota.assignedAt)) + '<br/>'
+              : (nota.assignedAt ? 'Tempo em aberto desde a atribuição: ' + fmtDuration(new Date() - new Date(nota.assignedAt)) + '<br/>' : '')}
+            ${nota.descricao ? 'Obs: ' + escapeHtml(nota.descricao) : ''}
+          </div>
+
+          ${renderAnexosSectionHtml(nota, anexos)}
+
+          <div class="modal-section-title">Histórico</div>
+          <div style="max-height:220px;overflow-y:auto;">${linhas || '<p class="legend-note">Sem histórico.</p>'}</div>
+        </div>
+        <div class="modal-chat-col">
+          ${renderChatSectionHtml(nota, comentarios)}
+        </div>
       </div>
-
-      <div class="modal-section-title">Documentos anexados</div>
-      <div id="anexosLista">${renderAnexosList(anexosNota, podeExcluirAnexo)}</div>
-      <form id="anexoUploadForm" class="anexo-upload-form">
-        <input type="file" id="anexoInput" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt" />
-        <button type="submit" class="btn secondary small">Anexar documento</button>
-        <span id="anexoMsg" class="legend-note"></span>
-      </form>
-
-      ${temFreteDetalhe ? `
-      <div class="modal-section-title">Documentos do frete (CT-e etc.)</div>
-      <div id="anexosFreteLista">${renderAnexosList(anexosFrete, podeExcluirAnexo)}</div>
-      <form id="anexoFreteUploadForm" class="anexo-upload-form">
-        <input type="file" id="anexoFreteInput" accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,.doc,.docx,.xls,.xlsx,.txt" />
-        <button type="submit" class="btn secondary small">Anexar documento do frete</button>
-        <span id="anexoFreteMsg" class="legend-note"></span>
-      </form>
-      ` : ''}
-
-      <div class="modal-section-title">Diálogo interno</div>
-      <div class="comentarios-lista" id="comentariosLista">${renderComentariosList(comentarios)}</div>
-      <form id="comentarioForm" class="comentario-form">
-        <div class="comentario-form-row">
-          <select id="comentarioDestinatario">
-            <option value="">Mensagem geral (todos os participantes)</option>
-            ${participantesDaNota(nota, comentarios).map((p) => `<option value="${p.id}">Direcionar para: ${escapeHtml(p.nome)}</option>`).join('')}
-          </select>
-        </div>
-        <div class="comentario-form-row">
-          <textarea id="comentarioInput" placeholder="Escreva uma mensagem para quem também está tratando esta nota…" maxlength="4000"></textarea>
-          <button type="submit" class="btn small">Enviar</button>
-        </div>
-      </form>
-      <span id="comentarioMsg" class="legend-note"></span>
-
-      <div class="modal-section-title">Histórico</div>
-      <div style="max-height:220px;overflow-y:auto;">${linhas || '<p class="legend-note">Sem histórico.</p>'}</div>
       <div class="form-actions"><button class="btn secondary" id="modalCloseBtn">Fechar</button></div>
-    `, { wide: true });
+    `, { huge: true });
 
     document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
-
-    // Diálogo interno: envio de mensagem + atualização automática enquanto
-    // o modal estiver aberto, para simular uma conversa entre os
-    // participantes que estão tratando a nota (sem depender de recarregar
-    // o modal inteiro, o que perderia o que a pessoa já digitou).
-    const comentarioForm = document.getElementById('comentarioForm');
-    comentarioForm.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const input = document.getElementById('comentarioInput');
-      const destSelect = document.getElementById('comentarioDestinatario');
-      const msg = document.getElementById('comentarioMsg');
-      const texto = input.value.trim();
-      msg.textContent = '';
-      if (!texto) { msg.textContent = 'Escreva uma mensagem antes de enviar.'; return; }
-      try {
-        await api.post(`/api/notas/${id}/comentarios`, { mensagem: texto, destinatarioId: destSelect.value || null });
-        input.value = '';
-        await atualizarComentarios(id);
-      } catch (e) {
-        msg.textContent = e.message;
-      }
-    });
-    // Enter envia, Shift+Enter quebra linha — igual à maioria dos chats.
-    document.getElementById('comentarioInput').addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter' && !ev.shiftKey) {
-        ev.preventDefault();
-        comentarioForm.requestSubmit();
-      }
-    });
-    wireComentariosExcluir(id);
-    marcarComentariosComoLidos(id);
-    iniciarPollingComentarios(id);
-
-    document.getElementById('anexoUploadForm').addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const input = document.getElementById('anexoInput');
-      const msg = document.getElementById('anexoMsg');
-      msg.textContent = '';
-      if (!input.files || input.files.length === 0) {
-        msg.textContent = 'Selecione um arquivo primeiro.';
-        return;
-      }
-      try {
-        await uploadAnexoLocal(id, input.files[0], 'nota');
-        toast('Documento anexado.', 'success');
-        openDetalheModal(id); // recarrega o modal com a lista atualizada
-        loadBoard();
-      } catch (e) {
-        msg.textContent = e.message;
-      }
-    });
-
-    const anexoFreteForm = document.getElementById('anexoFreteUploadForm');
-    if (anexoFreteForm) {
-      anexoFreteForm.addEventListener('submit', async (ev) => {
-        ev.preventDefault();
-        const input = document.getElementById('anexoFreteInput');
-        const msg = document.getElementById('anexoFreteMsg');
-        msg.textContent = '';
-        if (!input.files || input.files.length === 0) {
-          msg.textContent = 'Selecione um arquivo primeiro.';
-          return;
-        }
-        try {
-          await uploadAnexoLocal(id, input.files[0], 'frete');
-          toast('Documento do frete anexado.', 'success');
-          openDetalheModal(id);
-          loadBoard();
-        } catch (e) {
-          msg.textContent = e.message;
-        }
-      });
-    }
-
-    document.querySelectorAll('[data-action="visualizar-anexo"]').forEach((btn) => {
-      btn.addEventListener('click', () => visualizarAnexoLocal(Number(btn.dataset.anexoId), id));
-    });
-
-    document.querySelectorAll('[data-action="baixar-anexo"]').forEach((btn) => {
-      btn.addEventListener('click', () => baixarAnexoLocal(Number(btn.dataset.anexoId)));
-    });
-
-    document.querySelectorAll('[data-action="excluir-anexo"]').forEach((btn) => {
-      btn.addEventListener('click', async () => {
-        if (!confirm('Excluir este documento anexado? Essa ação não pode ser desfeita.')) return;
-        try {
-          await api.delete(`/api/anexos/${btn.dataset.anexoId}`);
-          toast('Documento excluído.', 'success');
-          openDetalheModal(id);
-          loadBoard();
-        } catch (e) {
-          toast(e.message, 'error');
-        }
-      });
-    });
+    wireAnexosEChatSection(id, () => openDetalheModal(id));
   } catch (e) {
     toast(e.message, 'error');
   }
@@ -3048,7 +3081,7 @@ async function openDetalheModal(id) {
 // também o status/responsável, respeitando a mesma regra de permissão do backend.
 async function openEditModal(id) {
   try {
-    const { nota } = await api.get(`/api/notas/${id}`);
+    const { nota, anexos, comentarios } = await api.get(`/api/notas/${id}`);
     const statusOptions = ['importadas_sienge', 'entradas', 'lancamento', 'financeiro_cx', 'pendencias', 'concluido']
       .map((s) => `<option value="${s}" ${s === nota.status ? 'selected' : ''}>${COLUNA_LABELS[s]}</option>`).join('');
     const formasPagamento = ['Boleto', 'PIX', 'Transferência', 'Cartão', 'Depósito', 'Cheque', 'Outro'];
@@ -3059,6 +3092,8 @@ async function openEditModal(id) {
 
     showModal(`
       <h3>Editar NF ${escapeHtml(nota.numero)}</h3>
+      <div class="modal-two-col">
+        <div class="modal-main-col">
       <form id="editNotaForm">
         <div class="form-grid">
           <div class="field"><label for="edNumero">Número da nota *</label><input type="text" id="edNumero" required value="${escapeHtml(nota.numero)}" /></div>
@@ -3121,12 +3156,20 @@ async function openEditModal(id) {
         </div>
         <div class="field" style="margin-top:12px;"><label for="edDescricao">Observações</label><textarea id="edDescricao" rows="2">${escapeHtml(nota.descricao || '')}</textarea></div>
         <div class="error-msg" id="editNotaError"></div>
-        <div class="form-actions">
-          <button type="button" class="btn secondary" id="editNotaCancel">Cancelar</button>
-          <button type="submit" class="btn">Salvar alterações</button>
-        </div>
       </form>
-    `, { wide: true });
+
+          ${renderAnexosSectionHtml(nota, anexos)}
+        </div>
+        <div class="modal-chat-col">
+          ${renderChatSectionHtml(nota, comentarios)}
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="button" class="btn secondary" id="editNotaCancel">Cancelar</button>
+        <button type="submit" class="btn" form="editNotaForm">Salvar alterações</button>
+      </div>
+    `, { huge: true });
 
     const statusSel = document.getElementById('edStatus');
     const respField = document.getElementById('edResponsavelField');
@@ -3161,6 +3204,8 @@ async function openEditModal(id) {
       podeMudarStatus ? refreshResponsavel() : Promise.resolve(),
       popularObraSelect(document.getElementById('edObra'), nota.obra),
     ]);
+
+    wireAnexosEChatSection(id, () => openEditModal(id));
 
     document.getElementById('editNotaCancel').addEventListener('click', closeModal);
     document.getElementById('editNotaForm').addEventListener('submit', async (ev) => {
@@ -3810,7 +3855,8 @@ function exportDesempenhoCsv() {
 function showModal(innerHtml, opts) {
   const root = document.getElementById('modalRoot');
   let sizeStyle = '';
-  if (opts && opts.xl) sizeStyle = ' style="width:900px;max-width:95vw;"';
+  if (opts && opts.huge) sizeStyle = ' style="width:1040px;max-width:96vw;"';
+  else if (opts && opts.xl) sizeStyle = ' style="width:900px;max-width:95vw;"';
   else if (opts && opts.wide) sizeStyle = ' style="width:480px;max-width:92vw;"';
   root.innerHTML = `<div class="modal-backdrop" id="modalBackdrop"><div class="modal"${sizeStyle}>${innerHtml}</div></div>`;
   document.getElementById('modalBackdrop').addEventListener('click', (ev) => {
