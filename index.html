@@ -473,7 +473,7 @@ const titles={ painel:['Painel','Visão por obra'],entrada:['Entrada / Nota Fisc
   aprovacoes:['Aprovações','Requisições pendentes de aprovação'],
   separacao:['Separação','Separação física dos itens disponíveis'],
   expedicao:['Expedição','Embalagem, romaneio, nota fiscal, etiquetas de volume e envio'],
-  retiradas:['Aguardando Retirada','Material já separado do estoque que ainda não saiu — despacho ou retirada interna'],
+  retiradas:['Aguardando Retirada','Material já separado do estoque que ainda não saiu — despacho ou retirada no balcão'],
   mutuo:['Mútuo entre Empresas','Controle de valores entre empresas e fechamento por período'],
   compras:['Compras','Itens faltantes aguardando compra'],
   transfer:['Transferência entre Obras','Mover saldo de uma obra para outra'],consulta:['Consulta','Buscar por nome, código ou equipamento'],
@@ -1578,7 +1578,7 @@ function renderExpedModal(){
   const {r,itens,caixas,itensCaixa,nf,emb,ret}=window._expedCtx;
   const restante=itens.filter(i=>i.quantidade_separada-i.quantidade_embalada>0.0001);
   let html=`<h3>Expedição — REQ-${String(r.id).padStart(5,'0')}</h3>
-    <p class="mp">${esc(r.obra_nome)}${r.ordem_servico?' · OS '+esc(r.ordem_servico):''}${r.aplicacao_nome?' · '+esc(r.aplicacao_nome):''}${r.tipo_envio?' · '+(r.tipo_envio==='despacho'?'🚚 Despacho':'🤝 Tramitação interna'):''}</p>
+    <p class="mp">${esc(r.obra_nome)}${r.ordem_servico?' · OS '+esc(r.ordem_servico):''}${r.aplicacao_nome?' · '+esc(r.aplicacao_nome):''}${r.tipo_envio?' · '+(r.tipo_envio==='despacho'?'🚚 Despacho':'🤝 Retirada no balcão'):''}</p>
     ${expedStepperHTML(r,caixas)}`;
 
   const backMap={embalado:'separado',romaneio_emitido:'embalado',faturado:'romaneio_emitido',embarcado:'faturado',retirado:'faturado'};
@@ -1589,7 +1589,7 @@ function renderExpedModal(){
     <p class="mp" style="font-size:12px">Decidindo agora, antes de embalar, pra já preparar tudo do jeito certo.</p>
     <div style="display:flex;gap:16px;margin:6px 0 12px">
       <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:500;margin:0"><input type="radio" name="tipoEnvioPre" value="despacho" checked style="width:auto"> Despacho (transportadora)</label>
-      <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:500;margin:0"><input type="radio" name="tipoEnvioPre" value="interna" style="width:auto"> Tramitação interna (retirada)</label></div>
+      <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:500;margin:0"><input type="radio" name="tipoEnvioPre" value="interna" style="width:auto"> Retirada no balcão</label></div>
     <button class="btn primary sm" onclick="definirTipoEnvio(${r.id})">Confirmar e iniciar embalagem</button>`;
   } else {
 
@@ -1647,7 +1647,7 @@ function renderExpedModal(){
     html+=`<div class="sechead" style="margin-top:16px"><h3 style="font-size:13px">🚚 Informar envio</h3></div>
     <div style="display:flex;gap:16px;margin:6px 0 10px">
       <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:500;margin:0"><input type="radio" name="envioTipo" value="despacho" ${pre==='despacho'?'checked':''} onchange="toggleEnvioTipo()" style="width:auto"> Despacho (transportadora)</label>
-      <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:500;margin:0"><input type="radio" name="envioTipo" value="interna" ${pre==='interna'?'checked':''} onchange="toggleEnvioTipo()" style="width:auto"> Tramitação interna (retirada)</label></div>
+      <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-weight:500;margin:0"><input type="radio" name="envioTipo" value="interna" ${pre==='interna'?'checked':''} onchange="toggleEnvioTipo()" style="width:auto"> Retirada no balcão</label></div>
     <div id="envioDespacho" style="display:${pre==='despacho'?'':'none'}"><div class="row c2"><div class="field"><label>Transportadora</label><input id="envTransp"></div><div class="field"><label>Data prevista de entrega</label><input id="envPrevisao" type="date"></div></div></div>
     <div id="envioInterna" style="display:${pre==='interna'?'':'none'}"><div class="row c2"><div class="field"><label>Colaborador que retirou</label><input id="envColab"></div><div class="field"><label>Documento (opcional)</label><input id="envColabDoc"></div></div></div>
     <div class="field"><label>Observação</label><input id="envObs"></div>
@@ -1655,7 +1655,7 @@ function renderExpedModal(){
   } else if(r.status==='embarcado' && emb){
     html+=`<div class="sechead" style="margin-top:16px"><h3 style="font-size:13px">🚚 Envio — Despacho</h3></div><p class="mp" style="font-size:12.5px">Transportadora: ${esc(emb.transportadora||'—')}${emb.data_prevista_entrega?' · previsão '+fmtDate(new Date(emb.data_prevista_entrega).getTime()):''}</p>`;
   } else if(r.status==='retirado' && ret){
-    html+=`<div class="sechead" style="margin-top:16px"><h3 style="font-size:13px">🚚 Envio — Retirada interna</h3></div><p class="mp" style="font-size:12.5px">Retirado por ${esc(ret.colaborador_nome)} em ${fmtDate(new Date(ret.data_retirada).getTime())}</p>`;
+    html+=`<div class="sechead" style="margin-top:16px"><h3 style="font-size:13px">🚚 Envio — Retirada no balcão</h3></div><p class="mp" style="font-size:12.5px">Retirado por ${esc(ret.colaborador_nome)} em ${fmtDate(new Date(ret.data_retirada).getTime())}</p>`;
   }
   }
 
@@ -1759,11 +1759,11 @@ async function registrarEnvio(reqId){ const tipo=document.querySelector('input[n
     if(e1){toast('Erro: '+e1.message,'err');return;}
     const {error:e2}=await sb.from('requisicoes').update({status:'retirado'}).eq('id',reqId);
     if(e2){toast('Retirada salva, mas houve erro ao atualizar a requisição: '+e2.message,'err');return;}
-    toast('Retirada interna registrada.','ok');
+    toast('Retirada no balcão registrada.','ok');
   }
   await abrirExpedicao(reqId); drawExpedicaoList(); refreshExpedBadge(); refreshRetiradasBadge(); }
 
-/* ===== AGUARDANDO RETIRADA (material já baixado do estoque na separação, mas ainda não saiu — nem despacho nem retirada interna) ===== */
+/* ===== AGUARDANDO RETIRADA (material já baixado do estoque na separação, mas ainda não saiu — nem despacho nem retirada no balcão) ===== */
 const STATUS_AINDA_NAO_SAIU=['em_separacao','aguardando_compra','separado','embalado','romaneio_emitido','faturado'];
 let _retiradasFiltro='';
 async function refreshRetiradasBadge(){ if(!podeVerRetiradas())return; const b=$('#navBadgeRetiradas'); if(!b)return;
@@ -1773,14 +1773,14 @@ async function refreshRetiradasBadge(){ if(!podeVerRetiradas())return; const b=$
   const count=reqIds.size;
   if(count){b.textContent=count;b.style.display='';}else b.style.display='none'; refreshFluxoGroupBadge(); }
 function diasParado(ts){ return Math.max(0,Math.floor((Date.now()-ts)/86400000)); }
-function envioTipoLabel(tipo){ return tipo==='despacho'?'🚚 Despacho':tipo==='interna'?'🤝 Tramitação interna':'❓ Envio não definido'; }
+function envioTipoLabel(tipo){ return tipo==='despacho'?'🚚 Despacho':tipo==='interna'?'🤝 Retirada no balcão':'❓ Envio não definido'; }
 async function renderRetiradaPendente(){
   if(!podeVerRetiradas()){ $('#view').innerHTML='<div class="tbl-wrap"><div class="empty">Acesso restrito ao almoxarifado e encarregados/administradores.</div></div>'; return; }
   $('#view').innerHTML=`<div class="panel" style="margin-bottom:14px"><div class="field" style="max-width:280px;margin:0"><label>Filtrar por tipo de envio</label>
     <select id="retFiltro" onchange="_retiradasFiltro=this.value;drawRetiradaPendente()">
       <option value="" ${_retiradasFiltro===''?'selected':''}>Todos</option>
       <option value="despacho" ${_retiradasFiltro==='despacho'?'selected':''}>🚚 Despacho</option>
-      <option value="interna" ${_retiradasFiltro==='interna'?'selected':''}>🤝 Tramitação interna</option>
+      <option value="interna" ${_retiradasFiltro==='interna'?'selected':''}>🤝 Retirada no balcão</option>
       <option value="_indef" ${_retiradasFiltro==='_indef'?'selected':''}>❓ Envio não definido</option>
     </select></div></div>
     <div id="retList"><div class="empty">Carregando...</div></div>`;
