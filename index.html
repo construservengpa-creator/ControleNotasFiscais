@@ -627,6 +627,27 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
           </div>
         </div>
 
+        <div class="panel" id="atribuicaoLotePanel">
+          <h2>Atribuição em massa</h2>
+          <p class="desc">Selecione várias notas já em tratamento (Lançamento, Financeiro/CX ou Pendências) e atribua todas de uma vez a um usuário específico — sem precisar trocar o responsável nota por nota.</p>
+          <div class="filters-row">
+            <div class="field">
+              <label>Coluna</label>
+              <select id="atribuirLoteColunaSelect">
+                <option value="lancamento">Lançamento</option>
+                <option value="financeiro_cx">Financeiro/CX</option>
+                <option value="pendencias">Pendências</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Atribuir a</label>
+              <select id="atribuirLoteUsuarioSelect"></select>
+            </div>
+            <button class="btn" id="atribuirLoteSelecionadasBtn">Atribuir selecionadas</button>
+            <span id="atribuirLoteSelecaoInfo" class="legend-note"></span>
+          </div>
+        </div>
+
         <div class="board" id="board">
           <div class="col" data-col="importadas_sienge">
             <div class="col-head"><span class="title"><span class="dot" style="background:var(--col-importadas)"></span>Importadas SIENGE</span><span class="count" id="count-importadas_sienge">0</span></div>
@@ -1824,6 +1845,7 @@ function notaCasaComBusca(n, termo) {
   return campos.some((c) => c && String(c).toLowerCase().includes(termo));
 }
 const selectedEntradas = new Set();
+const selectedAtribuirLote = new Set();
 
 function fmtDateTime(iso) {
   if (!iso) return '—';
@@ -1943,6 +1965,7 @@ async function init() {
   setupObraForm();
   setupUsuarioForm();
   setupDistribuicao();
+  setupAtribuicaoLote();
   setupImportarSienge();
   setupAuditoriaFilters();
   setupRelatorioFilters();
@@ -2024,7 +2047,8 @@ function afterLogin(user) {
   document.getElementById('tabObras').classList.toggle('hidden', !(isAdmin || isSupervisor));
   document.getElementById('tabUsuarios').classList.toggle('hidden', !(isAdmin || isSupervisor));
   document.getElementById('tabAuditoria').classList.toggle('hidden', !(isAdmin || isSupervisor));
-  document.getElementById('distribuicaoPanel').classList.toggle('hidden', !(isAdmin || isSupervisor));
+  document.getElementById('distribuicaoPanel').classList.add('hidden');
+  document.getElementById('atribuicaoLotePanel').classList.add('hidden');
   document.getElementById('importarSiengePanel').classList.toggle('hidden', !(isAdmin || isSupervisor));
   document.getElementById('novoUsuarioPanel').classList.toggle('hidden', !isAdmin);
   document.getElementById('novaObraPanel').classList.toggle('hidden', !(isAdmin || isSupervisor));
@@ -2032,10 +2056,13 @@ function afterLogin(user) {
   if (isSupervisor && user.coluna) {
     const sel = document.getElementById('distribuirColunaSelect');
     sel.innerHTML = `<option value="${user.coluna}">${COLUNA_LABELS[user.coluna]}</option>`;
+    const selLote = document.getElementById('atribuirLoteColunaSelect');
+    selLote.innerHTML = `<option value="${user.coluna}">${COLUNA_LABELS[user.coluna]}</option>`;
   }
 
   if (isAdmin || isSupervisor) {
     atualizarOperadoresDistribuicao();
+    atualizarOperadoresAtribuicaoLote();
   }
 
   switchView('quadro');
@@ -2156,6 +2183,7 @@ function renderBoard() {
     for (const nota of grouped[c]) body.appendChild(renderCard(nota, c));
   }
   updateSelecaoInfo();
+  updateSelecaoAtribuicaoLoteInfo();
 }
 
 // Popula um <select> de "Obra" com as obras ativas do banco de cadastro de
@@ -2206,6 +2234,8 @@ function renderCard(nota, coluna) {
   let checkboxHtml = '';
   if (coluna === 'entradas' && canDistribuir) {
     checkboxHtml = `<div class="checkbox-row"><input type="checkbox" class="entrada-check" data-id="${nota.id}" ${selectedEntradas.has(nota.id) ? 'checked' : ''}/> <span style="font-size:11px;color:var(--text-muted)">selecionar</span></div>`;
+  } else if (COLUNAS_DISTRIBUIVEIS.includes(coluna) && canDistribuir && coluna === colunaAtribuicaoLoteSelecionada()) {
+    checkboxHtml = `<div class="checkbox-row"><input type="checkbox" class="atribuir-lote-check" data-id="${nota.id}" ${selectedAtribuirLote.has(nota.id) ? 'checked' : ''}/> <span style="font-size:11px;color:var(--text-muted)">selecionar p/ atribuição em massa</span></div>`;
   }
 
   let obraHtml = '';
@@ -2380,6 +2410,12 @@ function renderCard(nota, coluna) {
     if (chk.checked) selectedEntradas.add(nota.id); else selectedEntradas.delete(nota.id);
     updateSelecaoInfo();
   });
+  const chkLote = div.querySelector('.atribuir-lote-check');
+  if (chkLote) chkLote.addEventListener('change', () => {
+    if (chkLote.checked) selectedAtribuirLote.add(nota.id); else selectedAtribuirLote.delete(nota.id);
+    updateSelecaoAtribuicaoLoteInfo();
+    atualizarOperadoresAtribuicaoLote();
+  });
   const concluirBtn = div.querySelector('[data-action="concluir"]');
   if (concluirBtn) concluirBtn.addEventListener('click', () => openConcluirModal(nota.id, nota.numeroTitulo));
   const escalarBtn = div.querySelector('[data-action="escalar"]');
@@ -2420,6 +2456,32 @@ function escapeHtml(str) {
 function updateSelecaoInfo() {
   const info = document.getElementById('selecaoInfo');
   if (info) info.textContent = selectedEntradas.size ? `${selectedEntradas.size} nota(s) selecionada(s)` : '';
+  // Painel só aparece quando há pelo menos uma nota selecionada (mesmo que
+  // seja só uma) — mantém a tela limpa quando não há nada em seleção.
+  const panel = document.getElementById('distribuicaoPanel');
+  if (panel) {
+    const podeVer = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor');
+    panel.classList.toggle('hidden', !(podeVer && selectedEntradas.size >= 1));
+  }
+}
+
+// Coluna atualmente escolhida no painel "Atribuição em massa" — só as notas
+// dessa coluna mostram a checkbox de seleção para atribuição em lote.
+function colunaAtribuicaoLoteSelecionada() {
+  return document.getElementById('atribuirLoteColunaSelect')?.value || 'lancamento';
+}
+
+function updateSelecaoAtribuicaoLoteInfo() {
+  const info = document.getElementById('atribuirLoteSelecaoInfo');
+  if (info) info.textContent = selectedAtribuirLote.size ? `${selectedAtribuirLote.size} nota(s) selecionada(s)` : '';
+  // "Atribuição em massa" só faz sentido — e só aparece — quando mais de uma
+  // nota está selecionada; para uma única nota já existe o "Atribuir a…" no
+  // próprio card.
+  const panel = document.getElementById('atribuicaoLotePanel');
+  if (panel) {
+    const podeVer = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor');
+    panel.classList.toggle('hidden', !(podeVer && selectedAtribuirLote.size > 1));
+  }
 }
 
 function setupDistribuicao() {
@@ -2486,6 +2548,105 @@ async function atualizarOperadoresDistribuicao() {
   } catch (e) {
     sel.innerHTML = '<option value="">Não foi possível carregar os usuários</option>';
   }
+}
+
+// Painel "Atribuição em massa": permite selecionar várias notas que já
+// estão numa coluna de tratamento (Lançamento, Financeiro/CX ou Pendências)
+// e atribuir todas de uma vez a um único usuário — reaproveita o mesmo
+// endpoint de atribuição individual (/api/notas/:id/atribuir), chamado uma
+// vez para cada nota selecionada.
+function setupAtribuicaoLote() {
+  const colunaSel = document.getElementById('atribuirLoteColunaSelect');
+  colunaSel.addEventListener('change', () => {
+    selectedAtribuirLote.clear();
+    atualizarOperadoresAtribuicaoLote();
+    renderBoard();
+  });
+
+  document.getElementById('atribuirLoteSelecionadasBtn').addEventListener('click', async () => {
+    if (selectedAtribuirLote.size === 0) {
+      toast('Selecione ao menos uma nota para atribuir.', 'error');
+      return;
+    }
+    const usuarioId = document.getElementById('atribuirLoteUsuarioSelect').value;
+    if (!usuarioId) {
+      toast('Selecione o usuário que vai receber as notas.', 'error');
+      return;
+    }
+    const usuario = USERS_CACHE.find((u) => u.id === usuarioId);
+    const ids = Array.from(selectedAtribuirLote);
+    const resultados = await Promise.allSettled(
+      ids.map((id) => api.post(`/api/notas/${id}/atribuir`, { assignedTo: usuarioId }))
+    );
+    const sucesso = resultados.filter((r) => r.status === 'fulfilled').length;
+    const falhas = resultados.length - sucesso;
+    if (sucesso > 0) {
+      toast(
+        `${sucesso} nota(s) atribuída(s) para ${usuario ? usuario.name : 'usuário selecionado'} em ${COLUNA_LABELS[colunaSel.value]}.` +
+        (falhas ? ` ${falhas} não puderam ser atribuídas.` : ''),
+        falhas ? 'error' : 'success'
+      );
+    } else {
+      toast('Não foi possível atribuir as notas selecionadas.', 'error');
+    }
+    selectedAtribuirLote.clear();
+    loadBoard();
+  });
+
+  atualizarOperadoresAtribuicaoLote();
+}
+
+// Lista de usuários elegíveis para receber uma nota numa coluna distribuível
+// — operadores fixos da coluna, mais os responsáveis pela validação de
+// recebimento da obra da nota (mesma regra do "Atribuir a…" de cada card,
+// ver renderCard). É essa segunda parte que normalmente falta em Pendências,
+// já que ali quem trata a nota costuma ser o responsável pela obra, não um
+// operador formalmente cadastrado na coluna.
+function operadoresElegiveisParaNota(nota, coluna) {
+  const operadoresDaColuna = USERS_CACHE.filter((u) => u.role === 'operador' && u.coluna === coluna && u.active);
+  const obraDaNota = nota && nota.obra ? OBRAS_CACHE.find((o) => o.nome === nota.obra) : null;
+  const validadorIds = obraDaNota && Array.isArray(obraDaNota.validadorIds) ? obraDaNota.validadorIds : [];
+  const validadoresExtras = USERS_CACHE.filter((u) => u.active && validadorIds.includes(u.id) && !operadoresDaColuna.some((o) => o.id === u.id));
+  return [...operadoresDaColuna, ...validadoresExtras];
+}
+
+// Carrega, na coluna escolhida no painel de atribuição em massa, os usuários
+// elegíveis para receber o lote. Sem seleção ainda, mostra só os operadores
+// fixos da coluna; com notas selecionadas, calcula por nota (operadores +
+// responsáveis pela obra) e mantém apenas quem é elegível para TODAS as
+// notas selecionadas — evita atribuir em massa a alguém que não responde
+// pela obra de uma das notas do lote.
+async function atualizarOperadoresAtribuicaoLote() {
+  const coluna = document.getElementById('atribuirLoteColunaSelect').value;
+  const sel = document.getElementById('atribuirLoteUsuarioSelect');
+  if (!sel) return;
+  try {
+    const { users } = await api.get('/api/users');
+    USERS_CACHE = users;
+  } catch (e) {
+    sel.innerHTML = '<option value="">Não foi possível carregar os usuários</option>';
+    return;
+  }
+
+  const notasSelecionadas = Array.from(selectedAtribuirLote)
+    .map((id) => NOTAS_CACHE.find((n) => n.id === id))
+    .filter(Boolean);
+
+  let elegiveis;
+  if (notasSelecionadas.length === 0) {
+    elegiveis = USERS_CACHE.filter((u) => u.role === 'operador' && u.coluna === coluna && u.active);
+  } else {
+    const listasPorNota = notasSelecionadas.map((n) => operadoresElegiveisParaNota(n, coluna));
+    const [primeira, ...resto] = listasPorNota;
+    elegiveis = primeira.filter((u) => resto.every((lista) => lista.some((u2) => u2.id === u.id)));
+  }
+  elegiveis = elegiveis
+    .filter((u, idx, arr) => arr.findIndex((u2) => u2.id === u.id) === idx)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  sel.innerHTML = elegiveis.length
+    ? elegiveis.map((u) => `<option value="${u.id}">${escapeHtml(u.name)}</option>`).join('')
+    : '<option value="">Nenhum usuário elegível para todas as notas selecionadas</option>';
 }
 
 // ---------------------------------------------------------------------
