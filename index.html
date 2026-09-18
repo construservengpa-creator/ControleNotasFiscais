@@ -3103,7 +3103,7 @@ function renderComentariosList(comentarios) {
     return `
     <div class="comentario-item${own ? ' own' : ''}" data-comentario-id="${c.id}">
       <div class="comentario-autor">${escapeHtml(c.autor_nome || '—')}</div>
-      ${c.destinatario_nome ? `<div class="comentario-para">Para: ${escapeHtml(c.destinatario_nome)}</div>` : ''}
+      <div class="comentario-para">Para: ${c.destinatario_nome ? escapeHtml(c.destinatario_nome) : 'Todos'}</div>
       <div class="comentario-texto">${escapeHtml(c.mensagem)}</div>
       <div class="comentario-hora">${fmtDateTime(c.created_at)}${podeExcluir ? ` · <button type="button" class="comentario-excluir" data-action="excluir-comentario" data-comentario-id="${c.id}">excluir</button>` : ''}</div>
     </div>`;
