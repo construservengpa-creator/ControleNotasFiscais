@@ -1338,21 +1338,17 @@ async function apiGet(path) {
   if (pathname === '/api/comentarios/pendentes') {
     const { data: authData } = await supabaseClient.auth.getUser();
     if (!authData || !authData.user) fail(401, 'Não autenticado.');
-    const { data, error } = await supabaseClient
-      .from('nota_comentarios')
-      .select('id, nota_id, mensagem, created_at, autor_id, notas(numero, fornecedor)')
-      .eq('destinatario_id', authData.user.id)
-      .is('lida_em', null)
-      .order('created_at', { ascending: false })
-      .limit(50);
+    // Diretas (destinatario_id = eu, não lidas) + gerais (destinatario_id
+    // null) das notas cuja obra eu valido, com leitura individual controlada
+    // por nota_comentario_leituras — ver função no banco.
+    const { data, error } = await supabaseClient.rpc('comentarios_pendentes');
     throwSupabaseError(error);
-    const nomes = await buscarNomes((data || []).map((c) => c.autor_id));
     return {
       pendentes: (data || []).map((c) => ({
         id: c.id, notaId: c.nota_id, mensagem: c.mensagem, createdAt: c.created_at,
-        autorNome: c.autor_id ? (nomes[c.autor_id] || null) : null,
-        notaNumero: c.notas ? c.notas.numero : null,
-        notaFornecedor: c.notas ? c.notas.fornecedor : null,
+        autorNome: c.autor_nome || null,
+        notaNumero: c.nota_numero || null,
+        notaFornecedor: c.nota_fornecedor || null,
       })),
     };
   }
@@ -1686,10 +1682,9 @@ async function apiPost(path, body) {
   // nota — marca como lidas as mensagens direcionadas a ela nessa nota, o
   // que atualiza o contador do sininho no topo.
   if (seg[1] === 'notas' && seg[3] === 'comentarios' && seg[4] === 'marcar-lidas') {
-    const { data: authData } = await supabaseClient.auth.getUser();
-    const { error } = await supabaseClient.from('nota_comentarios')
-      .update({ lida_em: new Date().toISOString() })
-      .eq('nota_id', Number(seg[2])).eq('destinatario_id', authData.user.id).is('lida_em', null);
+    // Marca como lidas as diretas a mim e registra minha leitura individual
+    // das gerais dessa nota (ver função marcar_comentarios_lidos no banco).
+    const { error } = await supabaseClient.rpc('marcar_comentarios_lidos', { p_nota_id: Number(seg[2]) });
     throwSupabaseError(error);
     return { ok: true };
   }
