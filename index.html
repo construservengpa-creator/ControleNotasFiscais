@@ -5,9 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Controle de Notas Fiscais — Sede AMETA</title>
 <!-- SheetJS: lê o .xlsx do relatório do SIENGE inteiramente no navegador, sem enviar o arquivo a nenhum servidor. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <!-- Supabase: banco de dados compartilhado (substitui o localStorage por um backend real). -->
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -265,8 +264,9 @@ main.content {
 .col[data-col="concluido"] .col-head { background: color-mix(in srgb, var(--col-concluido) 14%, transparent); }
 .col-body { padding: 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
 /* ---------- Arrastar e soltar (mover em massa) ---------- */
-.card[draggable="true"] { cursor: grab; }
-.card[draggable="true"]:active { cursor: grabbing; }
+.card.pode-arrastar { cursor: grab; touch-action: manipulation; -webkit-touch-callout: none; }
+.card.pode-arrastar :is(button, select, input, a, label) { cursor: pointer; }
+body.arrastando-ativo, body.arrastando-ativo * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
 .card.selecionado {
   outline: 2px solid var(--accent); outline-offset: 1px;
   background: color-mix(in srgb, var(--accent) 7%, var(--surface-1));
@@ -281,7 +281,7 @@ main.content {
   color: #1A1E24; background: var(--accent); border-radius: 6px; padding: 6px 8px;
 }
 .drag-ghost {
-  position: fixed; top: -200px; left: -200px; pointer-events: none;
+  position: fixed; top: 0; left: 0; z-index: 9999; pointer-events: none; will-change: transform;
   background: var(--accent); color: #1A1E24; font-family: var(--font-mono); font-size: 12px; font-weight: 700;
   padding: 7px 12px; border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,0.35); white-space: nowrap;
 }
@@ -1084,7 +1084,6 @@ const supabaseClient = SUPABASE_CONFIGURADO
    quem decide, e qualquer tentativa de burlar pelo DevTools é barrada lá.
    ========================================================================= */
 const ANEXO_BUCKET = 'anexos';
-const SESSION_KEY = 'ameta_notas_session_v1'; // não usado para autenticação (isso é o Supabase Auth) — mantido só por compatibilidade, pode ser removido depois
 
 const COLUNAS_DISTRIBUIVEIS = ['lancamento', 'financeiro_cx', 'pendencias'];
 const COLUNA_LABELS_DB = {
@@ -1092,7 +1091,6 @@ const COLUNA_LABELS_DB = {
   pendencias: 'Pendências', concluido: 'Finalização',
 };
 
-function nowIso() { return new Date().toISOString(); }
 function todayIso() { return new Date().toISOString().slice(0, 10); }
 function fail(status, message) { const e = new Error(message); e.status = status; throw e; }
 
@@ -1184,11 +1182,14 @@ async function buscarNomes(ids) {
   return mapa;
 }
 
-async function buscarObrasMapa() {
-  const { data } = await supabaseClient.from('obras').select('id,nome');
-  const mapa = {};
-  (data || []).forEach((o) => { mapa[o.id] = o.nome; });
-  return mapa;
+// Id do usuário logado a partir da sessão local (sem ida ao servidor de
+// Auth). A segurança continua garantida pelo RLS/RPC no banco; getUser() fica
+// só no login e em /api/auth/me, onde a validação do token importa.
+async function uidSessaoAtual() {
+  const { data } = await supabaseClient.auth.getSession();
+  const uid = data && data.session && data.session.user ? data.session.user.id : null;
+  if (!uid) fail(401, 'Não autenticado.');
+  return uid;
 }
 
 async function resolverObraId(nomeObra) {
@@ -1364,8 +1365,7 @@ async function apiGet(path) {
   }
 
   if (pathname === '/api/comentarios/pendentes') {
-    const { data: authData } = await supabaseClient.auth.getUser();
-    if (!authData || !authData.user) fail(401, 'Não autenticado.');
+    await uidSessaoAtual();
     // Diretas (destinatario_id = eu, não lidas) + gerais (destinatario_id
     // null) das notas cuja obra eu valido, com leitura individual controlada
     // por nota_comentario_leituras — ver função no banco.
@@ -1385,12 +1385,11 @@ async function apiGet(path) {
   // "atribuições" no topo) — mesma lógica do sininho de mensagens, mas
   // baseada em assigned_seen_at em vez de nota_comentarios.lida_em.
   if (pathname === '/api/notas/atribuicoes-pendentes') {
-    const { data: authData } = await supabaseClient.auth.getUser();
-    if (!authData || !authData.user) fail(401, 'Não autenticado.');
+    const uid = await uidSessaoAtual();
     const { data, error } = await supabaseClient
       .from('notas')
       .select('id, numero, fornecedor, assigned_at')
-      .eq('assigned_to', authData.user.id)
+      .eq('assigned_to', uid)
       .is('assigned_seen_at', null)
       .in('status', COLUNAS_DISTRIBUIVEIS)
       .order('assigned_at', { ascending: false })
@@ -1697,9 +1696,9 @@ async function apiPost(path, body) {
   if (seg[1] === 'notas' && seg[3] === 'comentarios' && seg.length === 4) {
     const texto = (body.mensagem || '').trim();
     if (!texto) fail(400, 'Escreva uma mensagem antes de enviar.');
-    const { data: authData } = await supabaseClient.auth.getUser();
+    const uid = await uidSessaoAtual();
     const { data, error } = await supabaseClient.from('nota_comentarios').insert({
-      nota_id: Number(seg[2]), autor_id: authData.user.id, mensagem: texto,
+      nota_id: Number(seg[2]), autor_id: uid, mensagem: texto,
       destinatario_id: body.destinatarioId || null,
     }).select().single();
     throwSupabaseError(error, 'Não foi possível enviar a mensagem nesta nota.');
@@ -1878,7 +1877,6 @@ const selectedMover = new Set();
 // Importadas SIENGE só recebe via importação e Finalização exige o modal de
 // conclusão (nº do título), então não são destinos de arrastar.
 const COLUNAS_DESTINO_ARRASTE = ['entradas', 'lancamento', 'financeiro_cx', 'pendencias'];
-let DRAG_IDS = null;
 
 function fmtDateTime(iso) {
   if (!iso) return '—';
@@ -1907,6 +1905,23 @@ function fmtDuration(ms) {
   return partes.join(' ');
 }
 function initials(name) { if (!name) return '?'; return name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join(''); }
+// Leitor de planilhas (~900 KB) só é baixado quando alguém importa o
+// relatório do SIENGE — antes era carregado em toda abertura do sistema.
+let XLSX_PROMISE = null;
+function carregarXLSX() {
+  if (typeof XLSX !== 'undefined') return Promise.resolve();
+  if (!XLSX_PROMISE) {
+    XLSX_PROMISE = new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      sc.onload = resolve;
+      sc.onerror = () => { XLSX_PROMISE = null; sc.remove(); reject(new Error('xlsx')); };
+      document.head.appendChild(sc);
+    });
+  }
+  return XLSX_PROMISE;
+}
+
 function toast(msg, type) {
   const el = document.getElementById('toast');
   el.textContent = msg;
@@ -2069,6 +2084,13 @@ function afterLogin(user) {
   atualizarBadgeAtribuicoes();
   if (ATR_BADGE_POLL) clearInterval(ATR_BADGE_POLL);
   ATR_BADGE_POLL = setInterval(atualizarBadgeAtribuicoes, 20000);
+  // Ao voltar para a aba, atualiza na hora (os pollers ficam parados em 2º plano).
+  if (!afterLogin._visListener) {
+    afterLogin._visListener = true;
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && CURRENT_USER) { atualizarBadgeMensagens(); atualizarBadgeAtribuicoes(); }
+    });
+  }
 
   const isAdmin = user.role === 'admin';
   const isSupervisor = user.role === 'supervisor';
@@ -2115,9 +2137,13 @@ function setupNav() {
     renderBoard();
   });
   const buscaInput = document.getElementById('buscaNotaInput');
+  let buscaTimer = null;
   buscaInput.addEventListener('input', () => {
-    BOARD_BUSCA_TEXTO = buscaInput.value;
-    renderBoard();
+    clearTimeout(buscaTimer);
+    buscaTimer = setTimeout(() => {
+      BOARD_BUSCA_TEXTO = buscaInput.value;
+      renderBoard();
+    }, 180);
   });
   document.getElementById('buscaNotaLimparBtn').addEventListener('click', () => {
     buscaInput.value = '';
@@ -2129,7 +2155,7 @@ function setupNav() {
 function switchView(view) {
   document.querySelectorAll('nav.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   document.querySelectorAll('main .view').forEach((v) => v.classList.toggle('active', v.id === `view-${view}`));
-  if (view === 'quadro') loadBoard();
+  if (view === 'quadro') loadBoard(true);
   if (view === 'cadastro') { loadUltimosCadastros(); popularObraSelect(document.getElementById('nfObra')); }
   if (view === 'obras') loadObras();
   if (view === 'usuarios') loadUsuarios();
@@ -2137,7 +2163,8 @@ function switchView(view) {
   if (view === 'relatorios') loadRelatorios();
 }
 
-async function loadBoard() {
+let AUX_BOARD_TS = 0;
+async function loadBoard(forcarAux = false) {
   try {
     const podeGerenciar = CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor';
     // Também recarrega as obras (com os validadores de recebimento de cada
@@ -2145,14 +2172,19 @@ async function loadBoard() {
     // montar corretamente o botão "Homologar recebimento" e o seletor
     // "Atribuir a…" nos cards. Operador não tem acesso a GET /api/users,
     // então só busca quando faz sentido.
+    // Obras e usuários mudam pouco: só são buscados de novo a cada 60s (ou ao
+    // abrir o Quadro). Depois de mover/concluir/atribuir, só as notas voltam
+    // do banco — 1 chamada em vez de 3.
+    const auxVencido = forcarAux || Date.now() - AUX_BOARD_TS > 60000;
     const [{ notas }, obrasResp, usersResp] = await Promise.all([
       api.get('/api/notas'),
-      api.get('/api/obras').catch(() => ({ obras: OBRAS_CACHE })),
-      podeGerenciar ? api.get('/api/users').catch(() => ({ users: USERS_CACHE })) : Promise.resolve({ users: USERS_CACHE }),
+      auxVencido ? api.get('/api/obras').catch(() => ({ obras: OBRAS_CACHE })) : Promise.resolve({ obras: OBRAS_CACHE }),
+      podeGerenciar && auxVencido ? api.get('/api/users').catch(() => ({ users: USERS_CACHE })) : Promise.resolve({ users: USERS_CACHE }),
     ]);
     NOTAS_CACHE = notas;
     OBRAS_CACHE = obrasResp.obras;
     if (podeGerenciar) USERS_CACHE = usersResp.users;
+    if (auxVencido) AUX_BOARD_TS = Date.now();
     renderBoard();
   } catch (e) {
     toast(e.message, 'error');
@@ -2169,6 +2201,7 @@ function podeHomologar(nota) {
   return !!(obra && Array.isArray(obra.validadorIds) && obra.validadorIds.includes(CURRENT_USER.id));
 }
 
+let OPERADORES_POR_COLUNA = {};
 function renderBoard() {
   const cols = ['importadas_sienge', 'entradas', 'lancamento', 'financeiro_cx', 'pendencias', 'concluido'];
   const grouped = { importadas_sienge: [], entradas: [], lancamento: [], financeiro_cx: [], pendencias: [], concluido: [] };
@@ -2195,6 +2228,10 @@ function renderBoard() {
       : '';
   }
 
+  OPERADORES_POR_COLUNA = {};
+  for (const u of USERS_CACHE) {
+    if (u.role === 'operador' && u.active && u.coluna) (OPERADORES_POR_COLUNA[u.coluna] ||= []).push(u);
+  }
   for (const c of cols) {
     if (c === 'concluido') {
       // Na Finalização, o mais útil é ver primeiro quem concluiu por último —
@@ -2213,8 +2250,9 @@ function renderBoard() {
       ? `${grouped[c].length} / ${totalConcluidas}`
       : grouped[c].length;
     const body = document.getElementById(`body-${c}`);
-    body.innerHTML = '';
-    for (const nota of grouped[c]) body.appendChild(renderCard(nota, c));
+    const frag = document.createDocumentFragment();
+    for (const nota of grouped[c]) frag.appendChild(renderCard(nota, c));
+    body.replaceChildren(frag);
   }
   updateSelecaoInfo();
   updateSelecaoAtribuicaoLoteInfo();
@@ -2395,7 +2433,7 @@ function renderCard(nota, coluna) {
   // comum que quem vai homologar o material não seja formalmente um
   // operador de "Pendências".
   if (COLUNAS_DISTRIBUIVEIS.includes(coluna) && canDistribuir) {
-    const operadoresDaColuna = USERS_CACHE.filter((u) => u.role === 'operador' && u.coluna === coluna && u.active);
+    const operadoresDaColuna = OPERADORES_POR_COLUNA[coluna] || [];
     const obraDaNota = nota.obra ? OBRAS_CACHE.find((o) => o.nome === nota.obra) : null;
     const validadorIds = obraDaNota && Array.isArray(obraDaNota.validadorIds) ? obraDaNota.validadorIds : [];
     const validadoresExtras = USERS_CACHE.filter((u) => u.active && validadorIds.includes(u.id) && !operadoresDaColuna.some((o) => o.id === u.id));
@@ -2460,7 +2498,11 @@ function renderCard(nota, coluna) {
     if (chkMover.checked) selectedMover.add(nota.id); else selectedMover.delete(nota.id);
     atualizarVisualSelecaoCard(div, nota.id);
   });
-  if (canDistribuir) prepararCardArrastavel(div, nota, coluna);
+  if (canDistribuir) {
+    div.classList.add('pode-arrastar');
+    div.dataset.id = nota.id;
+    if (idsSelecionadosParaMover().has(nota.id)) div.classList.add('selecionado');
+  }
   const concluirBtn = div.querySelector('[data-action="concluir"]');
   if (concluirBtn) concluirBtn.addEventListener('click', () => openConcluirModal(nota.id, nota.numeroTitulo));
   const escalarBtn = div.querySelector('[data-action="escalar"]');
@@ -2529,80 +2571,176 @@ function limparTodasSelecoes() {
   selectedMover.clear();
 }
 
-function prepararCardArrastavel(div, nota, coluna) {
-  div.dataset.id = nota.id;
-  div.dataset.col = coluna;
-  div.classList.toggle('selecionado', idsSelecionadosParaMover().has(nota.id));
-  div.draggable = true;
-  // Evita que selects/botões/inputs dentro do card iniciem um arraste (e que
-  // o arraste atrapalhe o uso deles).
-  const interativo = (el) => el.closest('input, select, button, textarea, a, label');
-  div.addEventListener('mousedown', (ev) => { div.draggable = !interativo(ev.target); });
-  div.addEventListener('mouseup', () => { div.draggable = true; });
+// Arraste feito com Pointer Events (não com o drag-and-drop nativo do HTML):
+// começa assim que o mouse anda 4px, a mãozinha vira "agarrando" na hora e
+// continua assim até soltar, o indicador acompanha o cursor a cada quadro
+// (requestAnimationFrame) e funciona também no toque — segurando o card por
+// ~0,3s. Tudo delegado no #board: nenhum listener por card.
+const ARRASTE = {
+  pendente: null,   // { id, x, y, pointerId, tipo, timer }
+  ativo: false,
+  ids: null,
+  ghost: null,
+  x: 0, y: 0,
+  colHover: null,
+  raf: 0,
+  engolirClique: false,
+};
+const LIMIAR_MOUSE_PX = 4;
+const LIMIAR_TOQUE_PX = 8;
+const TOQUE_SEGURAR_MS = 300;
+const EL_INTERATIVO = 'input, select, button, textarea, a, label';
 
-  // Ctrl/⌘ + clique no card alterna a seleção (atalho para a checkbox).
-  div.addEventListener('click', (ev) => {
-    if (!(ev.ctrlKey || ev.metaKey) || interativo(ev.target)) return;
-    ev.preventDefault();
-    const box = div.querySelector('.entrada-check, .atribuir-lote-check, .mover-check');
-    if (!box) return;
-    box.checked = !box.checked;
-    box.dispatchEvent(new Event('change'));
-  });
+function iniciarArraste() {
+  const p = ARRASTE.pendente;
+  if (p.timer) { clearTimeout(p.timer); p.timer = null; }
+  const selecionados = idsSelecionadosParaMover();
+  const id = Number(p.id);
+  ARRASTE.ids = selecionados.has(id) ? Array.from(selecionados) : [id];
+  ARRASTE.ativo = true;
+  window.getSelection()?.removeAllRanges();
+  document.body.classList.add('arrastando-ativo');
 
-  div.addEventListener('dragstart', (ev) => {
-    const selecionados = idsSelecionadosParaMover();
-    DRAG_IDS = selecionados.has(nota.id) ? Array.from(selecionados) : [nota.id];
-    ev.dataTransfer.effectAllowed = 'move';
-    ev.dataTransfer.setData('text/plain', DRAG_IDS.join(','));
-    const ghost = document.createElement('div');
-    ghost.className = 'drag-ghost';
-    ghost.textContent = DRAG_IDS.length > 1 ? `Movendo ${DRAG_IDS.length} notas` : `NF ${nota.numero}`;
-    document.body.appendChild(ghost);
-    ev.dataTransfer.setDragImage(ghost, 16, 16);
-    setTimeout(() => ghost.remove(), 0);
-    const idsSet = new Set(DRAG_IDS);
-    document.querySelectorAll('#board .card').forEach((c) => {
-      if (idsSet.has(Number(c.dataset.id)) || idsSet.has(c.dataset.id)) c.classList.add('arrastando');
-    });
-    document.querySelectorAll('#board .col').forEach((col) => {
-      const ok = COLUNAS_DESTINO_ARRASTE.includes(col.dataset.col);
-      col.classList.add(ok ? 'drop-ok' : 'drop-bloqueada');
-    });
+  const nota = NOTAS_CACHE.find((n) => String(n.id) === String(id));
+  const g = document.createElement('div');
+  g.className = 'drag-ghost';
+  g.textContent = ARRASTE.ids.length > 1 ? `Movendo ${ARRASTE.ids.length} notas` : `NF ${nota ? nota.numero : ''}`;
+  g.style.transform = `translate3d(${ARRASTE.x + 14}px, ${ARRASTE.y + 14}px, 0)`;
+  document.body.appendChild(g);
+  ARRASTE.ghost = g;
+
+  const idsSet = new Set(ARRASTE.ids.map(String));
+  document.querySelectorAll('#board .card.pode-arrastar').forEach((c) => {
+    if (idsSet.has(c.dataset.id)) c.classList.add('arrastando');
   });
-  div.addEventListener('dragend', finalizarArraste);
+  document.querySelectorAll('#board .col').forEach((col) => {
+    col.classList.add(COLUNAS_DESTINO_ARRASTE.includes(col.dataset.col) ? 'drop-ok' : 'drop-bloqueada');
+  });
+  if (p.tipo !== 'mouse' && navigator.vibrate) navigator.vibrate(15);
+  ARRASTE.raf = requestAnimationFrame(quadroArraste);
 }
 
-function finalizarArraste() {
-  DRAG_IDS = null;
+// Roda uma vez por quadro enquanto arrasta: posiciona o indicador, descobre a
+// coluna sob o cursor e faz rolagem automática perto das bordas.
+function quadroArraste() {
+  if (!ARRASTE.ativo) return;
+  const { x, y } = ARRASTE;
+  ARRASTE.ghost.style.transform = `translate3d(${x + 14}px, ${y + 14}px, 0)`;
+
+  const el = document.elementFromPoint(x, y);
+  const col = el ? el.closest('#board .col') : null;
+  const alvo = col && COLUNAS_DESTINO_ARRASTE.includes(col.dataset.col) ? col : null;
+  if (alvo !== ARRASTE.colHover) {
+    if (ARRASTE.colHover) ARRASTE.colHover.classList.remove('drop-hover');
+    if (alvo) {
+      const n = ARRASTE.ids.length;
+      alvo.querySelector('.col-body').dataset.dropLabel = `Soltar ${n > 1 ? n + ' notas' : '1 nota'} em ${COLUNA_LABELS[alvo.dataset.col]}`;
+      alvo.classList.add('drop-hover');
+    }
+    ARRASTE.colHover = alvo;
+  }
+
+  const borda = 60, passo = 14;
+  if (y < borda) window.scrollBy(0, -passo);
+  else if (y > window.innerHeight - borda) window.scrollBy(0, passo);
+  const board = document.getElementById('board');
+  const rb = board.getBoundingClientRect();
+  if (board.scrollWidth > board.clientWidth) {
+    if (x < rb.left + borda) board.scrollLeft -= passo;
+    else if (x > rb.right - borda) board.scrollLeft += passo;
+  }
+  const body = col ? col.querySelector('.col-body') : null;
+  if (body && body.scrollHeight > body.clientHeight) {
+    const r = body.getBoundingClientRect();
+    if (y < r.top + 40) body.scrollTop -= passo;
+    else if (y > r.bottom - 40) body.scrollTop += passo;
+  }
+  ARRASTE.raf = requestAnimationFrame(quadroArraste);
+}
+
+function encerrarArraste() {
+  if (ARRASTE.pendente && ARRASTE.pendente.timer) clearTimeout(ARRASTE.pendente.timer);
+  ARRASTE.pendente = null;
+  if (!ARRASTE.ativo) return;
+  ARRASTE.ativo = false;
+  cancelAnimationFrame(ARRASTE.raf);
+  if (ARRASTE.ghost) ARRASTE.ghost.remove();
+  ARRASTE.ghost = null;
+  ARRASTE.colHover = null;
+  ARRASTE.ids = null;
+  document.body.classList.remove('arrastando-ativo');
   document.querySelectorAll('#board .card.arrastando').forEach((c) => c.classList.remove('arrastando'));
   document.querySelectorAll('#board .col').forEach((col) => col.classList.remove('drop-ok', 'drop-hover', 'drop-bloqueada'));
 }
 
 function setupArrastarSoltar() {
+  const board = document.getElementById('board');
+
+  board.addEventListener('pointerdown', (ev) => {
+    if (ev.button !== 0 || ARRASTE.ativo) return;
+    const card = ev.target.closest('.card.pode-arrastar');
+    if (!card || ev.target.closest(EL_INTERATIVO)) return;
+    const tipo = ev.pointerType || 'mouse';
+    ARRASTE.pendente = { id: card.dataset.id, x: ev.clientX, y: ev.clientY, pointerId: ev.pointerId, tipo, timer: null };
+    ARRASTE.x = ev.clientX; ARRASTE.y = ev.clientY;
+    if (tipo !== 'mouse') {
+      ARRASTE.pendente.timer = setTimeout(() => { if (ARRASTE.pendente) iniciarArraste(); }, TOQUE_SEGURAR_MS);
+    }
+  });
+
+  window.addEventListener('pointermove', (ev) => {
+    const p = ARRASTE.pendente;
+    if (!p || ev.pointerId !== p.pointerId) return;
+    ARRASTE.x = ev.clientX; ARRASTE.y = ev.clientY;
+    if (ARRASTE.ativo) return; // posição aplicada no próximo quadro
+    const dist = Math.hypot(ev.clientX - p.x, ev.clientY - p.y);
+    if (p.tipo === 'mouse') {
+      if (dist >= LIMIAR_MOUSE_PX) iniciarArraste();
+    } else if (dist >= LIMIAR_TOQUE_PX) {
+      encerrarArraste(); // mexeu antes de segurar: é rolagem, não arraste
+    }
+  }, { passive: true });
+
+  window.addEventListener('pointerup', (ev) => {
+    const p = ARRASTE.pendente;
+    if (!p || ev.pointerId !== p.pointerId) return;
+    if (!ARRASTE.ativo) { encerrarArraste(); return; }
+    ARRASTE.x = ev.clientX; ARRASTE.y = ev.clientY;
+    const el = document.elementFromPoint(ev.clientX, ev.clientY);
+    const col = el ? el.closest('#board .col') : null;
+    const destino = col && COLUNAS_DESTINO_ARRASTE.includes(col.dataset.col) ? col.dataset.col : null;
+    const ids = ARRASTE.ids.slice();
+    ARRASTE.engolirClique = true;
+    setTimeout(() => { ARRASTE.engolirClique = false; }, 0);
+    encerrarArraste();
+    if (destino) moverNotasEmMassa(ids, destino);
+  });
+  window.addEventListener('pointercancel', encerrarArraste);
+  window.addEventListener('keydown', (ev) => { if (ev.key === 'Escape' && ARRASTE.ativo) encerrarArraste(); });
+
+  // No toque, depois que o arraste começou, impede a página de rolar.
+  board.addEventListener('touchmove', (ev) => { if (ARRASTE.ativo) ev.preventDefault(); }, { passive: false });
+  // Bloqueia o drag nativo (ex.: de um texto selecionado), que roubaria o ponteiro.
+  board.addEventListener('dragstart', (ev) => { if (ev.target.closest && ev.target.closest('.card.pode-arrastar')) ev.preventDefault(); });
+  board.addEventListener('contextmenu', (ev) => { if (ARRASTE.pendente || ARRASTE.ativo) ev.preventDefault(); });
+
+  // Clique logo após soltar não deve abrir nada; Ctrl/⌘ + clique alterna a seleção.
+  board.addEventListener('click', (ev) => {
+    if (ARRASTE.engolirClique) { ev.stopPropagation(); ev.preventDefault(); return; }
+    if (!(ev.ctrlKey || ev.metaKey)) return;
+    const card = ev.target.closest('.card.pode-arrastar');
+    if (!card || ev.target.closest(EL_INTERATIVO)) return;
+    ev.preventDefault();
+    const box = card.querySelector('.entrada-check, .atribuir-lote-check, .mover-check');
+    if (!box) return;
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event('change'));
+  }, true);
+
   document.querySelectorAll('#board .col').forEach((col) => {
-    const destino = col.dataset.col;
-    if (!COLUNAS_DESTINO_ARRASTE.includes(destino)) return;
-    const body = col.querySelector('.col-body');
-    body.dataset.dropLabel = `Soltar em ${COLUNA_LABELS[destino]}`;
-    col.addEventListener('dragover', (ev) => {
-      if (!DRAG_IDS) return;
-      ev.preventDefault();
-      ev.dataTransfer.dropEffect = 'move';
-      const n = DRAG_IDS.length;
-      body.dataset.dropLabel = `Soltar ${n > 1 ? n + ' notas' : '1 nota'} em ${COLUNA_LABELS[destino]}`;
-      col.classList.add('drop-hover');
-    });
-    col.addEventListener('dragleave', (ev) => {
-      if (!col.contains(ev.relatedTarget)) col.classList.remove('drop-hover');
-    });
-    col.addEventListener('drop', (ev) => {
-      if (!DRAG_IDS) return;
-      ev.preventDefault();
-      const ids = DRAG_IDS.slice();
-      finalizarArraste();
-      moverNotasEmMassa(ids, destino);
-    });
+    if (COLUNAS_DESTINO_ARRASTE.includes(col.dataset.col)) {
+      col.querySelector('.col-body').dataset.dropLabel = `Soltar em ${COLUNA_LABELS[col.dataset.col]}`;
+    }
   });
   document.getElementById('selecaoMoverLimparBtn').addEventListener('click', () => {
     limparTodasSelecoes();
@@ -2900,7 +3038,11 @@ async function importarRelatorioSienge() {
     toast('Selecione o arquivo do relatório (.xlsx) primeiro.', 'error');
     return;
   }
-  if (typeof XLSX === 'undefined') {
+  try {
+    msg.textContent = 'Carregando leitor de planilhas…';
+    await carregarXLSX();
+  } catch (e) {
+    msg.textContent = '';
     toast('Não foi possível carregar o leitor de planilhas. Verifique sua conexão e tente novamente.', 'error');
     return;
   }
@@ -3209,7 +3351,7 @@ let PENDENTES_CACHE = [];
 
 async function atualizarBadgeMensagens() {
   const btn = document.getElementById('msgBadgeBtn');
-  if (!btn) return;
+  if (!btn || document.hidden) return;
   try {
     const { pendentes } = await api.get('/api/comentarios/pendentes');
     PENDENTES_CACHE = pendentes;
@@ -3257,7 +3399,7 @@ let ATRIBUICOES_CACHE = [];
 
 async function atualizarBadgeAtribuicoes() {
   const btn = document.getElementById('atrBadgeBtn');
-  if (!btn) return;
+  if (!btn || document.hidden) return;
   try {
     const { pendentes } = await api.get('/api/notas/atribuicoes-pendentes');
     ATRIBUICOES_CACHE = pendentes;
