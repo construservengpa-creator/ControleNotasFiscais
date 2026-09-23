@@ -264,6 +264,29 @@ main.content {
 .col[data-col="pendencias"] .col-head { background: color-mix(in srgb, var(--col-pendencias) 14%, transparent); }
 .col[data-col="concluido"] .col-head { background: color-mix(in srgb, var(--col-concluido) 14%, transparent); }
 .col-body { padding: 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
+/* ---------- Arrastar e soltar (mover em massa) ---------- */
+.card[draggable="true"] { cursor: grab; }
+.card[draggable="true"]:active { cursor: grabbing; }
+.card.selecionado {
+  outline: 2px solid var(--accent); outline-offset: 1px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface-1));
+}
+.card.arrastando { opacity: 0.4; }
+.col.drop-ok { outline: 2px dashed var(--accent-dim); outline-offset: -2px; }
+.col.drop-hover { outline: 2px solid var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 6%, var(--page)); }
+.col.drop-bloqueada { opacity: 0.45; }
+.col.drop-hover .col-body::before {
+  content: attr(data-drop-label); display: block; text-align: center;
+  font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #1A1E24; background: var(--accent); border-radius: 6px; padding: 6px 8px;
+}
+.drag-ghost {
+  position: fixed; top: -200px; left: -200px; pointer-events: none;
+  background: var(--accent); color: #1A1E24; font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+  padding: 7px 12px; border-radius: 999px; box-shadow: 0 6px 18px rgba(0,0,0,0.35); white-space: nowrap;
+}
+.selecao-mover-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--text-secondary); }
+.selecao-mover-bar .contador { font-family: var(--font-mono); color: var(--accent); font-weight: 600; }
 .col-body:empty::after { content: "Nenhuma nota nesta coluna."; color: var(--text-muted); font-size: 12px; padding: 12px 4px; }
 
 .card {
@@ -597,6 +620,11 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
             <button class="btn secondary" id="buscaNotaLimparBtn" type="button">Limpar</button>
             <span class="legend-note" id="buscaNotaResultado"></span>
           </div>
+          <div class="selecao-mover-bar hidden" id="selecaoMoverBar">
+            <span><span class="contador" id="selecaoMoverContador">0</span> nota(s) selecionada(s) — arraste qualquer uma delas até a coluna de destino para mover todas de uma vez.</span>
+            <button class="btn secondary small" id="selecaoMoverLimparBtn" type="button">Limpar seleção</button>
+          </div>
+          <p class="legend-note hidden" id="selecaoMoverDica" style="margin:8px 0 0;">Dica: marque as notas (ou Ctrl/⌘ + clique no card) e arraste para outra coluna para mover em massa. Também dá para arrastar um card sozinho.</p>
         </div>
 
         <div class="panel" id="distribuicaoPanel">
@@ -1841,6 +1869,16 @@ function notaCasaComBusca(n, termo) {
 }
 const selectedEntradas = new Set();
 const selectedAtribuirLote = new Set();
+// Seleção para mover por arrastar — cobre os cards que não têm a checkbox de
+// distribuição (Entradas) nem a de atribuição em massa (Importadas SIENGE,
+// Finalização e colunas de tratamento fora do painel de atribuição). Ao
+// arrastar, vale a união das três seleções.
+const selectedMover = new Set();
+// Destinos aceitos ao soltar — os mesmos do seletor "Mover para…" do card.
+// Importadas SIENGE só recebe via importação e Finalização exige o modal de
+// conclusão (nº do título), então não são destinos de arrastar.
+const COLUNAS_DESTINO_ARRASTE = ['entradas', 'lancamento', 'financeiro_cx', 'pendencias'];
+let DRAG_IDS = null;
 
 function fmtDateTime(iso) {
   if (!iso) return '—';
@@ -2086,6 +2124,7 @@ function setupNav() {
     BOARD_BUSCA_TEXTO = '';
     renderBoard();
   });
+  setupArrastarSoltar();
 }
 function switchView(view) {
   document.querySelectorAll('nav.tabs button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
@@ -2179,6 +2218,7 @@ function renderBoard() {
   }
   updateSelecaoInfo();
   updateSelecaoAtribuicaoLoteInfo();
+  atualizarBarraSelecaoMover();
 }
 
 // Popula um <select> de "Obra" com as obras ativas do banco de cadastro de
@@ -2231,6 +2271,8 @@ function renderCard(nota, coluna) {
     checkboxHtml = `<div class="checkbox-row"><input type="checkbox" class="entrada-check" data-id="${nota.id}" ${selectedEntradas.has(nota.id) ? 'checked' : ''}/> <span style="font-size:11px;color:var(--text-muted)">selecionar</span></div>`;
   } else if (COLUNAS_DISTRIBUIVEIS.includes(coluna) && canDistribuir && coluna === colunaAtribuicaoLoteSelecionada()) {
     checkboxHtml = `<div class="checkbox-row"><input type="checkbox" class="atribuir-lote-check" data-id="${nota.id}" ${selectedAtribuirLote.has(nota.id) ? 'checked' : ''}/> <span style="font-size:11px;color:var(--text-muted)">selecionar p/ atribuição em massa</span></div>`;
+  } else if (canDistribuir) {
+    checkboxHtml = `<div class="checkbox-row"><input type="checkbox" class="mover-check" data-id="${nota.id}" ${selectedMover.has(nota.id) ? 'checked' : ''}/> <span style="font-size:11px;color:var(--text-muted)">selecionar p/ mover</span></div>`;
   }
 
   let obraHtml = '';
@@ -2404,13 +2446,21 @@ function renderCard(nota, coluna) {
   if (chk) chk.addEventListener('change', () => {
     if (chk.checked) selectedEntradas.add(nota.id); else selectedEntradas.delete(nota.id);
     updateSelecaoInfo();
+    atualizarVisualSelecaoCard(div, nota.id);
   });
   const chkLote = div.querySelector('.atribuir-lote-check');
   if (chkLote) chkLote.addEventListener('change', () => {
     if (chkLote.checked) selectedAtribuirLote.add(nota.id); else selectedAtribuirLote.delete(nota.id);
     updateSelecaoAtribuicaoLoteInfo();
     atualizarOperadoresAtribuicaoLote();
+    atualizarVisualSelecaoCard(div, nota.id);
   });
+  const chkMover = div.querySelector('.mover-check');
+  if (chkMover) chkMover.addEventListener('change', () => {
+    if (chkMover.checked) selectedMover.add(nota.id); else selectedMover.delete(nota.id);
+    atualizarVisualSelecaoCard(div, nota.id);
+  });
+  if (canDistribuir) prepararCardArrastavel(div, nota, coluna);
   const concluirBtn = div.querySelector('[data-action="concluir"]');
   if (concluirBtn) concluirBtn.addEventListener('click', () => openConcluirModal(nota.id, nota.numeroTitulo));
   const escalarBtn = div.querySelector('[data-action="escalar"]');
@@ -2442,6 +2492,175 @@ function renderCard(nota, coluna) {
   if (reabrirBtn) reabrirBtn.addEventListener('click', () => reabrirNota(nota.id));
 
   return div;
+}
+
+/* ---------- Mover em massa por arrastar e soltar ----------
+   Admin/supervisor podem arrastar cards entre colunas. Se o card arrastado
+   estiver selecionado, vão junto todas as notas selecionadas (de qualquer
+   coluna); se não estiver, move só ele. Notas vindas de "Entradas" para uma
+   coluna de tratamento passam pela distribuição por rodízio (mesma regra do
+   painel "Distribuição"), para manter o cronômetro de tratamento; as demais
+   usam a mesma mudança de status do "Mover para…". Cada nota é validada
+   pelo servidor — as que forem recusadas (ex.: sem homologação) são
+   informadas no aviso final sem bloquear as outras. */
+function idsSelecionadosParaMover() {
+  return new Set([...selectedEntradas, ...selectedAtribuirLote, ...selectedMover]);
+}
+
+function atualizarVisualSelecaoCard(div, id) {
+  div.classList.toggle('selecionado', idsSelecionadosParaMover().has(id));
+  atualizarBarraSelecaoMover();
+}
+
+function atualizarBarraSelecaoMover() {
+  const podeVer = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor');
+  const total = idsSelecionadosParaMover().size;
+  const bar = document.getElementById('selecaoMoverBar');
+  const dica = document.getElementById('selecaoMoverDica');
+  if (bar) bar.classList.toggle('hidden', !(podeVer && total > 0));
+  if (dica) dica.classList.toggle('hidden', !(podeVer && total === 0));
+  const cont = document.getElementById('selecaoMoverContador');
+  if (cont) cont.textContent = total;
+}
+
+function limparTodasSelecoes() {
+  selectedEntradas.clear();
+  selectedAtribuirLote.clear();
+  selectedMover.clear();
+}
+
+function prepararCardArrastavel(div, nota, coluna) {
+  div.dataset.id = nota.id;
+  div.dataset.col = coluna;
+  div.classList.toggle('selecionado', idsSelecionadosParaMover().has(nota.id));
+  div.draggable = true;
+  // Evita que selects/botões/inputs dentro do card iniciem um arraste (e que
+  // o arraste atrapalhe o uso deles).
+  const interativo = (el) => el.closest('input, select, button, textarea, a, label');
+  div.addEventListener('mousedown', (ev) => { div.draggable = !interativo(ev.target); });
+  div.addEventListener('mouseup', () => { div.draggable = true; });
+
+  // Ctrl/⌘ + clique no card alterna a seleção (atalho para a checkbox).
+  div.addEventListener('click', (ev) => {
+    if (!(ev.ctrlKey || ev.metaKey) || interativo(ev.target)) return;
+    ev.preventDefault();
+    const box = div.querySelector('.entrada-check, .atribuir-lote-check, .mover-check');
+    if (!box) return;
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event('change'));
+  });
+
+  div.addEventListener('dragstart', (ev) => {
+    const selecionados = idsSelecionadosParaMover();
+    DRAG_IDS = selecionados.has(nota.id) ? Array.from(selecionados) : [nota.id];
+    ev.dataTransfer.effectAllowed = 'move';
+    ev.dataTransfer.setData('text/plain', DRAG_IDS.join(','));
+    const ghost = document.createElement('div');
+    ghost.className = 'drag-ghost';
+    ghost.textContent = DRAG_IDS.length > 1 ? `Movendo ${DRAG_IDS.length} notas` : `NF ${nota.numero}`;
+    document.body.appendChild(ghost);
+    ev.dataTransfer.setDragImage(ghost, 16, 16);
+    setTimeout(() => ghost.remove(), 0);
+    const idsSet = new Set(DRAG_IDS);
+    document.querySelectorAll('#board .card').forEach((c) => {
+      if (idsSet.has(Number(c.dataset.id)) || idsSet.has(c.dataset.id)) c.classList.add('arrastando');
+    });
+    document.querySelectorAll('#board .col').forEach((col) => {
+      const ok = COLUNAS_DESTINO_ARRASTE.includes(col.dataset.col);
+      col.classList.add(ok ? 'drop-ok' : 'drop-bloqueada');
+    });
+  });
+  div.addEventListener('dragend', finalizarArraste);
+}
+
+function finalizarArraste() {
+  DRAG_IDS = null;
+  document.querySelectorAll('#board .card.arrastando').forEach((c) => c.classList.remove('arrastando'));
+  document.querySelectorAll('#board .col').forEach((col) => col.classList.remove('drop-ok', 'drop-hover', 'drop-bloqueada'));
+}
+
+function setupArrastarSoltar() {
+  document.querySelectorAll('#board .col').forEach((col) => {
+    const destino = col.dataset.col;
+    if (!COLUNAS_DESTINO_ARRASTE.includes(destino)) return;
+    const body = col.querySelector('.col-body');
+    body.dataset.dropLabel = `Soltar em ${COLUNA_LABELS[destino]}`;
+    col.addEventListener('dragover', (ev) => {
+      if (!DRAG_IDS) return;
+      ev.preventDefault();
+      ev.dataTransfer.dropEffect = 'move';
+      const n = DRAG_IDS.length;
+      body.dataset.dropLabel = `Soltar ${n > 1 ? n + ' notas' : '1 nota'} em ${COLUNA_LABELS[destino]}`;
+      col.classList.add('drop-hover');
+    });
+    col.addEventListener('dragleave', (ev) => {
+      if (!col.contains(ev.relatedTarget)) col.classList.remove('drop-hover');
+    });
+    col.addEventListener('drop', (ev) => {
+      if (!DRAG_IDS) return;
+      ev.preventDefault();
+      const ids = DRAG_IDS.slice();
+      finalizarArraste();
+      moverNotasEmMassa(ids, destino);
+    });
+  });
+  document.getElementById('selecaoMoverLimparBtn').addEventListener('click', () => {
+    limparTodasSelecoes();
+    renderBoard();
+  });
+}
+
+async function moverNotasEmMassa(ids, destino) {
+  const notas = ids
+    .map((id) => NOTAS_CACHE.find((n) => String(n.id) === String(id)))
+    .filter(Boolean);
+  const aMover = notas.filter((n) => n.status !== destino);
+  if (!aMover.length) { toast(`As notas já estão em ${COLUNA_LABELS[destino]}.`, 'error'); return; }
+
+  const deEntradas = aMover.filter((n) => n.status === 'entradas' && COLUNAS_DISTRIBUIVEIS.includes(destino));
+  const porStatus = aMover.filter((n) => !deEntradas.includes(n));
+
+  if (aMover.length > 1) {
+    const ok = confirm(`Mover ${aMover.length} nota(s) para "${COLUNA_LABELS[destino]}"?` +
+      (deEntradas.length ? `\n\n${deEntradas.length} delas saem de Entradas e serão distribuídas por rodízio entre os operadores da coluna.` : ''));
+    if (!ok) return;
+  }
+
+  toast(`Movendo ${aMover.length} nota(s)…`);
+  let sucesso = 0;
+  const falhas = [];
+
+  if (deEntradas.length) {
+    try {
+      const { distribuidas } = await api.post('/api/notas/distribuir-lote', { ids: deEntradas.map((n) => n.id), coluna: destino });
+      sucesso += distribuidas.length;
+      if (distribuidas.length < deEntradas.length) {
+        falhas.push(`${deEntradas.length - distribuidas.length} nota(s) de Entradas não foram distribuídas`);
+      }
+    } catch (e) {
+      falhas.push(`Entradas: ${e.message}`);
+    }
+  }
+
+  // Mudanças de status em pequenos lotes paralelos, para não sobrecarregar o banco.
+  const LOTE = 5;
+  for (let i = 0; i < porStatus.length; i += LOTE) {
+    const fatia = porStatus.slice(i, i + LOTE);
+    const res = await Promise.allSettled(fatia.map((n) => api.post(`/api/notas/${n.id}/status`, { status: destino })));
+    res.forEach((r, k) => {
+      if (r.status === 'fulfilled') sucesso += 1;
+      else falhas.push(`NF ${fatia[k].numero}: ${r.reason?.message || 'erro'}`);
+    });
+  }
+
+  limparTodasSelecoes();
+  if (falhas.length === 0) {
+    toast(`${sucesso} nota(s) movida(s) para ${COLUNA_LABELS[destino]}.`, 'success');
+  } else {
+    toast(`${sucesso} movida(s) para ${COLUNA_LABELS[destino]}; ${falhas.length} com erro — ${falhas.slice(0, 2).join(' | ')}${falhas.length > 2 ? ' …' : ''}`, 'error');
+    console.warn('Falhas ao mover em massa:', falhas);
+  }
+  loadBoard();
 }
 
 function escapeHtml(str) {
