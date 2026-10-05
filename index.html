@@ -1513,6 +1513,27 @@ async function apiGet(path) {
     };
   }
 
+  // "Sinal de mudança" do Quadro: três consultas mínimas, que não trazem as
+  // notas, só o suficiente para saber se algo mudou desde o último
+  // carregamento — total de notas, maior id, data da última alteração e total
+  // de anexos. É o que a atualização automática consulta a cada ciclo; a
+  // lista completa só é buscada de novo quando este sinal muda.
+  if (pathname === '/api/notas/sinal') {
+    const [ultima, maior, anexos] = await Promise.all([
+      supabaseClient.from('notas').select('updated_at').not('updated_at', 'is', null).order('updated_at', { ascending: false }).limit(1),
+      supabaseClient.from('notas').select('id', { count: 'exact' }).order('id', { ascending: false }).limit(1),
+      supabaseClient.from('anexos').select('id', { count: 'exact', head: true }),
+    ]);
+    throwSupabaseError(ultima.error);
+    throwSupabaseError(maior.error);
+    return {
+      total: maior.count ?? null,
+      maiorId: maior.data && maior.data[0] ? maior.data[0].id : null,
+      ultimaAlteracao: ultima.data && ultima.data[0] ? ultima.data[0].updated_at : null,
+      anexos: anexos.error ? null : (anexos.count ?? null),
+    };
+  }
+
   if (pathname === '/api/notas') {
     const { data, error } = await supabaseClient.from('notas').select('*').order('created_at', { ascending: false });
     throwSupabaseError(error);
@@ -2251,6 +2272,7 @@ async function onLogout() {
   document.getElementById('msgBadgeBtn').classList.add('hidden');
   document.getElementById('msgPanel').classList.add('hidden');
   if (ATR_BADGE_POLL) { clearInterval(ATR_BADGE_POLL); ATR_BADGE_POLL = null; }
+  pararAtualizacaoAutomaticaDoQuadro();
   ATRIBUICOES_CACHE = [];
   document.getElementById('atrBadgeBtn').classList.add('hidden');
   document.getElementById('atrPanel').classList.add('hidden');
@@ -2272,6 +2294,7 @@ function afterLogin(user) {
   atualizarBadgeAtribuicoes();
   if (ATR_BADGE_POLL) clearInterval(ATR_BADGE_POLL);
   ATR_BADGE_POLL = setInterval(atualizarBadgeAtribuicoes, 20000);
+  iniciarAtualizacaoAutomaticaDoQuadro();
   // Ao voltar para a aba, atualiza na hora (os pollers ficam parados em 2º plano).
   if (!afterLogin._visListener) {
     afterLogin._visListener = true;
@@ -2351,8 +2374,134 @@ function switchView(view) {
   if (view === 'relatorios') loadRelatorios();
 }
 
+/* ---------- Atualização automática do Quadro ----------
+   Antes, o Quadro só recarregava ao abrir a aba ou depois de uma ação do
+   próprio usuário — quem deixava a tela aberta continuava vendo cards que
+   outra pessoa já tinha movido ou concluído. Agora, com o Quadro visível:
+   - a cada 30s (e ao voltar para a aba/janela) consulta o "sinal de mudança"
+     (/api/notas/sinal — 3 consultas mínimas);
+   - só quando o sinal muda busca as notas de novo e redesenha os cards,
+     mantendo seleção e rolagem;
+   - não redesenha enquanto o usuário arrasta um card ou está com um campo do
+     Quadro aberto (tenta de novo em 5s). */
+const BOARD_AUTO_MS = 30000;        // intervalo entre verificações
+const BOARD_AUTO_MIN_MS = 5000;     // ao voltar para a aba, não verifica de novo antes disso
+const BOARD_AUTO_ADIAR_MS = 5000;   // nova tentativa quando o Quadro está em uso
+const BOARD_EM_USO_MS = 15000;      // um campo focado só "segura" a atualização por esse tempo sem interação
+let BOARD_AUTO_POLL = null;
+let BOARD_AUTO_ADIADO = null;
+let BOARD_AUTO_OCUPADO = false;
+let BOARD_SEQ = 0;                  // aumenta a cada carregamento completo (loadBoard)
+let BOARD_BASE = null;              // { total, maiorId, ultimaAlteracao } das notas carregadas por último
+let BOARD_SINAL_OK = null;          // último sinal já refletido na tela (null logo após um loadBoard)
+let BOARD_ULTIMA_VERIFICACAO = 0;
+let ULTIMA_INTERACAO = 0;
+
+// Resume as notas recém-carregadas nos mesmos termos do sinal, para a
+// primeira verificação depois de um loadBoard saber se algo já mudou.
+function registrarBaseDoQuadro(notas) {
+  let maiorId = null;
+  let ultimaAlteracao = null;
+  for (const n of notas) {
+    if (maiorId === null || n.id > maiorId) maiorId = n.id;
+    if (n.updatedAt && (ultimaAlteracao === null || n.updatedAt > ultimaAlteracao)) ultimaAlteracao = n.updatedAt;
+  }
+  BOARD_BASE = { total: notas.length, maiorId, ultimaAlteracao };
+  BOARD_SINAL_OK = null;
+  BOARD_ULTIMA_VERIFICACAO = Date.now();
+}
+
+// O usuário está no meio de algo que um redesenho atrapalharia?
+function quadroEmUso() {
+  if (ARRASTE.ativo || ARRASTE.pendente) return true;
+  const el = document.activeElement;
+  const campoDoQuadro = !!(el && el.closest && el.closest('#board')
+    && el.matches('select, textarea, input:not([type="checkbox"]):not([type="radio"])'));
+  return campoDoQuadro && Date.now() - ULTIMA_INTERACAO < BOARD_EM_USO_MS;
+}
+
+function adiarVerificacaoDoQuadro() {
+  if (BOARD_AUTO_ADIADO) return;
+  BOARD_AUTO_ADIADO = setTimeout(() => { BOARD_AUTO_ADIADO = null; verificarAtualizacaoDoQuadro(); }, BOARD_AUTO_ADIAR_MS);
+}
+
+function renderBoardMantendoRolagem() {
+  const board = document.getElementById('board');
+  const rolagens = [...board.querySelectorAll('.col-body')].map((el) => [el, el.scrollTop]);
+  const esquerda = board.scrollLeft;
+  renderBoard();
+  rolagens.forEach(([el, topo]) => { el.scrollTop = topo; });
+  board.scrollLeft = esquerda;
+}
+
+async function verificarAtualizacaoDoQuadro() {
+  if (!CURRENT_USER || document.hidden || BOARD_AUTO_OCUPADO) return;
+  const ativa = document.querySelector('main .view.active');
+  if (!ativa || ativa.id !== 'view-quadro') return;
+  if (quadroEmUso()) { adiarVerificacaoDoQuadro(); return; }
+  BOARD_AUTO_OCUPADO = true;
+  const seq = BOARD_SEQ;
+  try {
+    const sinal = await api.get('/api/notas/sinal');
+    BOARD_ULTIMA_VERIFICACAO = Date.now();
+    // Se um loadBoard começou nesse meio-tempo, ele é quem manda: descarta este resultado.
+    if (seq !== BOARD_SEQ) return;
+    const chave = [sinal.total, sinal.maiorId, sinal.ultimaAlteracao, sinal.anexos].join('|');
+    if (chave === BOARD_SINAL_OK) return; // nada mudou
+    if (BOARD_SINAL_OK === null && BOARD_BASE && sinal.total === BOARD_BASE.total
+        && sinal.maiorId === BOARD_BASE.maiorId && sinal.ultimaAlteracao === BOARD_BASE.ultimaAlteracao) {
+      BOARD_SINAL_OK = chave; // primeira verificação após um carregamento, e nada mudou desde então
+      return;
+    }
+    const { notas } = await api.get('/api/notas');
+    if (seq !== BOARD_SEQ) return;
+    // Começou a mexer no Quadro durante a busca: não troca os cards sob o cursor; tenta de novo em seguida.
+    if (quadroEmUso()) { adiarVerificacaoDoQuadro(); return; }
+    // Nota selecionada que outra pessoa moveu de coluna (ou excluiu) sai da
+    // seleção — senão continuaria contando para "mover/distribuir selecionadas".
+    const statusAntes = new Map(NOTAS_CACHE.map((n) => [n.id, n.status]));
+    const statusAgora = new Map(notas.map((n) => [n.id, n.status]));
+    for (const selecao of [selectedEntradas, selectedAtribuirLote, selectedMover]) {
+      for (const id of [...selecao]) if (statusAgora.get(id) !== statusAntes.get(id)) selecao.delete(id);
+    }
+    NOTAS_CACHE = notas;
+    // Guarda o sinal lido ANTES das notas: se algo mudou entre as duas buscas,
+    // a próxima verificação percebe a diferença e recarrega de novo.
+    BOARD_SINAL_OK = chave;
+    renderBoardMantendoRolagem();
+  } catch (e) {
+    // Falha de rede/sessão numa verificação em segundo plano não deve
+    // incomodar o usuário — a próxima verificação tenta outra vez.
+  } finally {
+    BOARD_AUTO_OCUPADO = false;
+  }
+}
+
+function aoVoltarParaOQuadro() {
+  if (CURRENT_USER && !document.hidden && Date.now() - BOARD_ULTIMA_VERIFICACAO > BOARD_AUTO_MIN_MS) verificarAtualizacaoDoQuadro();
+}
+
+function iniciarAtualizacaoAutomaticaDoQuadro() {
+  pararAtualizacaoAutomaticaDoQuadro();
+  BOARD_AUTO_POLL = setInterval(verificarAtualizacaoDoQuadro, BOARD_AUTO_MS);
+  if (!iniciarAtualizacaoAutomaticaDoQuadro._ouvintes) {
+    iniciarAtualizacaoAutomaticaDoQuadro._ouvintes = true;
+    document.addEventListener('visibilitychange', aoVoltarParaOQuadro);
+    window.addEventListener('focus', aoVoltarParaOQuadro);
+    const marcarInteracao = () => { ULTIMA_INTERACAO = Date.now(); };
+    document.addEventListener('pointerdown', marcarInteracao, { capture: true, passive: true });
+    document.addEventListener('keydown', marcarInteracao, { capture: true, passive: true });
+  }
+}
+
+function pararAtualizacaoAutomaticaDoQuadro() {
+  if (BOARD_AUTO_POLL) { clearInterval(BOARD_AUTO_POLL); BOARD_AUTO_POLL = null; }
+  if (BOARD_AUTO_ADIADO) { clearTimeout(BOARD_AUTO_ADIADO); BOARD_AUTO_ADIADO = null; }
+}
+
 let AUX_BOARD_TS = 0;
 async function loadBoard(forcarAux = false) {
+  BOARD_SEQ += 1; // avisa a atualização automática de que há um carregamento completo em curso
   try {
     const podeGerenciar = CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor';
     // Também recarrega as obras (com os validadores de recebimento de cada
@@ -2370,6 +2519,7 @@ async function loadBoard(forcarAux = false) {
       podeGerenciar && auxVencido ? api.get('/api/users').catch(() => ({ users: USERS_CACHE })) : Promise.resolve({ users: USERS_CACHE }),
     ]);
     NOTAS_CACHE = notas;
+    registrarBaseDoQuadro(notas);
     OBRAS_CACHE = obrasResp.obras;
     if (podeGerenciar) USERS_CACHE = usersResp.users;
     if (auxVencido) AUX_BOARD_TS = Date.now();
@@ -3345,6 +3495,17 @@ function openConcluirModal(id, numeroTituloAtual) {
       closeModal();
       loadBoard();
     } catch (e) {
+      if (/já está nesse status/i.test(e.message)) {
+        // Outra pessoa concluiu a nota enquanto este Quadro estava aberto:
+        // em vez de deixar o erro técnico na tela, atualiza o Quadro e diz
+        // com qual título ela ficou registrada.
+        closeModal();
+        await loadBoard();
+        const atual = NOTAS_CACHE.find((n) => n.id === id);
+        const titulo = atual && atual.status === 'concluido' && atual.numeroTitulo ? ` com o título ${atual.numeroTitulo}` : '';
+        toast(`Esta nota já tinha sido concluída por outra pessoa${titulo}. O Quadro foi atualizado.`, 'error');
+        return;
+      }
       errEl.textContent = e.message;
     }
   });
