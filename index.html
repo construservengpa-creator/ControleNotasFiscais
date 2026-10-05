@@ -384,6 +384,60 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .bar-labels { display: flex; gap: 6px; margin-top: 6px; }
 .bar-labels span { flex: 1; text-align: center; font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
 
+/* ---------- Relatório de pendências (quantidade + datas) ---------- */
+.pend-kpis .kpi-tile { background: var(--page); }
+.pend-kpis .kpi-tile.alerta::before { background: var(--status-critical); }
+.pend-kpis .kpi-tile .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pend-charts { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 14px; margin-bottom: 16px; }
+.pend-chart-box { background: var(--page); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
+.pend-chart-box h3 { font-family: var(--font-display); font-weight: 500; font-size: 14px; margin: 0 0 2px; letter-spacing: 0.01em; }
+.pend-chart-box .sub { font-size: 11px; color: var(--text-muted); margin: 0 0 12px; }
+.pend-vazio { font-size: 12.5px; color: var(--text-muted); padding: 28px 0; text-align: center; }
+.pend-scroll { overflow-x: auto; padding: 0 12px 4px; }
+.pend-bars { display: flex; align-items: flex-end; gap: 4px; height: 190px; border-bottom: 1px solid var(--baseline); }
+.pend-bar {
+  flex: 1 0 14px; min-width: 14px; height: 100%; padding: 0; margin: 0; border: none; background: none; color: inherit;
+  display: flex; flex-direction: column; align-items: center; justify-content: flex-end; cursor: pointer; font: inherit;
+}
+.pend-bar .v { font-size: 10px; color: var(--text-secondary); font-family: var(--font-mono); font-variant-numeric: tabular-nums; margin-bottom: 3px; }
+.pend-bar .b { width: 100%; max-width: 40px; background: var(--accent); border-radius: 3px 3px 0 0; transition: filter 0.15s, opacity 0.15s; }
+.pend-bar:hover .b { filter: brightness(1.15); }
+.pend-bar.vazio { cursor: default; }
+.pend-bar.vazio .b { background: var(--grid); }
+.pend-bar:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
+.pend-bars.com-filtro .pend-bar:not(.sel) .b { opacity: 0.3; }
+.pend-axis { display: flex; gap: 4px; margin-top: 6px; height: 14px; }
+.pend-axis span { flex: 1 0 14px; min-width: 14px; display: flex; justify-content: center; }
+.pend-axis span i { font-style: normal; white-space: nowrap; font-size: 10px; color: var(--text-muted); font-family: var(--font-mono); }
+.pend-idade { display: flex; flex-direction: column; gap: 4px; }
+.pend-idade-row {
+  display: grid; grid-template-columns: 104px minmax(0, 1fr) 36px; align-items: center; column-gap: 10px; row-gap: 2px;
+  padding: 6px 8px; margin: 0; border: none; border-radius: 6px; background: none; color: inherit; font: inherit;
+  text-align: left; cursor: pointer; width: 100%;
+}
+.pend-idade-row:hover, .pend-idade-row.sel { background: var(--surface-1); }
+.pend-idade-row.sel { box-shadow: inset 0 0 0 1px var(--accent-dim); }
+.pend-idade-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pend-idade-row .lab { font-size: 12px; color: var(--text-secondary); }
+.pend-idade-row .track { height: 14px; background: var(--surface-2); border-radius: 3px; overflow: hidden; }
+.pend-idade-row .fill { display: block; height: 100%; border-radius: 3px; }
+.pend-idade-row .n { font-family: var(--font-mono); font-size: 12.5px; font-variant-numeric: tabular-nums; text-align: right; font-weight: 600; }
+.pend-idade-row .val { grid-column: 2 / 4; font-size: 10.5px; color: var(--text-muted); font-family: var(--font-mono); }
+.pend-filtro { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
+.pend-filtro strong { color: var(--text-primary); font-weight: 600; }
+.pend-table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
+.pend-table-wrap table.data-table th { position: sticky; top: 0; background: var(--surface-2); z-index: 1; white-space: nowrap; }
+.pend-table-wrap table.data-table tr.pend-row { cursor: pointer; }
+.pend-table-wrap table.data-table td { white-space: nowrap; }
+.pend-table-wrap table.data-table td.obs { white-space: normal; min-width: 200px; max-width: 280px; font-size: 12px; color: var(--text-secondary); }
+.pend-table-wrap table.data-table tbody tr:last-child td { border-bottom: none; }
+.pend-dias {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; white-space: nowrap;
+  font-family: var(--font-mono); color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent);
+}
+.pend-vencida { color: var(--status-critical); font-weight: 600; }
+@media (max-width: 900px) { .pend-charts { grid-template-columns: minmax(0, 1fr); } }
+
 /* ---------- Toast ---------- */
 #toast {
   position: fixed; bottom: 18px; right: 18px; background: var(--surface-1); color: var(--text-primary);
@@ -997,6 +1051,63 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
       <section class="view" id="view-relatorios">
         <div class="kpi-row" id="kpiRow"></div>
 
+        <!-- Relatório de pendências: quantas notas estão paradas e desde quando.
+             A data de cada pendência vem do histórico de movimentações (tabela
+             "movements") — é o momento em que a nota entrou na coluna em que
+             está hoje, e não a data de emissão/cadastro. -->
+        <div class="panel" id="pendPanel">
+          <h2>Notas pendentes — quantidade e datas</h2>
+          <p class="desc" id="pendDesc">Notas que estão hoje na coluna Pendências, pela data em que entraram nela.</p>
+          <div class="filters-row">
+            <div class="field">
+              <label for="pendEscopo">Notas analisadas</label>
+              <select id="pendEscopo">
+                <option value="pendencias">Coluna Pendências</option>
+                <option value="abertas">Todas em aberto (Entradas a Pendências)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="pendObra">Obra</label>
+              <select id="pendObra" style="max-width:260px;"><option value="">Todas as obras</option></select>
+            </div>
+            <div class="field">
+              <label for="pendAgrupar">Agrupar datas por</label>
+              <select id="pendAgrupar">
+                <option value="auto">Automático</option>
+                <option value="dia">Dia</option>
+                <option value="semana">Semana</option>
+                <option value="mes">Mês</option>
+              </select>
+            </div>
+            <button class="btn secondary" id="pendAtualizarBtn" type="button">Atualizar</button>
+            <button class="btn secondary" id="pendExportBtn" type="button">Exportar CSV</button>
+            <span class="legend-note" id="pendGeradoEm"></span>
+          </div>
+
+          <div class="kpi-row pend-kpis" id="pendKpiRow"></div>
+
+          <div class="pend-charts">
+            <div class="pend-chart-box">
+              <h3 id="pendChartDatasTitulo">Entrada em pendência por data</h3>
+              <p class="sub" id="pendChartDatasSub"></p>
+              <div id="pendChartDatas"></div>
+            </div>
+            <div class="pend-chart-box">
+              <h3>Há quanto tempo estão paradas</h3>
+              <p class="sub">Dias corridos desde a entrada. Clique numa faixa para filtrar a lista.</p>
+              <div id="pendChartIdade"></div>
+            </div>
+          </div>
+
+          <div class="pend-filtro" id="pendFiltroInfo"></div>
+          <div class="pend-table-wrap">
+            <table class="data-table">
+              <thead id="pendTabelaHead"></thead>
+              <tbody id="pendTabelaBody"></tbody>
+            </table>
+          </div>
+        </div>
+
         <div class="panel">
           <h2>Notas concluídas por dia</h2>
           <p class="desc">Total de notas com tratamento finalizado, últimos 14 dias.</p>
@@ -1487,6 +1598,56 @@ async function apiGet(path) {
     return { logs: (data || []).map((r) => ({ id: r.id, userId: r.user_id, userName: r.user_name, action: r.action, entityType: r.entity_type, entityId: r.entity_id, details: r.details || null, ipAddress: null, createdAt: r.created_at })) };
   }
 
+  // Relatório de pendências: notas que estão HOJE na coluna Pendências (ou em
+  // qualquer coluna em aberto, conforme o escopo) + a data em que cada uma
+  // entrou na coluna atual, lida do histórico de movimentações.
+  if (pathname === '/api/reports/pendencias') {
+    const escopo = query.get('escopo') === 'abertas' ? 'abertas' : 'pendencias';
+    const statuses = escopo === 'abertas' ? ['entradas', ...COLUNAS_DISTRIBUIVEIS] : ['pendencias'];
+    const rows = await buscarTodasPaginas(() => supabaseClient.from('notas').select('*').in('status', statuses).order('id', { ascending: true }));
+
+    // Histórico completo dessas notas, em lotes de ids (evita URL gigante) e
+    // paginado (o Supabase devolve no máximo 1000 linhas por consulta).
+    const movsPorNota = {};
+    let movimentosIndisponiveis = false;
+    const notaIds = rows.map((n) => n.id);
+    try {
+      for (let i = 0; i < notaIds.length; i += 100) {
+        const lote = notaIds.slice(i, i + 100);
+        const movs = await buscarTodasPaginas(() => supabaseClient.from('movements')
+          .select('nota_id,from_status,to_status,moved_at,moved_by,note')
+          .in('nota_id', lote).order('moved_at', { ascending: true }).order('nota_id', { ascending: true }));
+        movs.forEach((m) => { (movsPorNota[m.nota_id] = movsPorNota[m.nota_id] || []).push(m); });
+      }
+    } catch (e) {
+      // Sem acesso ao histórico: o relatório ainda sai, com datas estimadas.
+      movimentosIndisponiveis = true;
+    }
+
+    const entradas = {};
+    rows.forEach((n) => { entradas[n.id] = inicioPermanenciaAtual(movsPorNota[n.id] || [], n.status); });
+    const [notas, nomes] = await Promise.all([
+      shapeNotas(rows),
+      buscarNomes(Object.values(entradas).filter(Boolean).map((m) => m.moved_by)),
+    ]);
+    return {
+      escopo, statuses, movimentosIndisponiveis, geradoEm: new Date().toISOString(),
+      notas: notas.map((n) => {
+        const mov = entradas[n.id];
+        // Sem movimentação registrada (dado antigo ou histórico inacessível):
+        // usa a melhor aproximação disponível e sinaliza como estimada.
+        const estimada = n.status === 'entradas' ? n.createdAt : (n.assignedAt || n.updatedAt || n.createdAt);
+        return {
+          ...n,
+          pendenteDesde: mov ? mov.moved_at : estimada,
+          pendenteDesdeEstimada: !mov,
+          pendenciaPorNome: mov && mov.moved_by ? (nomes[mov.moved_by] || null) : null,
+          pendenciaObs: mov ? (mov.note || null) : null,
+        };
+      }),
+    };
+  }
+
   if (pathname === '/api/reports/resumo') {
     const usuarios = await buscarUsuariosVisiveis();
     const hoje = todayIso();
@@ -1577,6 +1738,33 @@ async function apiGet(path) {
   }
 
   fail(404, 'Rota não encontrada: ' + pathname);
+}
+
+// Busca todas as linhas de uma consulta, página a página — o Supabase corta
+// cada resposta em 1000 linhas, então relatórios precisam pedir o resto.
+// Recebe uma função que monta a consulta do zero (cada página é uma consulta nova).
+async function buscarTodasPaginas(montarConsulta, tamanho = 1000) {
+  const todas = [];
+  for (let inicio = 0; ; inicio += tamanho) {
+    const { data, error } = await montarConsulta().range(inicio, inicio + tamanho - 1);
+    throwSupabaseError(error);
+    todas.push(...(data || []));
+    if (!data || data.length < tamanho) break;
+  }
+  return todas;
+}
+
+// Dado o histórico de uma nota (em ordem cronológica) e a coluna em que ela
+// está agora, devolve a movimentação que iniciou a permanência ATUAL nessa
+// coluna. Se a nota saiu e voltou, vale a última entrada; trocas de
+// responsável dentro da mesma coluna não reiniciam a contagem.
+function inicioPermanenciaAtual(movs, status) {
+  let entrada = null;
+  for (const m of movs) {
+    if (m.to_status !== status) { entrada = null; continue; }
+    if (!entrada || m.from_status !== status) entrada = m;
+  }
+  return entrada;
 }
 
 // Substitui visibleUserIds(): busca os PERFIS (não só ids) que a pessoa
@@ -4406,10 +4594,11 @@ function setupRelatorioFilters() {
   document.getElementById('desTo').value = isoDaysAgo(0);
   document.getElementById('desFilterBtn').addEventListener('click', loadDesempenhoTable);
   document.getElementById('desExportBtn').addEventListener('click', exportDesempenhoCsv);
+  setupPendenciasReport();
 }
 
 async function loadRelatorios() {
-  await Promise.all([loadKpis(), loadTrendChart(), loadDesempenhoTable(), loadRelatorioTable()]);
+  await Promise.all([loadKpis(), loadPendenciasReport(), loadTrendChart(), loadDesempenhoTable(), loadRelatorioTable()]);
 }
 
 async function loadKpis() {
@@ -4527,6 +4716,368 @@ function exportDesempenhoCsv() {
   a.href = url; a.download = `desempenho_operadores_${from}_a_${to}.csv`;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+}
+
+/* =========================================================================
+   RELATÓRIO DE PENDÊNCIAS — quantas notas estão paradas e desde quando.
+   A "data da pendência" é o momento em que a nota entrou na coluna em que
+   está hoje (vem de /api/reports/pendencias, que lê o histórico de
+   movimentações). Os gráficos são clicáveis: filtram a lista logo abaixo.
+   ========================================================================= */
+const PEND_TZ = 'America/Sao_Paulo';
+const PEND_MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+// Faixas de tempo parado (dias corridos). Cada faixa tem rótulo próprio — a
+// cor só reforça a leitura, do verde (recente) ao vermelho (mais de 30 dias).
+const PEND_FAIXAS = [
+  { id: 'f0', rotulo: 'Até 2 dias', min: 0, max: 2, cor: '#4FDD4F' },
+  { id: 'f1', rotulo: '3 a 7 dias', min: 3, max: 7, cor: '#F5C433' },
+  { id: 'f2', rotulo: '8 a 15 dias', min: 8, max: 15, cor: '#F59A2E' },
+  { id: 'f3', rotulo: '16 a 30 dias', min: 16, max: 30, cor: '#EC6A3A' },
+  { id: 'f4', rotulo: 'Mais de 30 dias', min: 31, max: Infinity, cor: '#E24C4C' },
+];
+const PEND_MAX_BARRAS = 370;
+
+let PEND_REPORT = { todos: [], itens: [], escopo: 'pendencias', filtro: null, hoje: null, geradoEm: null, movimentosIndisponiveis: false };
+
+const pendDiaFmt = new Intl.DateTimeFormat('en-CA', { timeZone: PEND_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
+// Data/hora do banco (UTC) -> dia no fuso do escritório, como 'AAAA-MM-DD'.
+function pendDiaLocal(iso) {
+  const p = {};
+  pendDiaFmt.formatToParts(new Date(iso)).forEach((x) => { p[x.type] = x.value; });
+  return `${p.year}-${p.month}-${p.day}`;
+}
+function pendUtc(dia) { const [y, m, d] = dia.split('-').map(Number); return Date.UTC(y, m - 1, d); }
+function pendDiffDias(de, ate) { return Math.round((pendUtc(ate) - pendUtc(de)) / 86400000); }
+function pendSomaDias(dia, n) { return new Date(pendUtc(dia) + n * 86400000).toISOString().slice(0, 10); }
+function pendFmtDia(dia, comAno) { const [y, m, d] = dia.split('-'); return comAno ? `${d}/${m}/${y.slice(2)}` : `${d}/${m}`; }
+function pendTextoDias(n) { return n === 1 ? '1 dia' : `${n} dias`; }
+function pendFaixa(dias) { return PEND_FAIXAS.find((f) => dias >= f.min && dias <= f.max) || PEND_FAIXAS[PEND_FAIXAS.length - 1]; }
+function pendSomaValor(itens) { return itens.reduce((s, i) => s + (Number(i.valor) || 0), 0); }
+
+async function loadPendenciasReport() {
+  const btn = document.getElementById('pendAtualizarBtn');
+  btn.disabled = true;
+  try {
+    const escopo = document.getElementById('pendEscopo').value;
+    const resp = await api.get(`/api/reports/pendencias?escopo=${escopo}`);
+    const hoje = pendDiaLocal(resp.geradoEm);
+    const itens = resp.notas.map((n) => {
+      const desde = n.pendenteDesde || resp.geradoEm;
+      const dia = pendDiaLocal(desde);
+      return {
+        ...n, pendenteDesde: desde, pendDia: dia,
+        pendDias: Math.max(0, pendDiffDias(dia, hoje)),
+        vencida: !!(n.vencimento && String(n.vencimento).slice(0, 10) < hoje),
+      };
+    }).sort((a, b) => new Date(a.pendenteDesde) - new Date(b.pendenteDesde)); // mais antiga primeiro
+    PEND_REPORT = { todos: itens, itens, escopo: resp.escopo, filtro: null, hoje, geradoEm: resp.geradoEm, movimentosIndisponiveis: resp.movimentosIndisponiveis };
+    pendPopularObras();
+    pendFiltrarPorObra();
+    renderPendencias();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ---- Filtro por obra ----
+// O filtro é aplicado no navegador, sobre as notas já carregadas: indicadores,
+// gráficos, lista e CSV passam a considerar só a obra escolhida.
+const PEND_SEM_OBRA = '__sem_obra__';
+function pendChaveObra(n) { return n.obraId != null ? String(n.obraId) : PEND_SEM_OBRA; }
+
+// Monta as opções com as obras que têm nota no relatório (e quantas são),
+// mantendo a obra que já estava escolhida quando ela continua existindo.
+function pendPopularObras() {
+  const sel = document.getElementById('pendObra');
+  const anterior = sel.value;
+  const obras = new Map();
+  for (const n of PEND_REPORT.todos) {
+    const chave = pendChaveObra(n);
+    if (!obras.has(chave)) obras.set(chave, { chave, nome: n.obra || (n.obraId != null ? `Obra #${n.obraId}` : 'Sem obra'), qtd: 0 });
+    obras.get(chave).qtd += 1;
+  }
+  const lista = [...obras.values()].filter((o) => o.chave !== PEND_SEM_OBRA).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  if (obras.has(PEND_SEM_OBRA)) lista.push(obras.get(PEND_SEM_OBRA)); // "Sem obra" sempre por último
+  sel.innerHTML = `<option value="">Todas as obras (${PEND_REPORT.todos.length})</option>`
+    + lista.map((o) => `<option value="${escapeHtml(o.chave)}">${escapeHtml(o.nome)} (${o.qtd})</option>`).join('');
+  sel.value = obras.has(anterior) ? anterior : '';
+}
+
+function pendFiltrarPorObra() {
+  const obra = document.getElementById('pendObra').value;
+  PEND_REPORT.itens = obra ? PEND_REPORT.todos.filter((n) => pendChaveObra(n) === obra) : PEND_REPORT.todos;
+}
+
+function renderPendencias() {
+  const { itens, escopo, geradoEm, movimentosIndisponiveis } = PEND_REPORT;
+  const emAberto = escopo === 'abertas';
+  const estimadas = itens.filter((i) => i.pendenteDesdeEstimada).length;
+  let desc = emAberto
+    ? 'Notas ainda não finalizadas (Entradas, Lançamento, Financeiro/CX e Pendências), pela data em que entraram na coluna em que estão hoje.'
+    : 'Notas que estão hoje na coluna Pendências, pela data em que entraram nela. Se uma nota saiu e voltou, vale a última entrada.';
+  if (emAberto && itens.length) {
+    desc += ' Hoje: ' + ['entradas', 'lancamento', 'financeiro_cx', 'pendencias']
+      .map((c) => `${COLUNA_LABELS[c]} ${itens.filter((i) => i.status === c).length}`).join(' · ') + '.';
+  }
+  if (movimentosIndisponiveis) desc += ' Seu perfil não tem acesso ao histórico de movimentações — as datas abaixo são estimadas (marcadas com ≈).';
+  else if (estimadas) desc += ` ${estimadas} nota(s) sem movimentação registrada: data estimada (marcada com ≈).`;
+  document.getElementById('pendDesc').textContent = desc;
+  document.getElementById('pendGeradoEm').textContent = geradoEm ? `Atualizado em ${fmtDateTime(geradoEm)}` : '';
+  document.getElementById('pendChartDatasTitulo').textContent = emAberto ? 'Entrada na coluna atual por data' : 'Entrada em pendência por data';
+  renderPendKpis();
+  renderPendChartDatas();
+  renderPendChartIdade();
+  renderPendTabela();
+}
+
+function renderPendKpis() {
+  const { itens, escopo } = PEND_REPORT;
+  const emAberto = escopo === 'abertas';
+  const total = itens.length;
+  const dias = itens.map((i) => i.pendDias).sort((a, b) => a - b);
+  const media = total ? dias.reduce((s, d) => s + d, 0) / total : null;
+  const mediana = total ? (total % 2 ? dias[(total - 1) / 2] : (dias[total / 2 - 1] + dias[total / 2]) / 2) : null;
+  const antiga = itens[0];
+  const vencidas = itens.filter((i) => i.vencida);
+  const antigaSub = antiga ? `NF ${antiga.numero} · ${antiga.fornecedor || '—'} · desde ${pendFmtDia(antiga.pendDia, true)}` : 'Nenhuma nota parada';
+  const totalSub = `${fmtMoney(pendSomaValor(itens))} em valor`;
+  document.getElementById('pendKpiRow').innerHTML = `
+    <div class="kpi-tile"><div class="label">${emAberto ? 'Notas em aberto' : 'Notas em Pendências'}</div><div class="value">${total}</div><div class="sub" title="${escapeHtml(totalSub)}">${escapeHtml(totalSub)}</div></div>
+    <div class="kpi-tile"><div class="label">${emAberto ? 'Parada há mais tempo' : 'Pendência mais antiga'}</div><div class="value">${antiga ? pendTextoDias(antiga.pendDias) : '—'}</div><div class="sub" title="${escapeHtml(antigaSub)}">${escapeHtml(antigaSub)}</div></div>
+    <div class="kpi-tile"><div class="label">Tempo médio parada</div><div class="value">${media != null ? media.toFixed(1).replace('.', ',') + ' dias' : '—'}</div><div class="sub">${mediana != null ? 'Mediana: ' + String(mediana).replace('.', ',') + ' dia(s)' : 'Sem notas no momento'}</div></div>
+    <div class="kpi-tile ${vencidas.length ? 'alerta' : ''}"><div class="label">Com vencimento ultrapassado</div><div class="value">${vencidas.length}</div><div class="sub">${vencidas.length ? fmtMoney(pendSomaValor(vencidas)) + ' em valor' : 'Nenhuma vencida'}</div></div>
+  `;
+}
+
+// Dia -> início do grupo (o próprio dia, a segunda-feira da semana ou o dia 1º do mês).
+function pendInicioGrupo(dia, gran) {
+  if (gran === 'mes') return dia.slice(0, 7) + '-01';
+  if (gran === 'semana') return pendSomaDias(dia, -((new Date(pendUtc(dia)).getUTCDay() + 6) % 7));
+  return dia;
+}
+function pendProximoGrupo(inicio, gran) {
+  if (gran === 'mes') { const [y, m] = inicio.split('-').map(Number); return new Date(Date.UTC(y, m, 1)).toISOString().slice(0, 10); }
+  return pendSomaDias(inicio, gran === 'semana' ? 7 : 1);
+}
+
+// Monta os grupos do eixo de datas, contínuos da pendência mais antiga até
+// hoje (grupos sem nota aparecem vazios — mostra também os períodos em que
+// nada entrou). "Automático" escolhe dia, semana ou mês pelo tamanho do período.
+function pendGruposPorData() {
+  const { itens, hoje } = PEND_REPORT;
+  const escolha = document.getElementById('pendAgrupar').value;
+  const primeiro = itens[0].pendDia;
+  const periodo = pendDiffDias(primeiro, hoje);
+  let gran = escolha !== 'auto' ? escolha : (periodo <= 31 ? 'dia' : periodo <= 182 ? 'semana' : 'mes');
+  let ajustado = false;
+  if (gran === 'dia' && periodo + 1 > PEND_MAX_BARRAS) { gran = 'semana'; ajustado = true; }
+  if (gran === 'semana' && periodo / 7 + 1 > PEND_MAX_BARRAS) { gran = 'mes'; ajustado = true; }
+
+  const grupos = [];
+  const indice = {};
+  const fim = pendInicioGrupo(hoje, gran);
+  for (let de = pendInicioGrupo(primeiro, gran); de <= fim; de = pendProximoGrupo(de, gran)) {
+    const g = { de, ate: pendSomaDias(pendProximoGrupo(de, gran), -1), qtd: 0, valor: 0 };
+    indice[de] = g;
+    grupos.push(g);
+  }
+  for (const i of itens) {
+    const g = indice[pendInicioGrupo(i.pendDia, gran)];
+    if (g) { g.qtd += 1; g.valor += Number(i.valor) || 0; }
+  }
+  for (const g of grupos) {
+    const [y, m] = g.de.split('-');
+    if (gran === 'mes') { g.rotulo = `${PEND_MESES[Number(m) - 1]}/${y.slice(2)}`; g.descricao = g.rotulo; }
+    else if (gran === 'semana') { g.rotulo = pendFmtDia(g.de); g.descricao = `semana de ${pendFmtDia(g.de, true)} a ${pendFmtDia(g.ate, true)}`; }
+    else { g.rotulo = pendFmtDia(g.de); g.descricao = pendFmtDia(g.de, true); }
+  }
+  return { grupos, gran, ajustado };
+}
+
+function renderPendChartDatas() {
+  const el = document.getElementById('pendChartDatas');
+  const sub = document.getElementById('pendChartDatasSub');
+  const { itens, hoje, filtro, escopo } = PEND_REPORT;
+  if (!itens.length) {
+    sub.textContent = '';
+    el.innerHTML = `<div class="pend-vazio">Nenhuma nota ${escopo === 'abertas' ? 'em aberto' : 'em Pendências'} no momento.</div>`;
+    return;
+  }
+  const { grupos, gran, ajustado } = pendGruposPorData();
+  const nomeGran = { dia: 'dia', semana: 'semana (início na segunda-feira)', mes: 'mês' }[gran];
+  sub.textContent = `Notas por ${nomeGran}, de ${pendFmtDia(itens[0].pendDia, true)} até hoje (${pendFmtDia(hoje, true)}).`
+    + (ajustado ? ' Período longo demais para o agrupamento escolhido — ajustado automaticamente.' : '')
+    + ' Clique numa barra para filtrar a lista.';
+  const max = Math.max(1, ...grupos.map((g) => g.qtd));
+  const passo = Math.ceil(grupos.length / 12); // no máximo ~12 rótulos no eixo
+  const ultimo = grupos.length - 1;
+  const barras = grupos.map((g) => {
+    const sel = filtro && filtro.tipo === 'data' && filtro.de === g.de;
+    const dica = `${g.descricao}: ${g.qtd} nota(s)${g.qtd ? ' · ' + fmtMoney(g.valor) : ''}`;
+    return `<button type="button" class="pend-bar${g.qtd ? '' : ' vazio'}${sel ? ' sel' : ''}" data-de="${g.de}" data-ate="${g.ate}"
+      data-rotulo="${escapeHtml(g.descricao)}" title="${escapeHtml(dica)}" aria-label="${escapeHtml(dica)}"${g.qtd ? '' : ' disabled'}>
+      ${g.qtd ? `<span class="v">${g.qtd}</span>` : ''}<span class="b" style="height:${g.qtd ? Math.max(4, Math.round((g.qtd / max) * 150)) : 2}px"></span>
+    </button>`;
+  }).join('');
+  const eixo = grupos.map((g, i) => `<span>${(ultimo - i) % passo === 0 ? `<i>${g.rotulo}</i>` : ''}</span>`).join('');
+  el.innerHTML = `
+    <div class="pend-scroll"><div style="min-width:${grupos.length * 18 - 4}px">
+      <div class="pend-bars${filtro && filtro.tipo === 'data' ? ' com-filtro' : ''}">${barras}</div>
+      <div class="pend-axis">${eixo}</div>
+    </div></div>`;
+}
+
+function renderPendChartIdade() {
+  const el = document.getElementById('pendChartIdade');
+  const { itens, filtro, escopo } = PEND_REPORT;
+  if (!itens.length) {
+    el.innerHTML = `<div class="pend-vazio">Nenhuma nota ${escopo === 'abertas' ? 'em aberto' : 'em Pendências'} no momento.</div>`;
+    return;
+  }
+  const faixas = PEND_FAIXAS.map((f) => {
+    const doGrupo = itens.filter((i) => i.pendDias >= f.min && i.pendDias <= f.max);
+    return { ...f, qtd: doGrupo.length, valor: pendSomaValor(doGrupo) };
+  });
+  const max = Math.max(1, ...faixas.map((f) => f.qtd));
+  el.innerHTML = `<div class="pend-idade">${faixas.map((f) => {
+    const sel = filtro && filtro.tipo === 'idade' && filtro.id === f.id;
+    const pct = Math.round((f.qtd / itens.length) * 100);
+    return `<button type="button" class="pend-idade-row${sel ? ' sel' : ''}" data-faixa="${f.id}"${f.qtd ? '' : ' disabled'}
+      aria-label="${f.rotulo}: ${f.qtd} nota(s), ${pct}% do total">
+      <span class="lab">${f.rotulo}</span>
+      <span class="track"><span class="fill" style="width:${f.qtd ? Math.max(2, (f.qtd / max) * 100) : 0}%;background:${f.cor}"></span></span>
+      <span class="n">${f.qtd}</span>
+      <span class="val">${f.qtd ? `${pct}% · ${fmtMoney(f.valor)}` : '—'}</span>
+    </button>`;
+  }).join('')}</div>`;
+}
+
+function pendItensFiltrados() {
+  const { itens, filtro } = PEND_REPORT;
+  if (!filtro) return itens;
+  if (filtro.tipo === 'data') return itens.filter((i) => i.pendDia >= filtro.de && i.pendDia <= filtro.ate);
+  return itens.filter((i) => i.pendDias >= filtro.min && i.pendDias <= filtro.max);
+}
+
+function renderPendTabela() {
+  const { itens, filtro, escopo } = PEND_REPORT;
+  const emAberto = escopo === 'abertas';
+  const lista = pendItensFiltrados();
+  const temObs = lista.some((i) => i.pendenciaObs);
+  const colunas = 9 + (emAberto ? 1 : 0) + (temObs ? 1 : 0);
+
+  const info = document.getElementById('pendFiltroInfo');
+  info.innerHTML = filtro
+    ? `<span>Filtrando por <strong>${escapeHtml(filtro.rotulo)}</strong> — ${lista.length} de ${itens.length} nota(s).</span><button type="button" class="btn secondary small" id="pendLimparFiltroBtn">Limpar filtro</button>`
+    : (itens.length ? `<span>${itens.length} nota(s), da mais antiga para a mais recente. Clique numa linha para abrir a nota.</span>` : '');
+
+  document.getElementById('pendTabelaHead').innerHTML = `<tr>
+    <th>Nota</th><th>Fornecedor</th><th>Obra</th>${emAberto ? '<th>Coluna</th>' : ''}<th class="num">Valor</th><th>Vencimento</th>
+    <th>${emAberto ? 'Na coluna desde' : 'Pendente desde'}</th><th class="num">Dias parada</th><th>Enviada por</th><th>Responsável</th>${temObs ? '<th>Observação</th>' : ''}
+  </tr>`;
+
+  document.getElementById('pendTabelaBody').innerHTML = lista.map((n) => {
+    const faixa = pendFaixa(n.pendDias);
+    const venc = n.vencimento ? pendFmtDia(String(n.vencimento).slice(0, 10), true) : '—';
+    return `<tr class="pend-row" data-id="${n.id}" tabindex="0">
+      <td style="font-family:var(--font-mono);">${escapeHtml(n.numero)}</td>
+      <td style="max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escapeHtml(n.fornecedor)}">${escapeHtml(n.fornecedor)}</td>
+      <td>${escapeHtml(n.obra || '—')}</td>
+      ${emAberto ? `<td>${COLUNA_LABELS[n.status] || escapeHtml(n.status)}</td>` : ''}
+      <td class="num">${fmtMoney(n.valor)}</td>
+      <td style="white-space:nowrap;"${n.vencida ? ' class="pend-vencida"' : ''}>${venc}${n.vencida ? ' · vencida' : ''}</td>
+      <td style="white-space:nowrap;"${n.pendenteDesdeEstimada ? ' title="Sem movimentação registrada no histórico — data estimada."' : ''}>${n.pendenteDesdeEstimada ? '≈ ' : ''}${fmtDateTime(n.pendenteDesde)}</td>
+      <td class="num"><span class="pend-dias" style="--c:${faixa.cor}">${n.pendDias}</span></td>
+      <td>${escapeHtml(n.pendenciaPorNome || '—')}</td>
+      <td>${escapeHtml(n.assignedToName || '—')}</td>
+      ${temObs ? `<td class="obs">${escapeHtml(n.pendenciaObs || '')}</td>` : ''}
+    </tr>`;
+  }).join('') || `<tr><td colspan="${colunas}" class="legend-note">Nenhuma nota ${emAberto ? 'em aberto' : 'em Pendências'} no momento.</td></tr>`;
+}
+
+// Liga/desliga um filtro vindo de um clique nos gráficos (clicar de novo no
+// mesmo item remove o filtro) e atualiza o destaque visual + a lista.
+function pendAplicarFiltro(novo) {
+  const atual = PEND_REPORT.filtro;
+  const mesmo = atual && novo && atual.tipo === novo.tipo && (novo.tipo === 'data' ? atual.de === novo.de : atual.id === novo.id);
+  PEND_REPORT.filtro = mesmo ? null : novo;
+  const f = PEND_REPORT.filtro;
+  const barras = document.querySelector('#pendChartDatas .pend-bars');
+  if (barras) barras.classList.toggle('com-filtro', !!(f && f.tipo === 'data'));
+  document.querySelectorAll('#pendChartDatas .pend-bar').forEach((b) => b.classList.toggle('sel', !!(f && f.tipo === 'data' && f.de === b.dataset.de)));
+  document.querySelectorAll('#pendChartIdade .pend-idade-row').forEach((r) => r.classList.toggle('sel', !!(f && f.tipo === 'idade' && f.id === r.dataset.faixa)));
+  renderPendTabela();
+}
+
+function exportPendenciasCsv() {
+  const lista = pendItensFiltrados();
+  if (!lista.length) { toast('Nenhuma nota para exportar.', 'error'); return; }
+  // Separador ";" e BOM para abrir direto no Excel em português, com acentos
+  // e valores decimais corretos. Textos que começam com = + - @ ganham um
+  // apóstrofo para o Excel não interpretar como fórmula.
+  const txt = (v) => { const s = String(v ?? ''); return `"${(/^[=+\-@]/.test(s) ? "'" + s : s).replace(/"/g, '""')}"`; };
+  const dataHora = (iso) => iso ? new Date(iso).toLocaleString('pt-BR', { timeZone: PEND_TZ, day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '') : '';
+  const data = (d) => { if (!d) return ''; const [y, m, dd] = String(d).slice(0, 10).split('-'); return `${dd}/${m}/${y}`; };
+  const header = ['numero', 'fornecedor', 'obra', 'coluna', 'valor', 'emissao', 'vencimento', 'vencida', 'pendente_desde', 'data_estimada', 'dias_parada', 'enviada_por', 'responsavel', 'observacao', 'pedido_compras', 'origem'].join(';');
+  const body = lista.map((n) => [
+    txt(n.numero), txt(n.fornecedor), txt(n.obra), txt(COLUNA_LABELS[n.status] || n.status),
+    (Number(n.valor) || 0).toFixed(2).replace('.', ','), data(n.dataEmissao), data(n.vencimento), n.vencida ? 'sim' : 'nao',
+    dataHora(n.pendenteDesde), n.pendenteDesdeEstimada ? 'sim' : 'nao', n.pendDias,
+    txt(n.pendenciaPorNome), txt(n.assignedToName), txt(n.pendenciaObs), txt(n.pedidoCompras), txt(n.origem),
+  ].join(';')).join('\n');
+  const blob = new Blob(['\uFEFF' + header + '\n' + body], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const selObra = document.getElementById('pendObra');
+  const sufixoObra = selObra.value
+    ? '_' + selObra.options[selObra.selectedIndex].text.replace(/\s*\(\d+\)$/, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    : '';
+  a.href = url; a.download = `notas_pendentes${sufixoObra}_${PEND_REPORT.hoje}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function setupPendenciasReport() {
+  document.getElementById('pendEscopo').addEventListener('change', loadPendenciasReport);
+  document.getElementById('pendAtualizarBtn').addEventListener('click', loadPendenciasReport);
+  document.getElementById('pendExportBtn').addEventListener('click', exportPendenciasCsv);
+  document.getElementById('pendObra').addEventListener('change', () => {
+    // Trocar de obra muda as barras e as faixas, então o filtro vindo de um clique nos gráficos é desfeito.
+    PEND_REPORT.filtro = null;
+    pendFiltrarPorObra();
+    renderPendencias();
+  });
+  document.getElementById('pendAgrupar').addEventListener('change', () => {
+    // Os grupos mudam junto com o agrupamento, então um filtro por data antigo deixa de valer.
+    if (PEND_REPORT.filtro && PEND_REPORT.filtro.tipo === 'data') PEND_REPORT.filtro = null;
+    renderPendChartDatas();
+    renderPendTabela();
+  });
+  document.getElementById('pendChartDatas').addEventListener('click', (ev) => {
+    const b = ev.target.closest('.pend-bar');
+    if (!b || b.disabled) return;
+    pendAplicarFiltro({ tipo: 'data', de: b.dataset.de, ate: b.dataset.ate, rotulo: (b.dataset.rotulo.startsWith('semana') ? 'entrada na ' : 'entrada em ') + b.dataset.rotulo });
+  });
+  document.getElementById('pendChartIdade').addEventListener('click', (ev) => {
+    const r = ev.target.closest('.pend-idade-row');
+    if (!r || r.disabled) return;
+    const f = PEND_FAIXAS.find((x) => x.id === r.dataset.faixa);
+    pendAplicarFiltro({ tipo: 'idade', id: f.id, min: f.min, max: f.max, rotulo: 'paradas há ' + f.rotulo.toLowerCase() });
+  });
+  document.getElementById('pendFiltroInfo').addEventListener('click', (ev) => {
+    if (ev.target.id === 'pendLimparFiltroBtn') pendAplicarFiltro(null);
+  });
+  const corpo = document.getElementById('pendTabelaBody');
+  corpo.addEventListener('click', (ev) => {
+    const tr = ev.target.closest('tr.pend-row');
+    if (tr) openDetalheModal(Number(tr.dataset.id));
+  });
+  corpo.addEventListener('keydown', (ev) => {
+    const tr = ev.target.closest('tr.pend-row');
+    if (tr && ev.key === 'Enter') openDetalheModal(Number(tr.dataset.id));
+  });
 }
 
 function showModal(innerHtml, opts) {
