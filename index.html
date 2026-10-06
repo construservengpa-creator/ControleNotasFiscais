@@ -357,6 +357,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .badge.prioridade-baixa { background: rgba(12, 163, 12, 0.16); color: var(--status-good-text); }
 .badge.tag-frete { background: var(--surface-1); color: var(--text-secondary); border: 1px solid var(--baseline); }
 .badge.tag-sienge { background: rgba(76, 141, 255, 0.16); color: var(--series-blue); }
+.badge.tag-estoque { background: rgba(46, 160, 67, 0.16); color: #2e7d32; }
 
 /* ---------- KPI / stat tiles ---------- */
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 18px; }
@@ -2671,6 +2672,7 @@ function renderCard(nota, coluna) {
   let badgesHtml = '<div class="badges-row">';
   badgesHtml += `<span class="badge prioridade-${nota.prioridade || 'media'}">Prioridade ${PRIORIDADE_LABELS[nota.prioridade] || 'Média'}</span>`;
   if (nota.origem === 'sienge') badgesHtml += `<span class="badge tag-sienge">SIENGE</span>`;
+  if (nota.origem === 'estoque') badgesHtml += `<span class="badge tag-estoque">ESTOQUE</span>`;
   if (nota.frete === 'sim') badgesHtml += `<span class="badge tag-frete">Frete: Sim</span>`;
   if (isVencida(nota)) badgesHtml += `<span class="badge prioridade-alta">Vencida</span>`;
   if (nota.anexosCount > 0) badgesHtml += `<span class="badge tag-frete">📎 ${nota.anexosCount}</span>`;
@@ -4053,7 +4055,7 @@ async function openDetalheModal(id) {
         <div class="modal-main-col">
           <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">
             Valor: ${fmtMoney(nota.valor)} · Status atual: ${COLUNA_LABELS[nota.status]} · Prioridade: ${PRIORIDADE_LABELS[nota.prioridade] || 'Média'}<br/>
-            Origem: ${nota.origem === 'sienge' ? 'Importada do SIENGE' : 'Cadastro manual'}<br/>
+            Origem: ${nota.origem === 'sienge' ? 'Importada do SIENGE' : nota.origem === 'estoque' ? 'Recebida no sistema de Estoque' : 'Cadastro manual'}<br/>
             ${nota.chaveAcesso ? 'Chave de acesso: ' + escapeHtml(nota.chaveAcesso) + '<br/>' : ''}
             ${nota.destinatario ? 'Destinatário: ' + escapeHtml(nota.destinatario) + '<br/>' : ''}
             ${nota.cnpjDestinatario ? 'CNPJ destinatário: ' + escapeHtml(nota.cnpjDestinatario) + '<br/>' : ''}
@@ -4156,8 +4158,9 @@ async function openEditModal(id) {
           <div class="field">
             <label for="edOrigem">Origem da nota</label>
             <select id="edOrigem">
-              <option value="manual" ${nota.origem !== 'sienge' ? 'selected' : ''}>Cadastro manual</option>
+              <option value="manual" ${nota.origem !== 'sienge' && nota.origem !== 'estoque' ? 'selected' : ''}>Cadastro manual</option>
               <option value="sienge" ${nota.origem === 'sienge' ? 'selected' : ''}>Importada do SIENGE</option>
+              <option value="estoque" ${nota.origem === 'estoque' ? 'selected' : ''}>Recebida no sistema de Estoque</option>
             </select>
           </div>
           ${podeMudarStatus ? `<div class="field"><label for="edStatus">Status</label><select id="edStatus">${statusOptions}</select></div>
@@ -4428,7 +4431,7 @@ function renderUltimosCadastros() {
         <td class="num">${fmtMoney(n.valor)}</td>
         <td>${n.vencimento ? fmtDate(n.vencimento) : '—'}</td>
         <td><span class="badge prioridade-${n.prioridade || 'media'}">${PRIORIDADE_LABELS[n.prioridade] || 'Média'}</span></td>
-        <td>${n.origem === 'sienge' ? '<span class="badge tag-sienge">SIENGE</span>' : 'Manual'}</td>
+        <td>${n.origem === 'sienge' ? '<span class="badge tag-sienge">SIENGE</span>' : n.origem === 'estoque' ? '<span class="badge tag-estoque">ESTOQUE</span>' : 'Manual'}</td>
         <td>${COLUNA_LABELS[n.status]}</td>
         <td>
           <button class="btn secondary small" data-action="editar-lista" data-id="${n.id}">Editar</button>
