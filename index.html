@@ -632,7 +632,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
     <header class="topbar">
       <div class="brand">
         <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Recolher menu">☰</button>
-        <div class="logo">AM</div>
+        <div class="logo" id="appLogo">AM</div>
         <div>
           <h1>Notas Fiscais — Sede AMETA</h1>
           <span class="tag">Entradas · Lançamento · Financeiro/CX · Pendências</span>
@@ -2071,6 +2071,37 @@ const PRIORIDADE_LABELS = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 const PRIORIDADE_ORDEM = { alta: 0, media: 1, baixa: 2 };
 
 let CURRENT_USER = null;
+
+/* ---------- Versão publicada ----------
+   IMPORTANTE ao editar este arquivo: mude APP_VERSION a cada publicação. A tela compara com a versão do arquivo
+   no servidor (a cada 2 min e ao voltar para a aba) e, se mudou, mostra a faixa "Nova versão — Recarregar".
+   Assim ninguém fica dias com uma aba antiga rodando lógica velha. */
+const APP_VERSION = '2026-10-07T17:30:00-03:00';
+let _versaoAvisoMostrado = false, _versaoUltimaChecagem = 0;
+function iniciarVerificacaoDeVersao() {
+  const logo = document.getElementById('appLogo');
+  if (logo) logo.title = 'Versão ' + APP_VERSION;
+  setInterval(verificarVersaoPublicada, 2 * 60 * 1000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) verificarVersaoPublicada(); });
+  window.addEventListener('focus', verificarVersaoPublicada);
+  setTimeout(verificarVersaoPublicada, 15000);
+}
+async function verificarVersaoPublicada() {
+  if (_versaoAvisoMostrado || !navigator.onLine) return;
+  const agora = Date.now(); if (agora - _versaoUltimaChecagem < 30000) return; _versaoUltimaChecagem = agora;
+  try {
+    const res = await fetch(location.pathname + '?_v=' + agora, { cache: 'no-store' });
+    if (!res.ok) return;
+    const m = (await res.text()).match(/const APP_VERSION = '([^']+)'/);
+    if (!m || m[1] === APP_VERSION) return;
+    _versaoAvisoMostrado = true;
+    const faixa = document.createElement('div');
+    faixa.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:99999;background:#F5B700;color:#1A1E24;padding:10px 16px;font-weight:700;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap';
+    faixa.innerHTML = 'Há uma versão nova do sistema. <button type="button" style="background:#1A1E24;color:#fff;border:0;border-radius:6px;padding:6px 14px;font-weight:700;cursor:pointer">Recarregar agora</button>';
+    faixa.querySelector('button').addEventListener('click', () => { location.replace(location.pathname + '?_v=' + Date.now() + location.hash); });
+    document.body.appendChild(faixa);
+  } catch (e) { /* sem rede: tenta na próxima */ }
+}
 let NOTAS_CACHE = [];
 let USERS_CACHE = [];
 let OBRAS_CACHE = [];
@@ -2191,6 +2222,7 @@ function restaurarPreferenciaSidebar() {
 }
 
 async function init() {
+  iniciarVerificacaoDeVersao();
   if (!SUPABASE_CONFIGURADO) {
     showConfigError('Este arquivo ainda não foi configurado com os dados do projeto Supabase (SUPABASE_URL / SUPABASE_ANON_KEY).');
     return;
