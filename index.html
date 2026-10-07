@@ -2304,6 +2304,10 @@ function afterLogin(user) {
   document.getElementById('userName').textContent = user.name;
   document.getElementById('userRoleBadge').textContent = ROLE_LABELS[user.role] + (user.coluna ? ' · ' + COLUNA_LABELS[user.coluna] : '');
 
+  // Os avisos 🗂️ e 💬 aparecem para todo usuário logado desde o login (antes só surgiam depois da 1ª consulta
+  // responder — se ela falhasse, ficavam escondidos sem aviso nenhum).
+  document.getElementById('msgBadgeBtn').classList.remove('hidden');
+  document.getElementById('atrBadgeBtn').classList.remove('hidden');
   atualizarBadgeMensagens();
   if (MSG_BADGE_POLL) clearInterval(MSG_BADGE_POLL);
   MSG_BADGE_POLL = setInterval(atualizarBadgeMensagens, 20000);
@@ -3727,7 +3731,11 @@ async function atualizarBadgeMensagens() {
     btn.classList.toggle('has-pending', pendentes.length > 0);
     const panel = document.getElementById('msgPanel');
     if (panel && !panel.classList.contains('hidden')) renderMsgPanel();
-  } catch (e) { /* melhor esforço — não interrompe o uso do sistema */ }
+    btn.title = 'Mensagens sem resposta direcionadas a você';
+  } catch (e) {
+    // melhor esforço — não interrompe o uso do sistema; tenta de novo na próxima rodada (20 s)
+    btn.title = 'Não foi possível atualizar as mensagens agora — tentando de novo.';
+  }
 }
 
 function renderMsgPanel() {
@@ -3775,7 +3783,10 @@ async function atualizarBadgeAtribuicoes() {
     btn.classList.toggle('has-pending', pendentes.length > 0);
     const panel = document.getElementById('atrPanel');
     if (panel && !panel.classList.contains('hidden')) renderAtrPanel();
-  } catch (e) { /* melhor esforço — não interrompe o uso do sistema */ }
+    btn.title = 'Notas atribuídas a você que ainda não foram abertas';
+  } catch (e) {
+    btn.title = 'Não foi possível atualizar as atribuições agora — tentando de novo.';
+  }
 }
 
 function renderAtrPanel() {
