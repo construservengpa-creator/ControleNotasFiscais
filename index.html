@@ -350,6 +350,10 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .badge.role-admin { background: rgba(76, 141, 255, 0.16); color: var(--series-blue); }
 .badge.role-supervisor { background: rgba(245, 196, 51, 0.16); color: var(--accent); }
 .badge.role-operador { background: rgba(12, 163, 12, 0.16); color: var(--status-good-text); }
+.badge.role-pendente { background: rgba(208, 59, 59, 0.16); color: var(--status-critical); }
+.check-list { max-height: 220px; overflow-y: auto; border: 1px solid var(--border, #333); border-radius: 8px; padding: 6px 10px; }
+.check-list label { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-weight: 500; text-transform: none; letter-spacing: 0; margin: 0; cursor: pointer; }
+.check-list input[type="checkbox"] { width: auto; margin: 0; }
 .badge.status-active { background: rgba(12, 163, 12, 0.16); color: var(--status-good-text); }
 .badge.status-inactive { background: rgba(208, 59, 59, 0.16); color: var(--status-critical); }
 .badge.prioridade-alta { background: rgba(208, 59, 59, 0.18); color: var(--status-critical); }
@@ -617,8 +621,8 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
         <a href="#" id="esqueciSenhaLink">Esqueci minha senha</a>
       </p>
       <p class="hint">
-        O login agora é validado pelo Supabase Authentication. Peça ao administrador
-        do sistema para criar seu acesso (e-mail e senha) caso ainda não tenha um.
+        Ainda não tem acesso? <a href="#" id="criarContaLink">Criar minha conta</a> — depois do cadastro,
+        o administrador libera o acesso e define a sua permissão.
       </p>
     </div>
   </section>
@@ -945,8 +949,8 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
                 <input type="text" id="obCodigo" placeholder="Ex.: OBR-014" />
               </div>
               <div class="field">
-                <label for="obValidadores">Responsáveis pela validação de recebimento</label>
-                <select id="obValidadores" multiple size="4"></select>
+                <label>Responsáveis pela validação de recebimento</label>
+                <div id="obValidadores" class="check-list"></div>
               </div>
             </div>
             <div class="form-actions">
@@ -1012,6 +1016,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 
         <div class="panel">
           <h2>Equipe</h2>
+          <p class="error-msg" id="usuariosPendentesAviso" style="display:none;margin-bottom:10px"></p>
           <p class="desc" id="usuariosResetNota" style="display:none;">
             Redefinição de senha não é feita por aqui: peça para a pessoa usar
             "Minha conta" (se ela ainda tem acesso) ou redefina pelo painel do
@@ -1241,8 +1246,11 @@ async function loginComSupabaseAuth(email, password) {
       perfil = novoPerfil;
     } else {
       await supabaseClient.auth.signOut();
-      throw new Error('Seu login existe, mas seu usuário não está vinculado (ou está desativado) neste sistema. Fale com o administrador.');
+      throw new Error('Seu cadastro foi recebido e está aguardando o administrador liberar o acesso.');
     }
+  } else if (perfil.role === 'pendente') {
+    await supabaseClient.auth.signOut();
+    throw new Error('Seu cadastro foi recebido e está aguardando o administrador liberar o acesso e definir sua permissão.');
   } else if (!perfil.active) {
     await supabaseClient.auth.signOut();
     throw new Error('Seu usuário está desativado neste sistema. Fale com o administrador.');
@@ -1895,10 +1903,14 @@ async function apiPost(path, body) {
     const uid = await supabaseClient.rpc('find_auth_user_id', { p_email: body.email });
     throwSupabaseError(uid.error);
     if (!uid.data) fail(400, 'Nenhum login encontrado com este e-mail no Supabase Authentication. Crie o login lá primeiro (Authentication > Users).');
-    const { data, error } = await supabaseClient.from('profiles').insert({
+    const linha = {
       id: uid.data, name: body.name, email: String(body.email).toLowerCase().trim(),
       role: body.role, coluna: body.role === 'admin' ? null : body.coluna, active: true,
-    }).select().single();
+    };
+    const { data: jaExiste } = await supabaseClient.from('profiles').select('id').eq('id', uid.data).maybeSingle();
+    const { data, error } = jaExiste
+      ? await supabaseClient.from('profiles').update(linha).eq('id', uid.data).select().single()
+      : await supabaseClient.from('profiles').insert(linha).select().single();
     throwSupabaseError(error, 'Não foi possível vincular o usuário.');
     return { user: fmtUserRow(data) };
   }
@@ -2054,7 +2066,7 @@ const COLUNA_LABELS = {
   pendencias: 'Pendências',
   concluido: 'Finalização',
 };
-const ROLE_LABELS = { admin: 'Administrador', supervisor: 'Supervisor', operador: 'Operador' };
+const ROLE_LABELS = { admin: 'Administrador', supervisor: 'Supervisor', operador: 'Operador', pendente: 'Aguardando liberação' };
 const PRIORIDADE_LABELS = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 const PRIORIDADE_ORDEM = { alta: 0, media: 1, baixa: 2 };
 
@@ -2208,6 +2220,10 @@ async function init() {
   document.getElementById('esqueciSenhaLink').addEventListener('click', (ev) => {
     ev.preventDefault();
     openEsqueciSenhaModal();
+  });
+  document.getElementById('criarContaLink').addEventListener('click', (ev) => {
+    ev.preventDefault();
+    openCriarContaModal();
   });
   // Quando a pessoa clica no link recebido por e-mail, o Supabase detecta o
   // token na própria URL e dispara este evento — é o gatilho para mostrar a
@@ -4496,15 +4512,22 @@ async function loadUsuarios() {
     USERS_CACHE = users;
     const tbody = document.getElementById('usuariosBody');
     const isAdmin = CURRENT_USER.role === 'admin';
+    users.sort((a, b) => (a.role === 'pendente' ? 0 : 1) - (b.role === 'pendente' ? 0 : 1));
+    const nPend = users.filter((u) => u.role === 'pendente').length;
+    const avisoPend = document.getElementById('usuariosPendentesAviso');
+    if (avisoPend) { avisoPend.style.display = isAdmin && nPend ? '' : 'none'; avisoPend.textContent = `${nPend} cadastro(s) aguardando liberação — clique em "Liberar acesso" para definir o papel e ativar.`; }
     tbody.innerHTML = users.map((u) => `
-      <tr>
+      <tr${u.role === 'pendente' ? ' style="background: rgba(208, 59, 59, 0.06)"' : ''}>
         <td>${escapeHtml(u.name)}</td>
         <td>${escapeHtml(u.email)}</td>
-        <td><span class="badge role-${u.role}">${ROLE_LABELS[u.role]}</span></td>
+        <td><span class="badge role-${u.role}">${ROLE_LABELS[u.role] || u.role}</span></td>
         <td>${u.coluna ? COLUNA_LABELS[u.coluna] : '—'}</td>
         <td><span class="badge ${u.active ? 'status-active' : 'status-inactive'}">${u.active ? 'Ativo' : 'Inativo'}</span></td>
         <td>${u.lastLoginAt ? fmtDateTime(u.lastLoginAt) : 'Nunca'}</td>
-        <td>${isAdmin ? `
+        <td>${isAdmin && u.role === 'pendente' ? `
+          <button class="btn small" data-action="liberar-usuario" data-id="${u.id}">Liberar acesso</button>
+          <button class="btn secondary small" data-action="excluir-usuario" data-id="${u.id}">Excluir</button>
+        ` : isAdmin ? `
           <button class="btn secondary small" data-action="editar-usuario" data-id="${u.id}">Editar</button>
           <button class="btn secondary small" data-action="toggle" data-id="${u.id}" data-active="${u.active ? 1 : 0}">${u.active ? 'Desativar' : 'Ativar'}</button>
           <button class="btn secondary small" data-action="excluir-usuario" data-id="${u.id}">Excluir</button>
@@ -4518,6 +4541,10 @@ async function loadUsuarios() {
     tbody.querySelectorAll('[data-action="editar-usuario"]').forEach((btn) => btn.addEventListener('click', () => {
       const usuario = users.find((u) => u.id === btn.dataset.id);
       if (usuario) openEditUsuarioModal(usuario);
+    }));
+    tbody.querySelectorAll('[data-action="liberar-usuario"]').forEach((btn) => btn.addEventListener('click', () => {
+      const usuario = users.find((u) => u.id === btn.dataset.id);
+      if (usuario) openEditUsuarioModal(usuario, { liberar: true });
     }));
     tbody.querySelectorAll('[data-action="toggle"]').forEach((btn) => btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
@@ -4546,16 +4573,18 @@ async function loadUsuarios() {
 // Edição de dados do usuário (nome, papel, coluna) — o e-mail é o campo-chave
 // (identifica a conta/login) e é sempre mostrado como somente leitura aqui,
 // nunca enviado no corpo da requisição de atualização.
-function openEditUsuarioModal(usuario) {
+function openEditUsuarioModal(usuario, opts) {
+  const liberar = !!(opts && opts.liberar);
   showModal(`
-    <h3>Editar usuário</h3>
+    <h3>${liberar ? 'Liberar acesso' : 'Editar usuário'}</h3>
+    ${liberar ? '<p class="legend-note" style="margin-bottom:10px">Cadastro feito pela própria pessoa. Defina o papel (e a coluna, se for operador) — ao salvar, o acesso é liberado.</p>' : ''}
     <form id="editUsuarioForm">
       <div class="field"><label>E-mail (não pode ser alterado)</label><input type="email" value="${escapeHtml(usuario.email)}" disabled /></div>
       <div class="field"><label for="euNome">Nome *</label><input type="text" id="euNome" required value="${escapeHtml(usuario.name)}" /></div>
       <div class="field">
         <label for="euPapel">Papel *</label>
         <select id="euPapel" required>
-          <option value="operador" ${usuario.role === 'operador' ? 'selected' : ''}>Operador</option>
+          <option value="operador" ${usuario.role === 'operador' || usuario.role === 'pendente' ? 'selected' : ''}>Operador</option>
           <option value="supervisor" ${usuario.role === 'supervisor' ? 'selected' : ''}>Supervisor</option>
           <option value="admin" ${usuario.role === 'admin' ? 'selected' : ''}>Administrador</option>
         </select>
@@ -4571,7 +4600,7 @@ function openEditUsuarioModal(usuario) {
       <div class="error-msg" id="editUsuarioError"></div>
       <div class="form-actions">
         <button type="button" class="btn secondary" id="editUsuarioCancel">Cancelar</button>
-        <button type="submit" class="btn">Salvar alterações</button>
+        <button type="submit" class="btn">${liberar ? 'Liberar acesso' : 'Salvar alterações'}</button>
       </div>
     </form>
   `);
@@ -4600,9 +4629,10 @@ function openEditUsuarioModal(usuario) {
     } else {
       body.coluna = null;
     }
+    if (liberar) body.active = true;
     try {
       await api.put(`/api/users/${usuario.id}`, body);
-      toast('Usuário atualizado com sucesso.', 'success');
+      toast(liberar ? 'Acesso liberado.' : 'Usuário atualizado com sucesso.', 'success');
       closeModal();
       loadUsuarios();
     } catch (e) {
@@ -4625,7 +4655,7 @@ function setupObraForm() {
     const body = {
       nome: document.getElementById('obNome').value.trim(),
       codigo: document.getElementById('obCodigo').value.trim(),
-      validadorIds: validadoresSel ? Array.from(validadoresSel.selectedOptions).map((op) => op.value) : [],
+      validadorIds: validadoresMarcados(validadoresSel),
     };
     try {
       await api.post('/api/obras', body);
@@ -4638,17 +4668,20 @@ function setupObraForm() {
   });
 }
 
-// Popula um <select multiple> de responsáveis pela validação de recebimento
-// com os usuários visíveis ao perfil logado (todos para admin; só a própria
-// coluna para supervisor — mesma regra de GET /api/users), pré-selecionando
-// quem já estiver na lista `selecionados`.
-function popularValidadoresSelect(selectEl, usuarios, selecionados) {
-  if (!selectEl) return;
-  const ids = new Set((selecionados || []).map(Number));
-  selectEl.innerHTML = usuarios
-    .filter((u) => u.active)
-    .map((u) => `<option value="${u.id}" ${ids.has(u.id) ? 'selected' : ''}>${escapeHtml(u.name)} (${ROLE_LABELS[u.role] || u.role})</option>`)
-    .join('');
+// Lista de caixas de marcar dos responsáveis pela validação de recebimento, com os usuários visíveis
+// ao perfil logado (todos para admin; só a própria coluna para supervisor — mesma regra de GET /api/users),
+// já marcando quem estiver em `selecionados`. Era um <select multiple>: bastava um clique sem Ctrl para
+// desmarcar todos os outros sem perceber — e a obra era salva sem os responsáveis anteriores.
+function popularValidadoresSelect(containerEl, usuarios, selecionados) {
+  if (!containerEl) return;
+  const ids = new Set((selecionados || []).map(String));
+  const lista = usuarios.filter((u) => u.active).sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  containerEl.innerHTML = lista.length
+    ? lista.map((u) => `<label><input type="checkbox" value="${u.id}" ${ids.has(String(u.id)) ? 'checked' : ''} /> ${escapeHtml(u.name)} <span class="legend-note">(${ROLE_LABELS[u.role] || u.role})</span></label>`).join('')
+    : '<span class="legend-note">Nenhum usuário ativo.</span>';
+}
+function validadoresMarcados(containerEl) {
+  return containerEl ? Array.from(containerEl.querySelectorAll('input[type="checkbox"]:checked')).map((el) => el.value) : [];
 }
 
 async function loadObras() {
@@ -4694,7 +4727,7 @@ function openEditObraModal(obra, usuarios) {
     <form id="editObraForm">
       <div class="field"><label for="eoNome">Nome da obra *</label><input type="text" id="eoNome" required value="${escapeHtml(obra.nome)}" /></div>
       <div class="field"><label for="eoCodigo">Código</label><input type="text" id="eoCodigo" value="${escapeHtml(obra.codigo || '')}" /></div>
-      <div class="field"><label for="eoValidadores">Responsáveis pela validação de recebimento</label><select id="eoValidadores" multiple size="4"></select></div>
+      <div class="field"><label>Responsáveis pela validação de recebimento</label><div id="eoValidadores" class="check-list"></div></div>
       <div class="error-msg" id="eoError"></div>
       <div class="form-actions">
         <button type="button" class="btn secondary" id="eoCancel">Cancelar</button>
@@ -4712,7 +4745,7 @@ function openEditObraModal(obra, usuarios) {
       await api.put(`/api/obras/${obra.id}`, {
         nome: document.getElementById('eoNome').value.trim(),
         codigo: document.getElementById('eoCodigo').value.trim(),
-        validadorIds: Array.from(validadoresSel.selectedOptions).map((op) => op.value),
+        validadorIds: validadoresMarcados(validadoresSel),
       });
       toast('Obra atualizada.', 'success');
       closeModal();
@@ -5294,6 +5327,61 @@ function openChangePasswordModal() {
 // "Esqueci minha senha" — acessível a partir da tela de login, sem precisar
 // estar autenticado. Só dispara o envio do e-mail; quem define a senha nova
 // é o modal abaixo, aberto quando a pessoa clicar no link recebido.
+function openCriarContaModal() {
+  showModal(`
+    <h3>Criar minha conta</h3>
+    <p class="desc">Depois do cadastro, o administrador libera o seu acesso e define a sua permissão. Até lá não é possível entrar no sistema.</p>
+    <form id="criarContaForm">
+      <div class="field"><label for="ccNome">Nome completo *</label><input type="text" id="ccNome" required autocomplete="name" /></div>
+      <div class="field"><label for="ccEmail">E-mail *</label><input type="email" id="ccEmail" required autocomplete="email" value="${escapeHtml(document.getElementById('loginEmail').value || '')}" /></div>
+      <div class="field"><label for="ccSenha">Senha * (mínimo 6 caracteres)</label><input type="password" id="ccSenha" required minlength="6" autocomplete="new-password" /></div>
+      <div class="field"><label for="ccSenha2">Confirme a senha *</label><input type="password" id="ccSenha2" required minlength="6" autocomplete="new-password" /></div>
+      <div class="error-msg" id="ccError"></div>
+      <div class="success-msg" id="ccOk"></div>
+      <div class="form-actions">
+        <button type="button" class="btn secondary" id="ccFechar">Fechar</button>
+        <button type="submit" class="btn" id="ccBtn">Criar conta</button>
+      </div>
+    </form>
+  `);
+  document.getElementById('ccFechar').addEventListener('click', closeModal);
+  document.getElementById('criarContaForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const errEl = document.getElementById('ccError'); const okEl = document.getElementById('ccOk'); const btn = document.getElementById('ccBtn');
+    errEl.textContent = ''; okEl.textContent = '';
+    const nome = document.getElementById('ccNome').value.trim();
+    const email = document.getElementById('ccEmail').value.trim().toLowerCase();
+    const senha = document.getElementById('ccSenha').value;
+    if (senha.length < 6) { errEl.textContent = 'A senha deve ter ao menos 6 caracteres.'; return; }
+    if (senha !== document.getElementById('ccSenha2').value) { errEl.textContent = 'As senhas não conferem.'; return; }
+    btn.disabled = true;
+    try {
+      const { data, error } = await supabaseClient.auth.signUp({
+        email, password: senha,
+        options: { data: { name: nome }, emailRedirectTo: location.origin + location.pathname },
+      });
+      if (error) throw error;
+      // Quando o e-mail já existe, o Supabase não dá erro (por segurança) e devolve um usuário sem identidades.
+      if (data && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        throw new Error('Este e-mail já tem cadastro. Use "Esqueci minha senha" se não lembrar a senha.');
+      }
+      if (data && data.session) await supabaseClient.auth.signOut(); // não entra: aguarda liberação
+      okEl.textContent = data && data.session
+        ? 'Conta criada! Agora é só aguardar o administrador liberar o seu acesso.'
+        : 'Conta criada! Confirme o seu e-mail pelo link que enviamos e aguarde o administrador liberar o seu acesso.';
+      ev.target.querySelectorAll('input').forEach((el) => { el.disabled = true; });
+      btn.style.display = 'none';
+    } catch (e) {
+      const m = String((e && e.message) || e);
+      errEl.textContent = /signups? not allowed|disabled/i.test(m)
+        ? 'O cadastro pela própria pessoa está desativado no Supabase. Peça ao administrador para criar seu acesso.'
+        : /already registered|already exists/i.test(m) ? 'Este e-mail já tem cadastro. Use "Esqueci minha senha" se não lembrar a senha.' : m;
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+
 function openEsqueciSenhaModal() {
   const emailAtual = document.getElementById('loginEmail').value.trim();
   showModal(`
