@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Capivara — Controle de Notas Fiscais · Sede AMETA</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23F5C433'/><g fill='%231A1E24'><rect x='12' y='40' width='6' height='12' rx='2.5'/><rect x='22' y='41' width='5.5' height='11' rx='2.5'/><rect x='35.5' y='40' width='6' height='12' rx='2.5'/><circle cx='41.5' cy='18.8' r='2.7'/><path fill-rule='evenodd' d='M10 44C5.5 40 5.5 30 9.5 25.5C13.5 20 21 17 28.5 17.8C33 18.3 35.5 20 38 20L44 19.6C50.5 19.8 55.5 21 58.5 23.5C60.8 25.5 61 31 59.5 33.5C58.3 35.2 55.5 35.8 52.5 35.8L46 35.8C44.5 40.5 41 44.5 36 45.5L16 46.5C13.5 46.5 11.3 45.5 10 44ZM48.6 24.3a1.6 1.6 0 1 0-3.2 0a1.6 1.6 0 1 0 3.2 0ZM59.2 26.6a.8 1.1 0 1 0-1.6 0a.8 1.1 0 1 0 1.6 0Z'/></g></svg>" />
+<title>Capivara Notas — Controle de Notas Fiscais · Sede AMETA</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23F5C433'/><g fill='%231A1E24' transform='translate(0.00 0.00) scale(1.0)'><rect x='12' y='40' width='6' height='12' rx='2.5'/><rect x='22' y='41' width='5.5' height='11' rx='2.5'/><rect x='35.5' y='40' width='6' height='12' rx='2.5'/><circle cx='41.5' cy='18.8' r='2.7'/><path fill-rule='evenodd' d='M10 44C5.5 40 5.5 30 9.5 25.5C13.5 20 21 17 28.5 17.8C33 18.3 35.5 20 38 20L44 19.6C50.5 19.8 55.5 21 58.5 23.5C60.8 25.5 61 31 59.5 33.5C58.3 35.2 55.5 35.8 52.5 35.8L46 35.8C44.5 40.5 41 44.5 36 45.5L16 46.5C13.5 46.5 11.3 45.5 10 44ZM48.6 24.3a1.6 1.6 0 1 0-3.2 0a1.6 1.6 0 1 0 3.2 0ZM59.2 26.6a.8 1.1 0 1 0-1.6 0a.8 1.1 0 1 0 1.6 0Z'/></g></svg>" />
 <!-- SheetJS: lê o .xlsx do relatório do SIENGE inteiramente no navegador, sem enviar o arquivo a nenhum servidor. -->
 <!-- Supabase: banco de dados compartilhado (substitui o localStorage por um backend real). -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
@@ -150,75 +150,46 @@ body {
 .hint code { background: var(--surface-1); padding: 1px 5px; border-radius: 4px; font-family: var(--font-mono); }
 .hint a { color: var(--accent); }
 
-/* ---------- Marca "Capivara" ----------
-   A capivara é desenhada uma vez como <symbol> (#capivaraSilhueta, em
-   currentColor, com olho e narina vazados) e reaproveitada via <use> no
-   login e no cabeçalho. O selo amarelo é o mesmo do tema "Rodovia". */
-.capivara-badge {
-  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
-  background: var(--accent); color: #1A1E24; border-radius: 22%;
-}
-.capivara-badge svg { width: 100%; height: 100%; display: block; }
-.login-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
-.login-brand .capivara-badge { width: 56px; height: 56px; box-shadow: 0 6px 18px rgba(245,196,51,0.18); }
-.login-brand h1 { font-size: 30px !important; letter-spacing: 0.08em !important; text-transform: uppercase; margin: 0 !important; line-height: 1; }
-.login-brand p.subtitle { margin: 6px 0 0 !important; }
+/* ===== Marca Capivara (kit comum a todas as aplicações Capivara) =====
+   Selo amarelo com a capivara (#capivaraSilhueta) e tela de abertura. Usa
+   variáveis próprias (--cap-*) para não depender do tema de cada aplicação. */
+.cap-selo{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+  width:34px;height:34px;border-radius:22%;background:#F5C433;color:#1A1E24;vertical-align:middle}
+.cap-selo svg{width:100%;height:100%;display:block}
+.cap-marca{text-transform:uppercase;letter-spacing:.08em}
+.cap-marca .cap-mod{color:var(--cap-mod-cor,#F5C433)}
 
-/* ---------- Tela de abertura ---------- */
-#splash {
-  position: fixed; inset: 0; z-index: 9999;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
-  background: radial-gradient(ellipse at 50% 35%, #1f252e 0%, var(--page) 70%);
-  cursor: pointer;
-  transition: opacity 0.5s ease, visibility 0.5s;
-}
-#splash.saindo { opacity: 0; visibility: hidden; pointer-events: none; }
-#splash .splash-badge {
-  width: 112px; height: 112px;
-  box-shadow: 0 18px 50px rgba(245,196,51,0.22);
-  animation: splashPop 0.7s cubic-bezier(.2,1.4,.4,1) both;
-}
-#splash .splash-nome {
-  font-family: var(--font-display); font-weight: 600; font-size: 52px; line-height: 1;
-  letter-spacing: 0.2em; margin: 26px 0 0 0.2em; color: var(--text-primary); text-transform: uppercase;
-  animation: splashSobe 0.6s 0.25s ease-out both;
-}
-#splash .splash-tag {
-  font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary);
-  text-transform: uppercase; letter-spacing: 0.12em; margin-top: 12px; text-align: center; padding: 0 16px;
-  animation: splashSobe 0.6s 0.4s ease-out both;
-}
-/* Estrada: a capivarinha "caminha" parada enquanto a faixa pontilhada corre
-   por baixo dela — serve de indicador de carregamento. */
-#splash .splash-estrada {
-  position: relative; width: min(260px, 70vw); height: 34px; margin-top: 34px; overflow: hidden;
-  animation: splashSobe 0.6s 0.55s ease-out both;
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
-          mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
-}
-#splash .splash-estrada .faixa {
-  position: absolute; left: 0; right: -36px; bottom: 0; height: 3px;
-  background: repeating-linear-gradient(90deg, var(--accent) 0 22px, transparent 22px 36px);
-  animation: splashFaixa 0.6s linear infinite;
-}
-#splash .splash-estrada .andando {
-  position: absolute; left: 50%; bottom: 4px; width: 34px; height: 34px; margin-left: -17px;
-  color: var(--accent); animation: splashPasso 0.3s ease-in-out infinite alternate;
-}
-#splash .andando .pata-a { animation: splashPata 0.3s ease-in-out infinite alternate; }
-#splash .andando .pata-b { animation: splashPata 0.3s ease-in-out infinite alternate-reverse; }
-@keyframes splashPop { from { transform: scale(0.4) rotate(-8deg); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes splashSobe { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }
-@keyframes splashFaixa { to { transform: translateX(-36px); } }
-@keyframes splashPasso { to { transform: translateY(-1.5px); } }
-@keyframes splashPata { to { transform: translateY(-2.5px); } }
-@media (prefers-reduced-motion: reduce) {
-  #splash *, #splash { animation: none !important; transition: none !important; }
-}
-@media (max-width: 480px) {
-  #splash .splash-badge { width: 88px; height: 88px; }
-  #splash .splash-nome { font-size: 38px; }
-}
+#capAbertura{position:fixed;inset:0;z-index:2147483000;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 50% 35%,#1f252e 0%,#12151A 70%);color:#EDEFF2;cursor:pointer;
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;transition:opacity .5s ease,visibility .5s}
+#capAbertura.saindo{opacity:0;visibility:hidden;pointer-events:none}
+#capAbertura .cap-selo{width:112px;height:112px;box-shadow:0 18px 50px rgba(245,196,51,.22);animation:capPop .7s cubic-bezier(.2,1.4,.4,1) both}
+#capAbertura .cap-nome{font-family:'Oswald','IBM Plex Sans Condensed','Arial Narrow',sans-serif;font-weight:600;font-size:52px;line-height:1;
+  letter-spacing:.2em;margin:26px 0 0 .2em;text-transform:uppercase;animation:capSobe .6s .25s ease-out both}
+#capAbertura .cap-modulo{font-family:'Oswald','IBM Plex Sans Condensed','Arial Narrow',sans-serif;font-weight:500;font-size:20px;line-height:1;
+  letter-spacing:.42em;margin:10px 0 0 .42em;text-transform:uppercase;color:#F5C433;animation:capSobe .6s .32s ease-out both}
+#capAbertura .cap-tag{font-family:'JetBrains Mono','IBM Plex Mono',ui-monospace,monospace;font-size:12px;color:#8D97A3;text-transform:uppercase;
+  letter-spacing:.12em;margin-top:14px;text-align:center;padding:0 16px;animation:capSobe .6s .4s ease-out both}
+/* estrada: a capivarinha "caminha" parada enquanto a faixa corre por baixo (indicador de carregamento) */
+#capAbertura .cap-estrada{position:relative;width:min(260px,70vw);height:34px;margin-top:34px;overflow:hidden;animation:capSobe .6s .55s ease-out both;
+  -webkit-mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent);mask-image:linear-gradient(90deg,transparent,#000 18%,#000 82%,transparent)}
+#capAbertura .cap-faixa{position:absolute;left:0;right:-36px;bottom:0;height:3px;
+  background:repeating-linear-gradient(90deg,#F5C433 0 22px,transparent 22px 36px);animation:capFaixa .6s linear infinite}
+#capAbertura .cap-andando{position:absolute;left:50%;bottom:4px;width:34px;height:34px;margin-left:-17px;color:#F5C433;
+  animation:capPasso .3s ease-in-out infinite alternate}
+#capAbertura .pata-a{animation:capPata .3s ease-in-out infinite alternate}
+#capAbertura .pata-b{animation:capPata .3s ease-in-out infinite alternate-reverse}
+@keyframes capPop{from{transform:scale(.4) rotate(-8deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes capSobe{from{transform:translateY(12px);opacity:0}to{transform:none;opacity:1}}
+@keyframes capFaixa{to{transform:translateX(-36px)}}
+@keyframes capPasso{to{transform:translateY(-1.5px)}}
+@keyframes capPata{to{transform:translateY(-2.5px)}}
+@media (prefers-reduced-motion:reduce){#capAbertura,#capAbertura *{animation:none!important;transition:none!important}}
+@media (max-width:480px){#capAbertura .cap-selo{width:88px;height:88px}#capAbertura .cap-nome{font-size:38px}#capAbertura .cap-modulo{font-size:16px}}
+.login-brand { display: flex; align-items: center; gap: 14px; margin-bottom: 22px; }
+.login-brand .cap-selo { width: 56px; height: 56px; box-shadow: 0 6px 18px rgba(245,196,51,0.18); }
+.login-brand h1 { font-size: 26px !important; white-space: nowrap; letter-spacing: 0.08em !important; text-transform: uppercase; margin: 0 !important; line-height: 1; }
+.login-brand p.subtitle { margin: 6px 0 0 !important; }
 
 /* ---------- Shell ---------- */
 header.topbar {
@@ -237,7 +208,6 @@ header.topbar .brand { display: flex; align-items: center; gap: 10px; }
 }
 .sidebar-toggle-btn:hover { color: var(--text-primary); border-color: var(--accent-dim); }
 header.topbar .brand .logo { width: 34px; height: 34px; border-radius: 7px; }
-header.topbar .brand h1 .marca { letter-spacing: 0.08em; text-transform: uppercase; }
 header.topbar .brand h1 .marca-sub { color: var(--text-secondary); font-weight: 400; }
 header.topbar .brand h1 { font-family: var(--font-display); font-weight: 600; font-size: 17px; margin: 0; letter-spacing: 0.01em; }
 header.topbar .brand span.tag { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.04em; }
@@ -665,23 +635,47 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 </head>
 <body>
 
-<!-- Marca: silhueta da capivara definida uma única vez e reutilizada via <use>. -->
+<!-- Marca Capivara: silhueta definida uma única vez e reutilizada via <use href="#capivaraSilhueta">. -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="capivaraSilhueta" viewBox="0 0 64 64">
-    <g fill="currentColor"><rect x="12" y="40" width="6" height="12" rx="2.5"/><rect x="22" y="41" width="5.5" height="11" rx="2.5"/><rect x="35.5" y="40" width="6" height="12" rx="2.5"/><circle cx="41.5" cy="18.8" r="2.7"/><path fill-rule="evenodd" d="M10 44C5.5 40 5.5 30 9.5 25.5C13.5 20 21 17 28.5 17.8C33 18.3 35.5 20 38 20L44 19.6C50.5 19.8 55.5 21 58.5 23.5C60.8 25.5 61 31 59.5 33.5C58.3 35.2 55.5 35.8 52.5 35.8L46 35.8C44.5 40.5 41 44.5 36 45.5L16 46.5C13.5 46.5 11.3 45.5 10 44ZM48.6 24.3a1.6 1.6 0 1 0-3.2 0a1.6 1.6 0 1 0 3.2 0ZM59.2 26.6a.8 1.1 0 1 0-1.6 0a.8 1.1 0 1 0 1.6 0Z"/></g>
-  </symbol>
+  <symbol id="capivaraSilhueta" viewBox="0 0 64 64"><g fill="currentColor"><rect x="12" y="40" width="6" height="12" rx="2.5"/><rect x="22" y="41" width="5.5" height="11" rx="2.5"/><rect x="35.5" y="40" width="6" height="12" rx="2.5"/><circle cx="41.5" cy="18.8" r="2.7"/><path fill-rule="evenodd" d="M10 44C5.5 40 5.5 30 9.5 25.5C13.5 20 21 17 28.5 17.8C33 18.3 35.5 20 38 20L44 19.6C50.5 19.8 55.5 21 58.5 23.5C60.8 25.5 61 31 59.5 33.5C58.3 35.2 55.5 35.8 52.5 35.8L46 35.8C44.5 40.5 41 44.5 36 45.5L16 46.5C13.5 46.5 11.3 45.5 10 44ZM48.6 24.3a1.6 1.6 0 1 0-3.2 0a1.6 1.6 0 1 0 3.2 0ZM59.2 26.6a.8 1.1 0 1 0-1.6 0a.8 1.1 0 1 0 1.6 0Z"/></g></symbol>
 </svg>
 
-<!-- ===================== TELA DE ABERTURA ===================== -->
-<div id="splash" role="status" aria-label="Carregando Capivara" title="Clique para pular">
-  <div class="capivara-badge splash-badge"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></div>
-  <div class="splash-nome">Capivara</div>
-  <div class="splash-tag">Controle de Notas Fiscais · Sede AMETA</div>
-  <div class="splash-estrada" aria-hidden="true">
-    <svg class="andando" viewBox="0 0 64 64"><g fill="currentColor"><rect class="pata-a" x="12" y="40" width="6" height="12" rx="2.5"/><rect class="pata-b" x="22" y="41" width="5.5" height="11" rx="2.5"/><rect class="pata-b" x="35.5" y="40" width="6" height="12" rx="2.5"/><circle cx="41.5" cy="18.8" r="2.7"/><path fill-rule="evenodd" d="M10 44C5.5 40 5.5 30 9.5 25.5C13.5 20 21 17 28.5 17.8C33 18.3 35.5 20 38 20L44 19.6C50.5 19.8 55.5 21 58.5 23.5C60.8 25.5 61 31 59.5 33.5C58.3 35.2 55.5 35.8 52.5 35.8L46 35.8C44.5 40.5 41 44.5 36 45.5L16 46.5C13.5 46.5 11.3 45.5 10 44ZM48.6 24.3a1.6 1.6 0 1 0-3.2 0a1.6 1.6 0 1 0 3.2 0ZM59.2 26.6a.8 1.1 0 1 0-1.6 0a.8 1.1 0 1 0 1.6 0Z"/></g></svg>
-    <div class="faixa"></div>
+<!-- ===== Tela de abertura Capivara ===== -->
+<div id="capAbertura" data-manual="1" role="status" aria-label="Carregando Capivara Notas" title="Clique para pular">
+  <span class="cap-selo"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></span>
+  <div class="cap-nome">Capivara</div>
+  <div class="cap-modulo">Notas</div>
+  <div class="cap-tag">Controle de Notas Fiscais · Sede AMETA</div>
+  <div class="cap-estrada" aria-hidden="true">
+    <svg class="cap-andando" viewBox="0 0 64 64"><g fill="currentColor"><rect class="pata-a" x="12" y="40" width="6" height="12" rx="2.5"/><rect class="pata-b" x="22" y="41" width="5.5" height="11" rx="2.5"/><rect class="pata-b" x="35.5" y="40" width="6" height="12" rx="2.5"/><circle cx="41.5" cy="18.8" r="2.7"/><path fill-rule="evenodd" d="M10 44C5.5 40 5.5 30 9.5 25.5C13.5 20 21 17 28.5 17.8C33 18.3 35.5 20 38 20L44 19.6C50.5 19.8 55.5 21 58.5 23.5C60.8 25.5 61 31 59.5 33.5C58.3 35.2 55.5 35.8 52.5 35.8L46 35.8C44.5 40.5 41 44.5 36 45.5L16 46.5C13.5 46.5 11.3 45.5 10 44ZM48.6 24.3a1.6 1.6 0 1 0-3.2 0a1.6 1.6 0 1 0 3.2 0ZM59.2 26.6a.8 1.1 0 1 0-1.6 0a.8 1.1 0 1 0 1.6 0Z"/></g></svg>
+    <div class="cap-faixa"></div>
   </div>
 </div>
+<script>
+/* Tela de abertura Capivara: sai com fade depois de um tempo mínimo (para a
+   animação não "piscar"). Por padrão sai quando a página termina de carregar;
+   com data-manual="1" a própria aplicação chama capivaraFecharAbertura().
+   Clique pula; após 8 s sai de qualquer jeito, para nunca prender a tela. */
+(function(){
+  var inicio = Date.now(), MINIMO = 1600;
+  window.capivaraFecharAbertura = function(imediato){
+    var el = document.getElementById('capAbertura');
+    if (!el || el.classList.contains('saindo')) return;
+    setTimeout(function(){
+      el.classList.add('saindo');
+      setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 600);
+    }, imediato ? 0 : Math.max(0, MINIMO - (Date.now() - inicio)));
+  };
+  var el = document.getElementById('capAbertura');
+  if (!el) return;
+  el.addEventListener('click', function(){ window.capivaraFecharAbertura(true); });
+  setTimeout(function(){ window.capivaraFecharAbertura(true); }, 8000);
+  if (!el.hasAttribute('data-manual')) {
+    if (document.readyState === 'complete') window.capivaraFecharAbertura();
+    else window.addEventListener('load', function(){ window.capivaraFecharAbertura(); });
+  }
+})();
+</script>
 
 <div id="app">
 
@@ -689,10 +683,10 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
   <section id="loginScreen" class="login-screen">
     <div class="login-card">
       <div class="login-brand">
-        <div class="capivara-badge"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></div>
+        <span class="cap-selo"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></span>
         <div>
-          <h1>Capivara</h1>
-          <p class="subtitle">Notas Fiscais — Sede AMETA</p>
+          <h1 class="cap-marca">Capivara <span class="cap-mod">Notas</span></h1>
+          <p class="subtitle">Controle de Notas Fiscais · Sede AMETA</p>
         </div>
       </div>
       <form id="loginForm">
@@ -723,9 +717,9 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
     <header class="topbar">
       <div class="brand">
         <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Recolher menu">☰</button>
-        <div class="logo capivara-badge" id="appLogo"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></div>
+        <span class="cap-selo logo" id="appLogo"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></span>
         <div>
-          <h1><span class="marca">Capivara</span> <span class="marca-sub">· Notas Fiscais — Sede AMETA</span></h1>
+          <h1><span class="cap-marca">Capivara <span class="cap-mod">Notas</span></span> <span class="marca-sub">· Sede AMETA</span></h1>
           <span class="tag">Entradas · Lançamento · Financeiro/CX · Pendências</span>
         </div>
       </div>
@@ -2167,7 +2161,7 @@ let CURRENT_USER = null;
    IMPORTANTE ao editar este arquivo: mude APP_VERSION a cada publicação. A tela compara com a versão do arquivo
    no servidor (a cada 2 min e ao voltar para a aba) e, se mudou, mostra a faixa "Nova versão — Recarregar".
    Assim ninguém fica dias com uma aba antiga rodando lógica velha. */
-const APP_VERSION = '2026-10-08T12:00:00-03:00';
+const APP_VERSION = '2026-10-08T15:00:00-03:00';
 let _versaoAvisoMostrado = false, _versaoUltimaChecagem = 0;
 function iniciarVerificacaoDeVersao() {
   const logo = document.getElementById('appLogo');
@@ -5587,28 +5581,9 @@ function openDefinirNovaSenhaModal() {
   });
 }
 
-/* ---------- Tela de abertura ----------
-   Fica visível desde o primeiro desenho da página e sai (com fade) quando o
-   init termina de decidir entre login e app — mas nunca antes de um tempo
-   mínimo, para a animação não "piscar". Clique pula. */
-const SPLASH_INICIO = Date.now();
-const SPLASH_MINIMO_MS = 1600;
-function esconderSplash(imediato) {
-  const el = document.getElementById('splash');
-  if (!el || el.classList.contains('saindo')) return;
-  const espera = imediato ? 0 : Math.max(0, SPLASH_MINIMO_MS - (Date.now() - SPLASH_INICIO));
-  setTimeout(() => {
-    el.classList.add('saindo');
-    setTimeout(() => el.remove(), 600);
-  }, espera);
-}
-
+// A tela de abertura (kit Capivara, data-manual) sai quando o init termina de decidir entre login e app.
 document.addEventListener('DOMContentLoaded', () => {
-  const splash = document.getElementById('splash');
-  if (splash) splash.addEventListener('click', () => esconderSplash(true));
-  // Rede de segurança: mesmo se algo travar no init, a abertura não prende a tela.
-  setTimeout(() => esconderSplash(true), 8000);
-  Promise.resolve().then(init).finally(() => esconderSplash());
+  Promise.resolve().then(init).finally(() => window.capivaraFecharAbertura && window.capivaraFecharAbertura());
 });
 </script>
 </body>
