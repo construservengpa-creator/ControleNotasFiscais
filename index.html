@@ -590,6 +590,21 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .msg-panel-autor { color: var(--accent); font-weight: 600; }
 .msg-panel-texto { margin-top: 3px; color: var(--text-primary); white-space: pre-wrap; }
 .msg-panel-vazio { padding: 16px 10px; text-align: center; color: var(--text-muted); font-size: 12px; }
+.msg-panel-rodape { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; background: none; border: none; border-top: 1px solid var(--grid); color: var(--accent); font-size: 12px; cursor: pointer; text-align: center; font-family: inherit; }
+.msg-panel-rodape:hover { background: var(--surface-1); }
+
+/* ---------- Histórico de notificações (📜) ---------- */
+.hist-lista { max-height: 60vh; overflow-y: auto; margin-top: 10px; border: 1px solid var(--grid); border-radius: 8px; }
+.hist-item { display: flex; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--grid); cursor: pointer; font-size: 12.5px; }
+.hist-item:last-child { border-bottom: none; }
+.hist-item:hover { background: var(--surface-1); }
+.hist-item.nao-lida { background: rgba(124, 179, 232, 0.07); }
+.hist-icone { font-size: 16px; line-height: 1.2; }
+.hist-corpo { flex: 1; min-width: 0; }
+.hist-topo { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.hist-status { font-size: 10.5px; font-family: var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+.hist-item.nao-lida .hist-status { color: var(--accent); font-weight: 700; }
+.hist-mais { margin-top: 10px; text-align: center; }
 
 .filters-row { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 14px; flex-wrap: wrap; }
 .filters-row .field { margin-bottom: 0; min-width: 140px; }
@@ -732,6 +747,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
         <button type="button" class="msg-badge hidden" id="msgBadgeBtn" title="Mensagens sem resposta direcionadas a você">
           💬 <span class="msg-badge-count" id="msgBadgeCount">0</span>
         </button>
+        <button type="button" class="msg-badge hidden" id="histNotifBtn" title="Histórico de notificações (mensagens e atribuições, lidas e não lidas)">📜</button>
         <button class="btn secondary small" id="minhaContaBtn">Minha conta</button>
         <button class="btn secondary small" id="logoutBtn">Sair</button>
       </div>
@@ -1586,6 +1602,29 @@ async function apiGet(path) {
     };
   }
 
+  // Histórico de notificações (📜): tudo o que já passou pelos avisos 💬 e 🗂️
+  // do usuário logado, lidas e não lidas — ver função historico_notificacoes
+  // no banco. Paginado por data: "antes" = createdAt do último item recebido.
+  if (pathname === '/api/notificacoes/historico') {
+    await uidSessaoAtual();
+    const tipo = ['mensagem', 'atribuicao'].includes(query.get('tipo')) ? query.get('tipo') : null;
+    const { data, error } = await supabaseClient.rpc('historico_notificacoes', {
+      p_limite: Number(query.get('limite')) || 50,
+      p_antes: query.get('antes') || null,
+      p_tipo: tipo,
+    });
+    throwSupabaseError(error);
+    return {
+      itens: (data || []).map((r) => ({
+        tipo: r.tipo, refId: r.ref_id, notaId: r.nota_id, createdAt: r.created_at,
+        autorNome: r.autor_nome || null, mensagem: r.mensagem || '', direta: !!r.direta,
+        lida: !!r.lida, lidaEm: r.lida_em || null,
+        notaNumero: r.nota_numero || null, notaFornecedor: r.nota_fornecedor || null,
+        paraStatus: r.para_status || null,
+      })),
+    };
+  }
+
   // Notas atribuídas ao usuário logado que ele ainda não abriu (sininho de
   // "atribuições" no topo) — mesma lógica do sininho de mensagens, mas
   // baseada em assigned_seen_at em vez de nota_comentarios.lida_em.
@@ -2327,6 +2366,7 @@ async function init() {
     panel.classList.add('hidden');
   });
   document.getElementById('atrBadgeBtn').addEventListener('click', toggleAtrPanel);
+  document.getElementById('histNotifBtn').addEventListener('click', () => openHistoricoNotificacoesModal());
   document.addEventListener('click', (ev) => {
     const panel = document.getElementById('atrPanel');
     const btn = document.getElementById('atrBadgeBtn');
@@ -2410,6 +2450,7 @@ async function onLogout() {
   ATRIBUICOES_CACHE = [];
   document.getElementById('atrBadgeBtn').classList.add('hidden');
   document.getElementById('atrPanel').classList.add('hidden');
+  document.getElementById('histNotifBtn').classList.add('hidden');
   document.getElementById('loginPassword').value = '';
   showLogin();
 }
@@ -2425,6 +2466,7 @@ function afterLogin(user) {
   // responder — se ela falhasse, ficavam escondidos sem aviso nenhum).
   document.getElementById('msgBadgeBtn').classList.remove('hidden');
   document.getElementById('atrBadgeBtn').classList.remove('hidden');
+  document.getElementById('histNotifBtn').classList.remove('hidden');
   atualizarBadgeMensagens();
   if (MSG_BADGE_POLL) clearInterval(MSG_BADGE_POLL);
   MSG_BADGE_POLL = setInterval(atualizarBadgeMensagens, 20000);
@@ -3858,7 +3900,8 @@ async function atualizarBadgeMensagens() {
 function renderMsgPanel() {
   const panel = document.getElementById('msgPanel');
   if (!PENDENTES_CACHE.length) {
-    panel.innerHTML = '<div class="msg-panel-vazio">Nenhuma mensagem sem resposta.</div>';
+    panel.innerHTML = '<div class="msg-panel-vazio">Nenhuma mensagem sem resposta.</div>' + rodapeHistoricoHtml('mensagem');
+    ligarRodapeHistorico(panel);
     return;
   }
   panel.innerHTML = PENDENTES_CACHE.map((p) => `
@@ -3866,7 +3909,8 @@ function renderMsgPanel() {
       <div class="msg-panel-nota">NF ${escapeHtml(p.notaNumero || '—')} · ${escapeHtml(p.notaFornecedor || '')}</div>
       <div><span class="msg-panel-autor">${escapeHtml(p.autorNome || '—')}</span> · ${fmtDateTime(p.createdAt)}</div>
       <div class="msg-panel-texto">${escapeHtml(p.mensagem)}</div>
-    </div>`).join('');
+    </div>`).join('') + rodapeHistoricoHtml('mensagem');
+  ligarRodapeHistorico(panel);
   panel.querySelectorAll('.msg-panel-item').forEach((el) => {
     el.addEventListener('click', () => {
       panel.classList.add('hidden');
@@ -3909,14 +3953,16 @@ async function atualizarBadgeAtribuicoes() {
 function renderAtrPanel() {
   const panel = document.getElementById('atrPanel');
   if (!ATRIBUICOES_CACHE.length) {
-    panel.innerHTML = '<div class="msg-panel-vazio">Nenhuma nota nova atribuída a você.</div>';
+    panel.innerHTML = '<div class="msg-panel-vazio">Nenhuma nota nova atribuída a você.</div>' + rodapeHistoricoHtml('atribuicao');
+    ligarRodapeHistorico(panel);
     return;
   }
   panel.innerHTML = ATRIBUICOES_CACHE.map((p) => `
     <div class="msg-panel-item" data-nota-id="${p.notaId}">
       <div class="msg-panel-nota">NF ${escapeHtml(p.notaNumero || '—')} · ${escapeHtml(p.notaFornecedor || '')}</div>
       <div class="msg-panel-texto">Atribuída a você em ${fmtDateTime(p.assignedAt)}</div>
-    </div>`).join('');
+    </div>`).join('') + rodapeHistoricoHtml('atribuicao');
+  ligarRodapeHistorico(panel);
   panel.querySelectorAll('.msg-panel-item').forEach((el) => {
     el.addEventListener('click', () => {
       panel.classList.add('hidden');
@@ -3942,6 +3988,134 @@ async function marcarAtribuicaoComoVista(nota) {
     await supabaseClient.from('notas').update({ assigned_seen_at: new Date().toISOString() }).eq('id', nota.id);
     atualizarBadgeAtribuicoes();
   } catch (e) { /* melhor esforço */ }
+}
+
+// Histórico de notificações (📜) — consulta de tudo o que já passou pelos
+// avisos 💬 e 🗂️, inclusive o que já foi lido. Os filtros de tipo vão para o
+// banco; situação (lida/não lida) e busca filtram o que já foi carregado —
+// "Carregar mais" traz páginas mais antigas.
+const HIST_PAGINA = 50;
+let HIST_ESTADO = { itens: [], tipo: '', fim: false, carregando: false };
+
+function rodapeHistoricoHtml(tipo) {
+  return `<button type="button" class="msg-panel-rodape" data-hist-tipo="${tipo}">📜 Ver histórico completo</button>`;
+}
+function ligarRodapeHistorico(panel) {
+  const btn = panel.querySelector('.msg-panel-rodape');
+  if (!btn) return;
+  btn.addEventListener('click', () => {
+    panel.classList.add('hidden');
+    openHistoricoNotificacoesModal(btn.dataset.histTipo);
+  });
+}
+
+function openHistoricoNotificacoesModal(tipoInicial) {
+  document.getElementById('msgPanel').classList.add('hidden');
+  document.getElementById('atrPanel').classList.add('hidden');
+  HIST_ESTADO = { itens: [], tipo: tipoInicial || '', fim: false, carregando: false };
+  showModal(`
+    <h3>📜 Histórico de notificações</h3>
+    <p class="legend-note" style="margin-top:0">Mensagens do diálogo das notas e notas atribuídas a você — lidas e não lidas. Clique em um item para abrir a nota.</p>
+    <div class="filters-row" style="margin-bottom:0">
+      <div class="field"><label>Tipo</label>
+        <select id="histTipo">
+          <option value="">Todas</option>
+          <option value="mensagem">💬 Mensagens</option>
+          <option value="atribuicao">🗂️ Atribuições</option>
+        </select>
+      </div>
+      <div class="field"><label>Situação</label>
+        <select id="histSituacao">
+          <option value="">Todas</option>
+          <option value="nao-lida">Não lidas</option>
+          <option value="lida">Lidas</option>
+        </select>
+      </div>
+      <div class="field" style="flex:1;min-width:180px"><label>Buscar</label>
+        <input type="search" id="histBusca" placeholder="NF, fornecedor, autor ou texto" />
+      </div>
+    </div>
+    <div class="hist-lista" id="histLista"><div class="msg-panel-vazio">Carregando…</div></div>
+    <div class="hist-mais"><button type="button" class="btn secondary small hidden" id="histMaisBtn">Carregar mais antigas</button></div>
+    <div class="form-actions"><button type="button" class="btn secondary" id="histFechar">Fechar</button></div>
+  `, { xl: true });
+  document.getElementById('histTipo').value = HIST_ESTADO.tipo;
+  document.getElementById('histFechar').addEventListener('click', closeModal);
+  document.getElementById('histTipo').addEventListener('change', (ev) => {
+    HIST_ESTADO = { itens: [], tipo: ev.target.value, fim: false, carregando: false };
+    carregarHistoricoNotificacoes();
+  });
+  document.getElementById('histSituacao').addEventListener('change', renderHistoricoNotificacoes);
+  document.getElementById('histBusca').addEventListener('input', renderHistoricoNotificacoes);
+  document.getElementById('histMaisBtn').addEventListener('click', carregarHistoricoNotificacoes);
+  carregarHistoricoNotificacoes();
+}
+
+async function carregarHistoricoNotificacoes() {
+  if (HIST_ESTADO.carregando || HIST_ESTADO.fim) return;
+  HIST_ESTADO.carregando = true;
+  const estado = HIST_ESTADO; // se o filtro de tipo mudar no meio, descarta a resposta antiga
+  const maisBtn = document.getElementById('histMaisBtn');
+  if (maisBtn) maisBtn.disabled = true;
+  try {
+    const params = new URLSearchParams({ limite: HIST_PAGINA });
+    if (estado.tipo) params.set('tipo', estado.tipo);
+    const ultimo = estado.itens[estado.itens.length - 1];
+    if (ultimo) params.set('antes', ultimo.createdAt);
+    const { itens } = await api.get('/api/notificacoes/historico?' + params.toString());
+    if (estado !== HIST_ESTADO) return;
+    estado.itens.push(...itens);
+    estado.fim = itens.length < HIST_PAGINA;
+  } catch (e) {
+    if (estado === HIST_ESTADO) toast(e.message, 'error');
+  } finally {
+    estado.carregando = false;
+    if (estado === HIST_ESTADO) renderHistoricoNotificacoes();
+  }
+}
+
+function renderHistoricoNotificacoes() {
+  const lista = document.getElementById('histLista');
+  if (!lista) return; // modal fechado
+  const situacao = document.getElementById('histSituacao').value;
+  const busca = document.getElementById('histBusca').value.trim().toLowerCase();
+  const itens = HIST_ESTADO.itens.filter((i) => {
+    if (situacao === 'lida' && !i.lida) return false;
+    if (situacao === 'nao-lida' && i.lida) return false;
+    if (!busca) return true;
+    return [i.notaNumero, i.notaFornecedor, i.autorNome, i.mensagem].some((v) => v && String(v).toLowerCase().includes(busca));
+  });
+  const maisBtn = document.getElementById('histMaisBtn');
+  maisBtn.classList.toggle('hidden', HIST_ESTADO.fim);
+  maisBtn.disabled = HIST_ESTADO.carregando;
+  if (!itens.length) {
+    lista.innerHTML = `<div class="msg-panel-vazio">${HIST_ESTADO.itens.length ? 'Nenhuma notificação com esses filtros entre as carregadas.' : 'Nenhuma notificação no histórico.'}</div>`;
+    return;
+  }
+  lista.innerHTML = itens.map((i) => {
+    const ehMsg = i.tipo === 'mensagem';
+    const titulo = ehMsg
+      ? `<span class="msg-panel-autor">${escapeHtml(i.autorNome || '—')}</span> ${i.direta ? 'escreveu para você' : 'escreveu para todos'}`
+      : `Nota atribuída a você${i.paraStatus ? ' em ' + escapeHtml(COLUNA_LABELS[i.paraStatus] || i.paraStatus) : ''}${i.autorNome ? ' por <span class="msg-panel-autor">' + escapeHtml(i.autorNome) + '</span>' : ''}`;
+    const status = i.lida
+      ? (ehMsg && i.lidaEm ? `Lida em ${fmtDateTime(i.lidaEm)}` : (ehMsg ? 'Lida' : 'Vista'))
+      : (ehMsg ? '● Não lida' : '● Não aberta');
+    return `
+    <div class="hist-item${i.lida ? '' : ' nao-lida'}" data-nota-id="${i.notaId}">
+      <div class="hist-icone">${ehMsg ? '💬' : '🗂️'}</div>
+      <div class="hist-corpo">
+        <div class="hist-topo">
+          <span class="msg-panel-nota">NF ${escapeHtml(i.notaNumero || '—')} · ${escapeHtml(i.notaFornecedor || '')}</span>
+          <span class="hist-status">${fmtDateTime(i.createdAt)} · ${status}</span>
+        </div>
+        <div>${titulo}</div>
+        ${i.mensagem ? `<div class="msg-panel-texto">${escapeHtml(i.mensagem)}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  lista.querySelectorAll('.hist-item').forEach((el) => {
+    el.addEventListener('click', () => openDetalheModal(Number(el.dataset.notaId)));
+  });
 }
 
 function renderComentariosList(comentarios) {
