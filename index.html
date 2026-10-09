@@ -143,6 +143,7 @@ body {
 .btn.secondary { background: var(--surface-1); color: var(--text-primary); border-color: var(--baseline); }
 .btn.danger { background: var(--status-critical); color: #fff; border-color: var(--status-critical); }
 .btn.small { padding: 5px 10px; font-size: 12px; }
+a.btn.inicio-btn { display: inline-flex; align-items: center; gap: 5px; text-decoration: none; }
 .btn.block { width: 100%; }
 .error-msg { color: var(--status-critical); font-size: 13px; margin-top: 10px; min-height: 16px; }
 .success-msg { color: var(--status-good-text); font-size: 13px; margin-top: 10px; min-height: 16px; }
@@ -733,6 +734,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
         Ainda não tem acesso? <a href="#" id="criarContaLink">Criar minha conta</a> — depois do cadastro,
         o administrador libera o acesso e define a sua permissão.
       </p>
+      <p class="hint"><a href="https://construservengpa-creator.github.io/Painel-suprimentos/inicio.html">← Voltar à página inicial do Capivara</a></p>
     </div>
   </section>
 
@@ -757,6 +759,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
           💬 <span class="msg-badge-count" id="msgBadgeCount">0</span>
         </button>
         <button type="button" class="msg-badge hidden" id="histNotifBtn" title="Histórico de notificações (mensagens e atribuições, lidas e não lidas)">📜</button>
+        <a class="btn secondary small inicio-btn" href="https://construservengpa-creator.github.io/Painel-suprimentos/inicio.html" title="Voltar à página inicial do Capivara (Suprimentos, Notas e Estoque)"><span aria-hidden="true">⌂</span> Início</a>
         <button class="btn secondary small" id="minhaContaBtn">Minha conta</button>
         <button class="btn secondary small" id="logoutBtn">Sair</button>
       </div>
