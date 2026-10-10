@@ -5887,5 +5887,120 @@ document.addEventListener('DOMContentLoaded', () => {
   Promise.resolve().then(init).finally(() => window.capivaraFecharAbertura && window.capivaraFecharAbertura());
 });
 </script>
+<!-- ===== Controle de inatividade (padrão Capivara): desconecta após 10 minutos sem uso =====
+     Conta como uso: clique, toque, tecla, rolagem ou movimento do mouse em qualquer aba aberta deste
+     sistema (o horário do último uso fica no navegador, compartilhado entre as abas). Aos 9 minutos
+     aparece um aviso com contagem regressiva; aos 10 a sessão é encerrada pelo logout normal do app.
+     Quem fecha o navegador e volta depois de 10 minutos também é desconectado ao abrir. -->
+<script>
+(function(){
+  var PROJETO = 'kygainafarusnsstvvhc';                          // projeto Supabase deste app
+  function cliente(){ return (typeof supabaseClient !== 'undefined' ? supabaseClient : null); }
+  function sairDoApp(){ return onLogout(); }              // o mesmo "Sair" do app
+
+  var LIMITE = 10 * 60 * 1000, AVISO = 60 * 1000;
+  var CHAVE_SESSAO = 'sb-' + PROJETO + '-auth-token';
+  var CHAVE_USO = 'capivara_ultimo_uso_' + PROJETO;
+  var CHAVE_MSG = 'capivara_saiu_inatividade';
+  var memoria = 0, gravadoEm = 0, saindo = false, caixa = null;
+
+  function ler(k){ try { return localStorage.getItem(k); } catch(e){ return null; } }
+  function logado(){ return !!ler(CHAVE_SESSAO); }
+  function ultimoUso(){ return Math.max(Number(ler(CHAVE_USO)) || 0, memoria); }
+  function marcarUso(forcar){
+    var t = Date.now(); memoria = t;
+    if(forcar || t - gravadoEm > 5000){ gravadoEm = t; try { localStorage.setItem(CHAVE_USO, String(t)); } catch(e){} }
+  }
+  function emUso(){
+    if(saindo) return;
+    marcarUso(false);
+    if(caixa && caixa.tipo === 'aviso') fechar();
+  }
+
+  /* ---- caixas de aviso ---- */
+  function fechar(){ if(caixa){ caixa.el.remove(); caixa = null; } }
+  function abrir(tipo, html){
+    fechar();
+    var fundo = document.createElement('div');
+    fundo.setAttribute('role', 'alertdialog');
+    fundo.setAttribute('aria-modal', 'true');
+    fundo.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(8,10,14,.62);display:flex;align-items:center;justify-content:center;padding:16px;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;';
+    fundo.innerHTML = '<div style="background:#1A1E24;color:#EDEFF2;border:1px solid #333A44;border-top:3px solid #F5C433;border-radius:12px;max-width:380px;width:100%;padding:22px 22px 18px;box-shadow:0 18px 50px rgba(0,0,0,.5);line-height:1.45;">' + html + '</div>';
+    document.body.appendChild(fundo);
+    caixa = { tipo: tipo, el: fundo };
+    var b = fundo.querySelector('button'); if(b) b.focus();
+    return fundo;
+  }
+  var BOTAO = 'margin-top:16px;width:100%;padding:11px 14px;border:0;border-radius:8px;background:#F5C433;color:#1A1E24;font:700 14px system-ui,-apple-system,"Segoe UI",sans-serif;cursor:pointer;';
+  function mmss(s){ s = Math.max(0, s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+  function mostrarAviso(seg){
+    if(caixa && caixa.tipo === 'aviso'){ caixa.el.querySelector('[data-cont]').textContent = mmss(seg); return; }
+    var el = abrir('aviso',
+      '<div style="font-size:17px;font-weight:700;margin-bottom:6px;">⏳ Você ainda está aí?</div>' +
+      '<div style="font-size:14px;color:#B3BCC8;">Por segurança, sua sessão será encerrada por inatividade em <b data-cont style="color:#F5C433;font-variant-numeric:tabular-nums;">' + mmss(seg) + '</b>.</div>' +
+      '<button type="button" style="' + BOTAO + '">Continuar conectado</button>');
+    el.querySelector('button').addEventListener('click', function(){ marcarUso(true); fechar(); });
+  }
+  function mostrarEncerrada(){
+    var el = abrir('fim',
+      '<div style="font-size:17px;font-weight:700;margin-bottom:6px;">🔒 Sessão encerrada</div>' +
+      '<div style="font-size:14px;color:#B3BCC8;">Você foi desconectado depois de 10 minutos sem uso. Entre novamente para continuar.</div>' +
+      '<button type="button" style="' + BOTAO + '">Entendi</button>');
+    el.querySelector('button').addEventListener('click', fechar);
+  }
+
+  /* ---- encerrar a sessão ---- */
+  function comLimite(p, ms){ return Promise.race([p, new Promise(function(r){ setTimeout(r, ms); })]); }
+  function sair(){
+    if(saindo) return;
+    saindo = true; fechar();
+    var c = null; try { c = cliente(); } catch(e){}
+    comLimite(Promise.resolve().then(sairDoApp), 8000).catch(function(){})
+      .then(function(){ if(logado() && c) return comLimite(c.auth.signOut({ scope: 'local' }), 5000).catch(function(){}); })
+      .then(function(){
+        if(logado()){
+          // sem internet o logout pode falhar: apaga a sessão guardada e recarrega
+          try { localStorage.removeItem(CHAVE_SESSAO); sessionStorage.setItem(CHAVE_MSG, '1'); } catch(e){}
+          location.reload(); return;
+        }
+        saindo = false; estavaLogado = false;
+        mostrarEncerrada();
+      });
+  }
+
+  /* ---- verificação ---- */
+  var estavaLogado = logado();
+  function verificar(){
+    if(saindo) return;
+    var agoraLogado = logado();
+    if(agoraLogado && !estavaLogado) marcarUso(true);   // acabou de entrar
+    estavaLogado = agoraLogado;
+    if(!agoraLogado){ if(caixa && caixa.tipo === 'aviso') fechar(); return; }
+    var ocioso = Date.now() - ultimoUso();
+    if(ocioso >= LIMITE) sair();
+    else if(ocioso >= LIMITE - AVISO) mostrarAviso(Math.ceil((LIMITE - ocioso) / 1000));
+    else if(caixa && caixa.tipo === 'aviso') fechar();
+  }
+
+  ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart', 'scroll', 'input'].forEach(function(ev){
+    document.addEventListener(ev, emUso, { capture: true, passive: true });
+  });
+  document.addEventListener('visibilitychange', function(){ if(!document.hidden) verificar(); });
+  window.addEventListener('focus', verificar);
+
+  var usoGuardado = Number(ler(CHAVE_USO)) || 0;
+  var veioDeSaida = false; try { veioDeSaida = sessionStorage.getItem(CHAVE_MSG) === '1'; sessionStorage.removeItem(CHAVE_MSG); } catch(e){}
+  if(veioDeSaida) mostrarEncerrada();
+  if(estavaLogado && usoGuardado && Date.now() - usoGuardado >= LIMITE){
+    // voltou depois de mais de 10 minutos: espera o app terminar de abrir e encerra a sessão
+    saindo = true;
+    setTimeout(function(){ saindo = false; sair(); }, 1500);
+  } else {
+    marcarUso(true);
+  }
+  setInterval(verificar, 1000);
+})();
+</script>
+
 </body>
 </html>
