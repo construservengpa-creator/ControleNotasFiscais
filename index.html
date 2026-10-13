@@ -237,18 +237,16 @@ nav.tabs button:hover { color: var(--text-primary); }
 .app-body { display: flex; flex: 1; min-height: 0; }
 
 main.content {
-  flex: 1; padding: 20px 24px 40px; max-width: 1400px; width: 100%; margin: 0 auto; min-width: 0;
-  transition: max-width 0.18s ease;
+  flex: 1; padding: 20px 24px 40px; width: 100%; min-width: 0;
 }
 
 /* Menu recolhível: o botão no topo alterna a classe abaixo, que zera a
-   largura do menu lateral e libera a área útil para o quadro/telas
-   (o max-width do conteúdo é removido para os elementos gráficos ocuparem
-   o espaço que sobrou). Só se aplica no layout de desktop — no mobile o
+   largura do menu lateral e libera a área útil para o quadro/telas.
+   O conteúdo ocupa sempre toda a largura disponível, com o menu aberto
+   ou recolhido. Só se aplica no layout de desktop — no mobile o
    menu já vira abas horizontais compactas no topo. */
 @media (min-width: 901px) {
   .app-body.nav-collapsed nav.tabs { width: 0; padding-left: 0; padding-right: 0; border-right: none; }
-  .app-body.nav-collapsed main.content { max-width: none; }
 }
 
 .view { display: none; }
