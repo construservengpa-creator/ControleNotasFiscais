@@ -480,18 +480,39 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .pend-table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
 .pend-table-wrap table.data-table thead { position: sticky; top: 0; z-index: 1; }
 .pend-table-wrap table.data-table th { background: var(--surface-2); white-space: nowrap; }
+.pend-table-wrap table.data-table thead th { border-right: 1px solid var(--grid); border-bottom: 1px solid var(--border); padding: 7px 6px 7px 10px; }
+.pend-table-wrap table.data-table thead th:last-child { border-right: none; }
 .pend-table-wrap th.pend-sort { cursor: pointer; user-select: none; }
-.pend-table-wrap th.pend-sort:hover, .pend-table-wrap th.pend-sort.ativo { color: var(--text-primary); }
-.pend-table-wrap th.pend-sort .seta { display: inline-block; width: 1em; margin-left: 3px; opacity: 0.35; }
-.pend-table-wrap th.pend-sort.ativo .seta { opacity: 1; color: var(--accent); }
+.pend-table-wrap th.pend-sort .cab { display: flex; align-items: center; gap: 4px; }
+.pend-table-wrap th.pend-sort.num .cab { justify-content: flex-end; }
+.pend-table-wrap th.pend-sort:hover, .pend-table-wrap th.pend-sort.ativo, .pend-table-wrap th.pend-sort.filtrado { color: var(--text-primary); }
+.pend-table-wrap th.pend-sort .seta { color: var(--accent); min-width: 0.8em; }
 .pend-table-wrap th.pend-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
-.pend-table-wrap tr.pend-filtros th { padding-top: 0; text-transform: none; letter-spacing: 0; }
-.pend-table-wrap tr.pend-filtros input {
-  width: 100%; min-width: 70px; box-sizing: border-box; padding: 4px 6px; font-size: 11.5px; font-family: var(--font-sans, inherit);
-  border: 1px solid var(--border); border-radius: 4px; background: var(--surface-1); color: var(--text-primary);
+.pend-af-btn {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 18px; height: 18px; margin-left: 2px; padding: 0;
+  border: 1px solid var(--border); border-radius: 3px; background: var(--surface-1); color: var(--text-secondary); cursor: pointer; font-size: 9px; line-height: 1;
 }
-.pend-table-wrap tr.pend-filtros input:focus { outline: none; border-color: var(--accent); }
-.pend-table-wrap tr.pend-filtros input.ativo { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface-1)); }
+.pend-af-btn:hover, .pend-af-btn.aberto { border-color: var(--accent); color: var(--text-primary); }
+.pend-af-btn.ativo { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface-1)); }
+.pend-af-btn svg { width: 10px; height: 10px; }
+.pend-af {
+  position: fixed; z-index: 1000; width: 260px; background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+  border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); padding: 6px; font-size: 12.5px;
+}
+.pend-af .op { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: none; background: none; color: inherit; text-align: left; border-radius: 4px; cursor: pointer; font: inherit; }
+.pend-af .op:hover:not(:disabled) { background: var(--surface-2); }
+.pend-af .op:disabled { opacity: 0.45; cursor: default; }
+.pend-af .op.sel { color: var(--accent); font-weight: 600; }
+.pend-af .op .ic { width: 16px; text-align: center; }
+.pend-af hr { border: none; border-top: 1px solid var(--grid); margin: 5px 0; }
+.pend-af input[type="search"] { width: 100%; box-sizing: border-box; padding: 5px 7px; font: inherit; border: 1px solid var(--border); border-radius: 4px; background: var(--surface-2); color: inherit; }
+.pend-af input[type="search"]:focus { outline: none; border-color: var(--accent); }
+.pend-af .lista { max-height: 220px; overflow: auto; margin-top: 6px; border: 1px solid var(--grid); border-radius: 4px; padding: 4px 0; }
+.pend-af .lista label { display: flex; align-items: center; gap: 7px; padding: 3px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pend-af .lista label:hover { background: var(--surface-2); }
+.pend-af .lista label.tudo { font-weight: 600; }
+.pend-af .lista input { margin: 0; flex: none; }
+.pend-af .acoes { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; }
 .pend-table-wrap table.data-table tr.pend-row { cursor: pointer; }
 .pend-table-wrap table.data-table td { white-space: nowrap; }
 .pend-table-wrap table.data-table td.obs { white-space: normal; min-width: 200px; max-width: 280px; font-size: 12px; color: var(--text-secondary); }
@@ -5700,8 +5721,12 @@ function pendItensFiltrados() {
 
 // ---- Classificação e filtro por coluna da lista ----
 // Ficam fora do PEND_REPORT para sobreviver a "Atualizar" e à troca de obra.
-// Clicar no cabeçalho alterna crescente -> decrescente -> ordem padrão (mais antiga primeiro).
+// Funciona como o Autofiltro do Excel: o botão ▾ de cada cabeçalho abre um
+// menu para classificar e marcar quais valores aparecem. Clicar no título
+// alterna crescente -> decrescente -> ordem padrão (mais antiga primeiro).
+// filtros[col] = Set com os valores marcados; coluna sem entrada = sem filtro.
 const PEND_TABELA = { ordem: null, filtros: {}, cabecalho: '' };
+const PEND_VAZIAS = '(Vazias)';
 function pendSemAcento(v) { return String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
 function pendColunasTabela(emAberto, temObs) {
   const dia = (d) => d ? pendFmtDia(String(d).slice(0, 10), true) : '';
@@ -5710,36 +5735,30 @@ function pendColunasTabela(emAberto, temObs) {
     { id: 'fornecedor', rotulo: 'Fornecedor', ordem: (n) => n.fornecedor, texto: (n) => n.fornecedor },
     { id: 'obra', rotulo: 'Obra', ordem: (n) => n.obra, texto: (n) => n.obra || '—' },
     emAberto && { id: 'coluna', rotulo: 'Coluna', ordem: (n) => COLUNA_LABELS[n.status] || n.status, texto: (n) => COLUNA_LABELS[n.status] || n.status },
-    { id: 'valor', rotulo: 'Valor', num: true, ordem: (n) => Number(n.valor) || 0, texto: (n) => fmtMoney(n.valor) },
-    { id: 'vencimento', rotulo: 'Vencimento', ordem: (n) => n.vencimento ? String(n.vencimento).slice(0, 10) : null, texto: (n) => n.vencimento ? dia(n.vencimento) + (n.vencida ? ' vencida' : '') : '—' },
-    { id: 'desde', rotulo: emAberto ? 'Na coluna desde' : 'Pendente desde', ordem: (n) => n.pendenteDesde, texto: (n) => fmtDateTime(n.pendenteDesde) },
-    { id: 'dias', rotulo: 'Dias parada', num: true, ordem: (n) => n.pendDias, texto: (n) => String(n.pendDias) },
+    { id: 'valor', rotulo: 'Valor', num: true, tipo: 'num', ordem: (n) => Number(n.valor) || 0, texto: (n) => fmtMoney(n.valor) },
+    { id: 'vencimento', rotulo: 'Vencimento', tipo: 'data', chave: (n) => dia(n.vencimento), ordem: (n) => n.vencimento ? String(n.vencimento).slice(0, 10) : null, texto: (n) => n.vencimento ? dia(n.vencimento) + (n.vencida ? ' vencida' : '') : '—' },
+    { id: 'desde', rotulo: emAberto ? 'Na coluna desde' : 'Pendente desde', tipo: 'data', chave: (n) => dia(n.pendDia), ordem: (n) => n.pendenteDesde, texto: (n) => fmtDateTime(n.pendenteDesde) },
+    { id: 'dias', rotulo: 'Dias parada', num: true, tipo: 'num', ordem: (n) => n.pendDias, texto: (n) => String(n.pendDias) },
     { id: 'enviada', rotulo: 'Enviada por', ordem: (n) => n.pendenciaPorNome, texto: (n) => n.pendenciaPorNome || '—' },
     { id: 'responsavel', rotulo: 'Responsável', ordem: (n) => n.assignedToName, texto: (n) => n.assignedToName || '—' },
     temObs && { id: 'obs', rotulo: 'Observação', ordem: (n) => n.pendenciaObs, texto: (n) => n.pendenciaObs || '' },
   ];
   return cols.filter(Boolean);
 }
-
-// Filtro de coluna: texto contido (sem diferenciar maiúsculas/acentos). Em
-// colunas numéricas também aceita comparações como ">1000", "<=5" ou "=4".
-function pendCasaFiltro(col, n, termo) {
-  if (col.num) {
-    const m = termo.replace(/\s/g, '').match(/^(>=|<=|>|<|=)(-?[\d.]*,?\d+)$/);
-    if (m) {
-      const alvo = Number(m[2].replace(/\./g, '').replace(',', '.'));
-      const v = col.ordem(n);
-      return { '>': v > alvo, '<': v < alvo, '>=': v >= alvo, '<=': v <= alvo, '=': v === alvo }[m[1]];
-    }
-  }
-  return pendSemAcento(col.texto(n)).includes(pendSemAcento(termo));
+// Valor usado na lista de caixas do filtro (datas sem a hora, vazios como "(Vazias)").
+function pendChaveCelula(col, n) {
+  const v = String((col.chave || col.texto)(n) ?? '').trim();
+  return !v || v === '—' ? PEND_VAZIAS : v;
 }
+function pendFiltroAtivo(colId) { return PEND_TABELA.filtros[colId] instanceof Set; }
 
 function pendOrdenar(lista, cols) {
   const o = PEND_TABELA.ordem;
   const col = o && cols.find((c) => c.id === o.col);
-  if (!col) return lista;
-  const fator = o.dir === 'desc' ? -1 : 1;
+  return col ? pendOrdenarPor(lista, col, o.dir) : lista;
+}
+function pendOrdenarPor(lista, col, dir) {
+  const fator = dir === 'desc' ? -1 : 1;
   return lista.slice().sort((a, b) => {
     const va = col.ordem(a), vb = col.ordem(b);
     const vazioA = va == null || va === '', vazioB = vb == null || vb === '';
@@ -5749,13 +5768,18 @@ function pendOrdenar(lista, cols) {
   });
 }
 
+// "exceto" ignora o filtro de uma coluna — como no Excel, a lista de valores
+// do menu de uma coluna mostra o que sobra depois dos filtros das outras.
+function pendPassaFiltros(cols, n, exceto) {
+  return cols.every((c) => c.id === exceto || !pendFiltroAtivo(c.id) || PEND_TABELA.filtros[c.id].has(pendChaveCelula(c, n)));
+}
+
 // Lista exibida na tabela (e exportada no CSV): filtro dos gráficos +
 // filtros por coluna + classificação escolhida.
 function pendItensTabela() {
   const { itens, escopo } = PEND_REPORT;
   const cols = pendColunasTabela(escopo === 'abertas', itens.some((i) => i.pendenciaObs));
-  const ativos = cols.filter((c) => (PEND_TABELA.filtros[c.id] || '').trim());
-  const lista = pendItensFiltrados().filter((n) => ativos.every((c) => pendCasaFiltro(c, n, PEND_TABELA.filtros[c.id].trim())));
+  const lista = pendItensFiltrados().filter((n) => pendPassaFiltros(cols, n));
   return { cols, lista: pendOrdenar(lista, cols) };
 }
 
@@ -5770,9 +5794,7 @@ function renderPendTabela() {
   if (PEND_TABELA.cabecalho !== chave) {
     PEND_TABELA.cabecalho = chave;
     document.getElementById('pendTabelaHead').innerHTML = `<tr>${cols.map((c) =>
-      `<th class="pend-sort${c.num ? ' num' : ''}" data-col="${c.id}" tabindex="0" title="Clique para classificar">${c.rotulo}<span class="seta"></span></th>`).join('')}</tr>
-      <tr class="pend-filtros">${cols.map((c) =>
-      `<th><input type="search" data-col="${c.id}" value="${escapeHtml(PEND_TABELA.filtros[c.id] || '')}" placeholder="${c.num ? 'Ex.: >100' : 'Filtrar…'}" aria-label="Filtrar ${c.rotulo}" /></th>`).join('')}</tr>`;
+      `<th class="pend-sort${c.num ? ' num' : ''}" data-col="${c.id}" tabindex="0" title="Clique para classificar"><span class="cab"><span>${c.rotulo}</span><span class="seta"></span><button type="button" class="pend-af-btn" data-col="${c.id}" aria-haspopup="true" aria-label="Classificar e filtrar ${c.rotulo}" title="Classificar e filtrar"></button></span></th>`).join('')}</tr>`;
   }
   renderPendCorpoTabela();
 }
@@ -5787,12 +5809,19 @@ function renderPendCorpoTabela() {
   document.querySelectorAll('#pendTabelaHead th.pend-sort').forEach((th) => {
     const ativo = !!(o && o.col === th.dataset.col);
     th.classList.toggle('ativo', ativo);
-    th.querySelector('.seta').textContent = ativo ? (o.dir === 'asc' ? '▲' : '▼') : '↕';
+    th.querySelector('.seta').textContent = ativo ? (o.dir === 'asc' ? '▲' : '▼') : '';
     th.setAttribute('aria-sort', ativo ? (o.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+    const filtrado = pendFiltroAtivo(th.dataset.col);
+    th.classList.toggle('filtrado', filtrado);
+    const btn = th.querySelector('.pend-af-btn');
+    btn.classList.toggle('ativo', filtrado);
+    btn.innerHTML = filtrado ? PEND_ICONE_FUNIL : '▼';
   });
-  document.querySelectorAll('#pendTabelaHead tr.pend-filtros input').forEach((inp) => inp.classList.toggle('ativo', !!(PEND_TABELA.filtros[inp.dataset.col] || '').trim()));
 
-  const filtrosColuna = cols.filter((c) => (PEND_TABELA.filtros[c.id] || '').trim()).map((c) => `${c.rotulo.toLowerCase()} "${PEND_TABELA.filtros[c.id].trim()}"`);
+  const filtrosColuna = cols.filter((c) => pendFiltroAtivo(c.id)).map((c) => {
+    const sel = [...PEND_TABELA.filtros[c.id]];
+    return `${c.rotulo.toLowerCase()} (${sel.length === 1 ? `"${sel[0]}"` : sel.length + ' valores'})`;
+  });
   const descOrdem = o && cols.find((c) => c.id === o.col)
     ? `classificadas por ${cols.find((c) => c.id === o.col).rotulo.toLowerCase()} (${o.dir === 'asc' ? 'crescente' : 'decrescente'})`
     : 'da mais antiga para a mais recente';
@@ -5800,7 +5829,7 @@ function renderPendCorpoTabela() {
   const info = document.getElementById('pendFiltroInfo');
   info.innerHTML = partes.length
     ? `<span>Filtrando por <strong>${partes.join('</strong> e <strong>')}</strong> — ${lista.length} de ${itens.length} nota(s), ${descOrdem}.</span><button type="button" class="btn secondary small" id="pendLimparFiltroBtn">Limpar filtros</button>`
-    : (itens.length ? `<span>${itens.length} nota(s), ${descOrdem}. Clique no título de uma coluna para classificar e use as caixas abaixo dele para filtrar. Clique numa linha para abrir a nota.</span>` : '');
+    : (itens.length ? `<span>${itens.length} nota(s), ${descOrdem}. Clique no título de uma coluna para classificar ou no botão ▼ para filtrar, como no Excel. Clique numa linha para abrir a nota.</span>` : '');
 
   const vazio = !itens.length
     ? `Nenhuma nota ${emAberto ? 'em aberto' : 'em Pendências'} no momento.`
@@ -5828,6 +5857,121 @@ function pendAlternarOrdem(col) {
   const o = PEND_TABELA.ordem;
   PEND_TABELA.ordem = !o || o.col !== col ? { col, dir: 'asc' } : o.dir === 'asc' ? { col, dir: 'desc' } : null;
   renderPendCorpoTabela();
+}
+
+const PEND_ICONE_FUNIL = '<svg viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M1 2h14l-5.5 6.5V14l-3-1.5v-4z"/></svg>';
+
+// ---- Menu do Autofiltro (estilo Excel) ----
+function pendFecharAutofiltro() {
+  const m = document.getElementById('pendAf');
+  if (m) m.remove();
+  document.querySelectorAll('#pendTabelaHead .pend-af-btn.aberto').forEach((b) => b.classList.remove('aberto'));
+}
+
+function pendAbrirAutofiltro(btn) {
+  const colId = btn.dataset.col;
+  const jaAberto = document.getElementById('pendAf');
+  pendFecharAutofiltro();
+  if (jaAberto && jaAberto.dataset.col === colId) return; // clicar de novo fecha
+
+  const { itens, escopo } = PEND_REPORT;
+  const cols = pendColunasTabela(escopo === 'abertas', itens.some((i) => i.pendenciaObs));
+  const col = cols.find((c) => c.id === colId);
+  if (!col) return;
+
+  // Valores distintos da coluna, na ordem natural dela, com "(Vazias)" no fim.
+  const base = pendItensFiltrados().filter((n) => pendPassaFiltros(cols, n, colId));
+  const vistos = new Map();
+  for (const n of pendOrdenarPor(base, col, 'asc')) {
+    const k = pendChaveCelula(col, n);
+    if (!vistos.has(k)) vistos.set(k, 0);
+    vistos.set(k, vistos.get(k) + 1);
+  }
+  const valores = [...vistos.keys()].filter((k) => k !== PEND_VAZIAS);
+  if (vistos.has(PEND_VAZIAS)) valores.push(PEND_VAZIAS);
+  const atual = PEND_TABELA.filtros[colId];
+  const marcado = (v) => !(atual instanceof Set) || atual.has(v);
+
+  const nomes = col.tipo === 'num' ? ['Classificar do menor para o maior', 'Classificar do maior para o menor']
+    : col.tipo === 'data' ? ['Classificar do mais antigo para o mais novo', 'Classificar do mais novo para o mais antigo']
+    : ['Classificar de A a Z', 'Classificar de Z a A'];
+  const o = PEND_TABELA.ordem;
+  const ordemSel = (dir) => o && o.col === colId && o.dir === dir ? ' sel' : '';
+
+  const m = document.createElement('div');
+  m.className = 'pend-af';
+  m.id = 'pendAf';
+  m.dataset.col = colId;
+  m.setAttribute('role', 'dialog');
+  m.setAttribute('aria-label', `Classificar e filtrar ${col.rotulo}`);
+  m.innerHTML = `
+    <button type="button" class="op${ordemSel('asc')}" data-acao="asc"><span class="ic">${col.tipo === 'num' || col.tipo === 'data' ? '↑' : 'A↓'}</span>${nomes[0]}</button>
+    <button type="button" class="op${ordemSel('desc')}" data-acao="desc"><span class="ic">${col.tipo === 'num' || col.tipo === 'data' ? '↓' : 'Z↓'}</span>${nomes[1]}</button>
+    <hr>
+    <button type="button" class="op" data-acao="limpar"${atual instanceof Set ? '' : ' disabled'}><span class="ic">✕</span>Limpar filtro de "${escapeHtml(col.rotulo)}"</button>
+    <hr>
+    <input type="search" placeholder="Pesquisar" aria-label="Pesquisar valores" />
+    <div class="lista">
+      <label class="tudo"><input type="checkbox" data-tudo /> (Selecionar tudo)</label>
+      ${valores.map((v) => `<label title="${escapeHtml(v)}"><input type="checkbox" value="${escapeHtml(v)}"${marcado(v) ? ' checked' : ''} /> ${escapeHtml(v)} <span style="color:var(--text-muted)">(${vistos.get(v)})</span></label>`).join('')}
+    </div>
+    <div class="acoes"><button type="button" class="btn small" data-acao="ok">OK</button><button type="button" class="btn secondary small" data-acao="cancelar">Cancelar</button></div>`;
+  document.body.appendChild(m);
+  btn.classList.add('aberto');
+
+  // Posiciona embaixo do botão, sem sair da tela.
+  const r = btn.getBoundingClientRect();
+  const largura = m.offsetWidth, altura = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(r.right - largura, window.innerWidth - largura - 8)) + 'px';
+  m.style.top = (r.bottom + 4 + altura > window.innerHeight - 8 ? Math.max(8, r.top - altura - 4) : r.bottom + 4) + 'px';
+
+  const busca = m.querySelector('input[type="search"]');
+  const tudo = m.querySelector('input[data-tudo]');
+  const caixas = () => [...m.querySelectorAll('.lista input:not([data-tudo])')];
+  const visiveis = () => caixas().filter((c) => !c.closest('label').hidden);
+  const okBtn = m.querySelector('[data-acao="ok"]');
+  const atualizarTudo = () => {
+    const vis = visiveis();
+    const n = vis.filter((c) => c.checked).length;
+    tudo.checked = vis.length > 0 && n === vis.length;
+    tudo.indeterminate = n > 0 && n < vis.length;
+    okBtn.disabled = n === 0;
+  };
+  busca.addEventListener('input', () => {
+    const termo = pendSemAcento(busca.value.trim());
+    // Como no Excel: ao pesquisar, os resultados vêm todos marcados.
+    caixas().forEach((c) => {
+      const casa = !termo || pendSemAcento(c.value).includes(termo);
+      c.closest('label').hidden = !casa;
+      if (termo) c.checked = casa;
+      else c.checked = marcado(c.value);
+    });
+    atualizarTudo();
+  });
+  busca.addEventListener('keydown', (ev) => { if (ev.key === 'Enter' && !okBtn.disabled) okBtn.click(); });
+  tudo.addEventListener('change', () => { visiveis().forEach((c) => { c.checked = tudo.checked; }); atualizarTudo(); });
+  m.querySelector('.lista').addEventListener('change', (ev) => { if (!ev.target.dataset.hasOwnProperty('tudo')) atualizarTudo(); });
+  m.addEventListener('click', (ev) => {
+    const acao = ev.target.closest('[data-acao]');
+    if (!acao || acao.disabled) return;
+    const a = acao.dataset.acao;
+    if (a === 'asc' || a === 'desc') PEND_TABELA.ordem = { col: colId, dir: a };
+    else if (a === 'limpar') delete PEND_TABELA.filtros[colId];
+    else if (a === 'ok') {
+      // Com pesquisa, valem só os resultados marcados; sem ela, todas as caixas marcadas.
+      const escolhidos = (busca.value.trim() ? visiveis() : caixas()).filter((c) => c.checked).map((c) => c.value);
+      // Mantém marcados valores que só existem fora desta lista (escondidos por outros filtros).
+      const fora = atual instanceof Set ? [...atual].filter((v) => !vistos.has(v)) : [];
+      if (!busca.value.trim() && escolhidos.length === valores.length) delete PEND_TABELA.filtros[colId];
+      else PEND_TABELA.filtros[colId] = new Set([...escolhidos, ...fora]);
+    }
+    pendFecharAutofiltro();
+    btn.focus();
+    renderPendCorpoTabela();
+  });
+  m.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') { pendFecharAutofiltro(); btn.focus(); } });
+  atualizarTudo();
+  busca.focus();
 }
 
 // Liga/desliga um filtro vindo de um clique nos gráficos (clicar de novo no
@@ -5902,24 +6046,31 @@ function setupPendenciasReport() {
   document.getElementById('pendFiltroInfo').addEventListener('click', (ev) => {
     if (ev.target.id !== 'pendLimparFiltroBtn') return;
     PEND_TABELA.filtros = {};
-    document.querySelectorAll('#pendTabelaHead tr.pend-filtros input').forEach((inp) => { inp.value = ''; });
     pendAplicarFiltro(null);
   });
   const cabecalho = document.getElementById('pendTabelaHead');
   cabecalho.addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.pend-af-btn');
+    if (btn) { pendAbrirAutofiltro(btn); return; }
     const th = ev.target.closest('th.pend-sort');
     if (th) pendAlternarOrdem(th.dataset.col);
   });
   cabecalho.addEventListener('keydown', (ev) => {
+    if (ev.target.closest('.pend-af-btn')) return;
     const th = ev.target.closest('th.pend-sort');
     if (th && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); pendAlternarOrdem(th.dataset.col); }
+    if (th && ev.key === 'ArrowDown' && ev.altKey) { ev.preventDefault(); pendAbrirAutofiltro(th.querySelector('.pend-af-btn')); } // Alt+↓, como no Excel
   });
-  cabecalho.addEventListener('input', (ev) => {
-    const inp = ev.target.closest('tr.pend-filtros input');
-    if (!inp) return;
-    PEND_TABELA.filtros[inp.dataset.col] = inp.value;
-    renderPendCorpoTabela();
+  // Fecha o menu do filtro ao clicar fora, rolar a página ou redimensionar a janela.
+  document.addEventListener('mousedown', (ev) => {
+    const m = document.getElementById('pendAf');
+    if (m && !m.contains(ev.target) && !ev.target.closest('.pend-af-btn')) pendFecharAutofiltro();
   });
+  document.addEventListener('scroll', (ev) => {
+    const m = document.getElementById('pendAf');
+    if (m && !m.contains(ev.target)) pendFecharAutofiltro();
+  }, true);
+  window.addEventListener('resize', pendFecharAutofiltro);
   const corpo = document.getElementById('pendTabelaBody');
   corpo.addEventListener('click', (ev) => {
     const tr = ev.target.closest('tr.pend-row');
