@@ -478,7 +478,20 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .pend-filtro { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin-bottom: 10px; }
 .pend-filtro strong { color: var(--text-primary); font-weight: 600; }
 .pend-table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
-.pend-table-wrap table.data-table th { position: sticky; top: 0; background: var(--surface-2); z-index: 1; white-space: nowrap; }
+.pend-table-wrap table.data-table thead { position: sticky; top: 0; z-index: 1; }
+.pend-table-wrap table.data-table th { background: var(--surface-2); white-space: nowrap; }
+.pend-table-wrap th.pend-sort { cursor: pointer; user-select: none; }
+.pend-table-wrap th.pend-sort:hover, .pend-table-wrap th.pend-sort.ativo { color: var(--text-primary); }
+.pend-table-wrap th.pend-sort .seta { display: inline-block; width: 1em; margin-left: 3px; opacity: 0.35; }
+.pend-table-wrap th.pend-sort.ativo .seta { opacity: 1; color: var(--accent); }
+.pend-table-wrap th.pend-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.pend-table-wrap tr.pend-filtros th { padding-top: 0; text-transform: none; letter-spacing: 0; }
+.pend-table-wrap tr.pend-filtros input {
+  width: 100%; min-width: 70px; box-sizing: border-box; padding: 4px 6px; font-size: 11.5px; font-family: var(--font-sans, inherit);
+  border: 1px solid var(--border); border-radius: 4px; background: var(--surface-1); color: var(--text-primary);
+}
+.pend-table-wrap tr.pend-filtros input:focus { outline: none; border-color: var(--accent); }
+.pend-table-wrap tr.pend-filtros input.ativo { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--surface-1)); }
 .pend-table-wrap table.data-table tr.pend-row { cursor: pointer; }
 .pend-table-wrap table.data-table td { white-space: nowrap; }
 .pend-table-wrap table.data-table td.obs { white-space: normal; min-width: 200px; max-width: 280px; font-size: 12px; color: var(--text-secondary); }
@@ -5685,23 +5698,113 @@ function pendItensFiltrados() {
   return itens.filter((i) => i.pendDias >= filtro.min && i.pendDias <= filtro.max);
 }
 
+// ---- Classificação e filtro por coluna da lista ----
+// Ficam fora do PEND_REPORT para sobreviver a "Atualizar" e à troca de obra.
+// Clicar no cabeçalho alterna crescente -> decrescente -> ordem padrão (mais antiga primeiro).
+const PEND_TABELA = { ordem: null, filtros: {}, cabecalho: '' };
+function pendSemAcento(v) { return String(v ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+function pendColunasTabela(emAberto, temObs) {
+  const dia = (d) => d ? pendFmtDia(String(d).slice(0, 10), true) : '';
+  const cols = [
+    { id: 'numero', rotulo: 'Nota', ordem: (n) => n.numero, texto: (n) => n.numero },
+    { id: 'fornecedor', rotulo: 'Fornecedor', ordem: (n) => n.fornecedor, texto: (n) => n.fornecedor },
+    { id: 'obra', rotulo: 'Obra', ordem: (n) => n.obra, texto: (n) => n.obra || '—' },
+    emAberto && { id: 'coluna', rotulo: 'Coluna', ordem: (n) => COLUNA_LABELS[n.status] || n.status, texto: (n) => COLUNA_LABELS[n.status] || n.status },
+    { id: 'valor', rotulo: 'Valor', num: true, ordem: (n) => Number(n.valor) || 0, texto: (n) => fmtMoney(n.valor) },
+    { id: 'vencimento', rotulo: 'Vencimento', ordem: (n) => n.vencimento ? String(n.vencimento).slice(0, 10) : null, texto: (n) => n.vencimento ? dia(n.vencimento) + (n.vencida ? ' vencida' : '') : '—' },
+    { id: 'desde', rotulo: emAberto ? 'Na coluna desde' : 'Pendente desde', ordem: (n) => n.pendenteDesde, texto: (n) => fmtDateTime(n.pendenteDesde) },
+    { id: 'dias', rotulo: 'Dias parada', num: true, ordem: (n) => n.pendDias, texto: (n) => String(n.pendDias) },
+    { id: 'enviada', rotulo: 'Enviada por', ordem: (n) => n.pendenciaPorNome, texto: (n) => n.pendenciaPorNome || '—' },
+    { id: 'responsavel', rotulo: 'Responsável', ordem: (n) => n.assignedToName, texto: (n) => n.assignedToName || '—' },
+    temObs && { id: 'obs', rotulo: 'Observação', ordem: (n) => n.pendenciaObs, texto: (n) => n.pendenciaObs || '' },
+  ];
+  return cols.filter(Boolean);
+}
+
+// Filtro de coluna: texto contido (sem diferenciar maiúsculas/acentos). Em
+// colunas numéricas também aceita comparações como ">1000", "<=5" ou "=4".
+function pendCasaFiltro(col, n, termo) {
+  if (col.num) {
+    const m = termo.replace(/\s/g, '').match(/^(>=|<=|>|<|=)(-?[\d.]*,?\d+)$/);
+    if (m) {
+      const alvo = Number(m[2].replace(/\./g, '').replace(',', '.'));
+      const v = col.ordem(n);
+      return { '>': v > alvo, '<': v < alvo, '>=': v >= alvo, '<=': v <= alvo, '=': v === alvo }[m[1]];
+    }
+  }
+  return pendSemAcento(col.texto(n)).includes(pendSemAcento(termo));
+}
+
+function pendOrdenar(lista, cols) {
+  const o = PEND_TABELA.ordem;
+  const col = o && cols.find((c) => c.id === o.col);
+  if (!col) return lista;
+  const fator = o.dir === 'desc' ? -1 : 1;
+  return lista.slice().sort((a, b) => {
+    const va = col.ordem(a), vb = col.ordem(b);
+    const vazioA = va == null || va === '', vazioB = vb == null || vb === '';
+    if (vazioA || vazioB) return vazioA === vazioB ? 0 : vazioA ? 1 : -1; // vazios sempre no fim
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * fator;
+    return String(va).localeCompare(String(vb), 'pt-BR', { numeric: true, sensitivity: 'base' }) * fator;
+  });
+}
+
+// Lista exibida na tabela (e exportada no CSV): filtro dos gráficos +
+// filtros por coluna + classificação escolhida.
+function pendItensTabela() {
+  const { itens, escopo } = PEND_REPORT;
+  const cols = pendColunasTabela(escopo === 'abertas', itens.some((i) => i.pendenciaObs));
+  const ativos = cols.filter((c) => (PEND_TABELA.filtros[c.id] || '').trim());
+  const lista = pendItensFiltrados().filter((n) => ativos.every((c) => pendCasaFiltro(c, n, PEND_TABELA.filtros[c.id].trim())));
+  return { cols, lista: pendOrdenar(lista, cols) };
+}
+
 function renderPendTabela() {
+  const { itens, escopo } = PEND_REPORT;
+  const emAberto = escopo === 'abertas';
+  const temObs = itens.some((i) => i.pendenciaObs);
+  const cols = pendColunasTabela(emAberto, temObs);
+  // O cabeçalho (com as caixas de filtro) só é refeito quando as colunas
+  // mudam — assim quem está digitando num filtro não perde o foco.
+  const chave = cols.map((c) => c.id + ':' + c.rotulo).join('|');
+  if (PEND_TABELA.cabecalho !== chave) {
+    PEND_TABELA.cabecalho = chave;
+    document.getElementById('pendTabelaHead').innerHTML = `<tr>${cols.map((c) =>
+      `<th class="pend-sort${c.num ? ' num' : ''}" data-col="${c.id}" tabindex="0" title="Clique para classificar">${c.rotulo}<span class="seta"></span></th>`).join('')}</tr>
+      <tr class="pend-filtros">${cols.map((c) =>
+      `<th><input type="search" data-col="${c.id}" value="${escapeHtml(PEND_TABELA.filtros[c.id] || '')}" placeholder="${c.num ? 'Ex.: >100' : 'Filtrar…'}" aria-label="Filtrar ${c.rotulo}" /></th>`).join('')}</tr>`;
+  }
+  renderPendCorpoTabela();
+}
+
+function renderPendCorpoTabela() {
   const { itens, filtro, escopo } = PEND_REPORT;
   const emAberto = escopo === 'abertas';
-  const lista = pendItensFiltrados();
-  const temObs = lista.some((i) => i.pendenciaObs);
-  const colunas = 9 + (emAberto ? 1 : 0) + (temObs ? 1 : 0);
+  const { cols, lista } = pendItensTabela();
+  const temObs = cols.some((c) => c.id === 'obs');
+  const o = PEND_TABELA.ordem;
 
+  document.querySelectorAll('#pendTabelaHead th.pend-sort').forEach((th) => {
+    const ativo = !!(o && o.col === th.dataset.col);
+    th.classList.toggle('ativo', ativo);
+    th.querySelector('.seta').textContent = ativo ? (o.dir === 'asc' ? '▲' : '▼') : '↕';
+    th.setAttribute('aria-sort', ativo ? (o.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  });
+  document.querySelectorAll('#pendTabelaHead tr.pend-filtros input').forEach((inp) => inp.classList.toggle('ativo', !!(PEND_TABELA.filtros[inp.dataset.col] || '').trim()));
+
+  const filtrosColuna = cols.filter((c) => (PEND_TABELA.filtros[c.id] || '').trim()).map((c) => `${c.rotulo.toLowerCase()} "${PEND_TABELA.filtros[c.id].trim()}"`);
+  const descOrdem = o && cols.find((c) => c.id === o.col)
+    ? `classificadas por ${cols.find((c) => c.id === o.col).rotulo.toLowerCase()} (${o.dir === 'asc' ? 'crescente' : 'decrescente'})`
+    : 'da mais antiga para a mais recente';
+  const partes = [filtro && escapeHtml(filtro.rotulo), filtrosColuna.length && escapeHtml(filtrosColuna.join(', '))].filter(Boolean);
   const info = document.getElementById('pendFiltroInfo');
-  info.innerHTML = filtro
-    ? `<span>Filtrando por <strong>${escapeHtml(filtro.rotulo)}</strong> — ${lista.length} de ${itens.length} nota(s).</span><button type="button" class="btn secondary small" id="pendLimparFiltroBtn">Limpar filtro</button>`
-    : (itens.length ? `<span>${itens.length} nota(s), da mais antiga para a mais recente. Clique numa linha para abrir a nota.</span>` : '');
+  info.innerHTML = partes.length
+    ? `<span>Filtrando por <strong>${partes.join('</strong> e <strong>')}</strong> — ${lista.length} de ${itens.length} nota(s), ${descOrdem}.</span><button type="button" class="btn secondary small" id="pendLimparFiltroBtn">Limpar filtros</button>`
+    : (itens.length ? `<span>${itens.length} nota(s), ${descOrdem}. Clique no título de uma coluna para classificar e use as caixas abaixo dele para filtrar. Clique numa linha para abrir a nota.</span>` : '');
 
-  document.getElementById('pendTabelaHead').innerHTML = `<tr>
-    <th>Nota</th><th>Fornecedor</th><th>Obra</th>${emAberto ? '<th>Coluna</th>' : ''}<th class="num">Valor</th><th>Vencimento</th>
-    <th>${emAberto ? 'Na coluna desde' : 'Pendente desde'}</th><th class="num">Dias parada</th><th>Enviada por</th><th>Responsável</th>${temObs ? '<th>Observação</th>' : ''}
-  </tr>`;
-
+  const vazio = !itens.length
+    ? `Nenhuma nota ${emAberto ? 'em aberto' : 'em Pendências'} no momento.`
+    : 'Nenhuma nota corresponde aos filtros.';
   document.getElementById('pendTabelaBody').innerHTML = lista.map((n) => {
     const faixa = pendFaixa(n.pendDias);
     const venc = n.vencimento ? pendFmtDia(String(n.vencimento).slice(0, 10), true) : '—';
@@ -5718,7 +5821,13 @@ function renderPendTabela() {
       <td>${escapeHtml(n.assignedToName || '—')}</td>
       ${temObs ? `<td class="obs">${escapeHtml(n.pendenciaObs || '')}</td>` : ''}
     </tr>`;
-  }).join('') || `<tr><td colspan="${colunas}" class="legend-note">Nenhuma nota ${emAberto ? 'em aberto' : 'em Pendências'} no momento.</td></tr>`;
+  }).join('') || `<tr><td colspan="${cols.length}" class="legend-note">${vazio}</td></tr>`;
+}
+
+function pendAlternarOrdem(col) {
+  const o = PEND_TABELA.ordem;
+  PEND_TABELA.ordem = !o || o.col !== col ? { col, dir: 'asc' } : o.dir === 'asc' ? { col, dir: 'desc' } : null;
+  renderPendCorpoTabela();
 }
 
 // Liga/desliga um filtro vindo de um clique nos gráficos (clicar de novo no
@@ -5736,7 +5845,7 @@ function pendAplicarFiltro(novo) {
 }
 
 function exportPendenciasCsv() {
-  const lista = pendItensFiltrados();
+  const { lista } = pendItensTabela();
   if (!lista.length) { toast('Nenhuma nota para exportar.', 'error'); return; }
   // Separador ";" e BOM para abrir direto no Excel em português, com acentos
   // e valores decimais corretos. Textos que começam com = + - @ ganham um
@@ -5791,7 +5900,25 @@ function setupPendenciasReport() {
     pendAplicarFiltro({ tipo: 'idade', id: f.id, min: f.min, max: f.max, rotulo: 'paradas há ' + f.rotulo.toLowerCase() });
   });
   document.getElementById('pendFiltroInfo').addEventListener('click', (ev) => {
-    if (ev.target.id === 'pendLimparFiltroBtn') pendAplicarFiltro(null);
+    if (ev.target.id !== 'pendLimparFiltroBtn') return;
+    PEND_TABELA.filtros = {};
+    document.querySelectorAll('#pendTabelaHead tr.pend-filtros input').forEach((inp) => { inp.value = ''; });
+    pendAplicarFiltro(null);
+  });
+  const cabecalho = document.getElementById('pendTabelaHead');
+  cabecalho.addEventListener('click', (ev) => {
+    const th = ev.target.closest('th.pend-sort');
+    if (th) pendAlternarOrdem(th.dataset.col);
+  });
+  cabecalho.addEventListener('keydown', (ev) => {
+    const th = ev.target.closest('th.pend-sort');
+    if (th && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); pendAlternarOrdem(th.dataset.col); }
+  });
+  cabecalho.addEventListener('input', (ev) => {
+    const inp = ev.target.closest('tr.pend-filtros input');
+    if (!inp) return;
+    PEND_TABELA.filtros[inp.dataset.col] = inp.value;
+    renderPendCorpoTabela();
   });
   const corpo = document.getElementById('pendTabelaBody');
   corpo.addEventListener('click', (ev) => {
