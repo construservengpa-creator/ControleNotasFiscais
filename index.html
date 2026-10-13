@@ -480,7 +480,16 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .pend-table-wrap { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); }
 .pend-table-wrap table.data-table thead { position: sticky; top: 0; z-index: 1; }
 .pend-table-wrap table.data-table th { background: var(--surface-2); white-space: nowrap; }
-.pend-table-wrap table.data-table thead th { border-right: 1px solid var(--grid); border-bottom: 1px solid var(--border); padding: 7px 6px 7px 10px; }
+.pend-table-wrap table.data-table thead th { position: relative; border-right: 1px solid var(--grid); border-bottom: 1px solid var(--border); padding: 7px 6px 7px 10px; }
+/* Alça para ajustar a largura (arrastar a borda direita do título, como no Excel). */
+.pend-resize { position: absolute; top: 0; right: -4px; width: 8px; height: 100%; cursor: col-resize; z-index: 2; touch-action: none; }
+.pend-resize::after { content: ''; position: absolute; top: 20%; bottom: 20%; left: 3px; width: 2px; border-radius: 1px; background: transparent; }
+.pend-resize:hover::after, .pend-resize.arrastando::after { background: var(--accent); }
+body.pend-redimensionando, body.pend-redimensionando * { cursor: col-resize !important; user-select: none !important; }
+/* Com larguras ajustadas a tabela passa a respeitar exatamente o tamanho de cada coluna. */
+.pend-table-wrap table.data-table.fixa { table-layout: fixed; }
+.pend-table-wrap table.data-table.fixa th .cab > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.pend-table-wrap table.data-table.fixa td { max-width: none !important; overflow: hidden; text-overflow: ellipsis; }
 .pend-table-wrap table.data-table thead th:last-child { border-right: none; }
 .pend-table-wrap th.pend-sort { cursor: pointer; user-select: none; }
 .pend-table-wrap th.pend-sort .cab { display: flex; align-items: center; gap: 4px; }
@@ -5794,8 +5803,96 @@ function renderPendTabela() {
   if (PEND_TABELA.cabecalho !== chave) {
     PEND_TABELA.cabecalho = chave;
     document.getElementById('pendTabelaHead').innerHTML = `<tr>${cols.map((c) =>
-      `<th class="pend-sort${c.num ? ' num' : ''}" data-col="${c.id}" tabindex="0" title="Clique para classificar"><span class="cab"><span>${c.rotulo}</span><span class="seta"></span><button type="button" class="pend-af-btn" data-col="${c.id}" aria-haspopup="true" aria-label="Classificar e filtrar ${c.rotulo}" title="Classificar e filtrar"></button></span></th>`).join('')}</tr>`;
+      `<th class="pend-sort${c.num ? ' num' : ''}" data-col="${c.id}" tabindex="0" title="Clique para classificar"><span class="cab"><span>${c.rotulo}</span><span class="seta"></span><button type="button" class="pend-af-btn" data-col="${c.id}" aria-haspopup="true" aria-label="Classificar e filtrar ${c.rotulo}" title="Classificar e filtrar"></button></span><span class="pend-resize" data-col="${c.id}" title="Arraste para ajustar a largura · duplo clique para ajustar ao conteúdo"></span></th>`).join('')}</tr>`;
   }
+  renderPendCorpoTabela();
+  pendAplicarLarguras();
+}
+
+// ---- Largura das colunas ----
+// Larguras ajustadas pelo usuário (px por coluna), lembradas neste navegador.
+const PEND_LARGURAS_KEY = 'pendLargurasColunas';
+const PEND_LARGURA_MIN = 50;
+function pendLerLarguras() {
+  try { return JSON.parse(localStorage.getItem(PEND_LARGURAS_KEY)) || {}; } catch (e) { return {}; }
+}
+function pendGravarLarguras(l) {
+  try { if (Object.keys(l).length) localStorage.setItem(PEND_LARGURAS_KEY, JSON.stringify(l)); else localStorage.removeItem(PEND_LARGURAS_KEY); } catch (e) { /* sem armazenamento: vale só nesta visita */ }
+}
+
+// Sem ajuste, a tabela ocupa a largura toda como antes. Com algum ajuste, as
+// demais colunas ficam no tamanho natural do conteúdo e a tabela passa a ter
+// layout fixo (como numa planilha, pode ficar mais estreita ou mais larga que a tela).
+function pendAplicarLarguras() {
+  const tabela = document.getElementById('pendTabelaHead').closest('table');
+  const ths = [...tabela.querySelectorAll('thead th.pend-sort')];
+  const salvas = pendLerLarguras();
+  tabela.classList.remove('fixa');
+  tabela.style.width = '';
+  ths.forEach((th) => { th.style.width = ''; });
+  if (!ths.some((th) => salvas[th.dataset.col])) return;
+  tabela.style.width = 'auto';
+  const naturais = ths.map((th) => th.offsetWidth);
+  if (naturais.some((w) => !w)) { tabela.style.width = ''; return; } // relatório escondido: tenta de novo no próximo desenho
+  let total = 0;
+  ths.forEach((th, i) => {
+    const w = Math.max(PEND_LARGURA_MIN, Math.round(salvas[th.dataset.col] || naturais[i]));
+    th.style.width = w + 'px';
+    total += w;
+  });
+  tabela.style.width = total + 'px';
+  tabela.classList.add('fixa');
+}
+
+function pendIniciarRedimensionar(ev, alca) {
+  ev.preventDefault();
+  ev.stopPropagation();
+  const th = alca.closest('th');
+  const tabela = th.closest('table');
+  // Congela as larguras atuais de todas as colunas antes de começar a arrastar.
+  if (!tabela.classList.contains('fixa')) {
+    const ths = [...tabela.querySelectorAll('thead th.pend-sort')];
+    const atuais = ths.map((t) => t.offsetWidth);
+    ths.forEach((t, i) => { t.style.width = atuais[i] + 'px'; });
+    tabela.style.width = atuais.reduce((a, b) => a + b, 0) + 'px';
+    tabela.classList.add('fixa');
+  }
+  const x0 = ev.clientX;
+  const w0 = th.offsetWidth;
+  const tabela0 = tabela.offsetWidth;
+  alca.classList.add('arrastando');
+  document.body.classList.add('pend-redimensionando');
+  alca.setPointerCapture(ev.pointerId);
+  const mover = (e) => {
+    const w = Math.max(PEND_LARGURA_MIN, w0 + e.clientX - x0);
+    th.style.width = w + 'px';
+    tabela.style.width = (tabela0 + w - w0) + 'px';
+  };
+  const soltar = () => {
+    alca.removeEventListener('pointermove', mover);
+    alca.removeEventListener('pointerup', soltar);
+    alca.removeEventListener('pointercancel', soltar);
+    alca.classList.remove('arrastando');
+    document.body.classList.remove('pend-redimensionando');
+    if (th.offsetWidth !== w0) {
+      // Grava a largura de todas as colunas, para a tabela ficar exatamente como foi deixada.
+      const salvas = pendLerLarguras();
+      tabela.querySelectorAll('thead th.pend-sort').forEach((t) => { salvas[t.dataset.col] = t.offsetWidth; });
+      pendGravarLarguras(salvas);
+      renderPendCorpoTabela(); // mostra o botão "Restaurar larguras"
+    }
+  };
+  alca.addEventListener('pointermove', mover);
+  alca.addEventListener('pointerup', soltar);
+  alca.addEventListener('pointercancel', soltar);
+}
+
+// Duplo clique na borda: ajusta a coluna ao conteúdo (deixa de ter largura salva).
+function pendAjustarAoConteudo(col) {
+  const salvas = pendLerLarguras();
+  delete salvas[col];
+  pendGravarLarguras(salvas);
+  pendAplicarLarguras();
   renderPendCorpoTabela();
 }
 
@@ -5829,7 +5926,8 @@ function renderPendCorpoTabela() {
   const info = document.getElementById('pendFiltroInfo');
   info.innerHTML = partes.length
     ? `<span>Filtrando por <strong>${partes.join('</strong> e <strong>')}</strong> — ${lista.length} de ${itens.length} nota(s), ${descOrdem}.</span><button type="button" class="btn secondary small" id="pendLimparFiltroBtn">Limpar filtros</button>`
-    : (itens.length ? `<span>${itens.length} nota(s), ${descOrdem}. Clique no título de uma coluna para classificar ou no botão ▼ para filtrar, como no Excel. Clique numa linha para abrir a nota.</span>` : '');
+    : (itens.length ? `<span>${itens.length} nota(s), ${descOrdem}. Clique no título de uma coluna para classificar ou no botão ▼ para filtrar, como no Excel; arraste a borda do título para ajustar a largura. Clique numa linha para abrir a nota.</span>` : '');
+  if (Object.keys(pendLerLarguras()).length) info.insertAdjacentHTML('beforeend', '<button type="button" class="btn secondary small" id="pendRestaurarLargurasBtn">Restaurar largura das colunas</button>');
 
   const vazio = !itens.length
     ? `Nenhuma nota ${emAberto ? 'em aberto' : 'em Pendências'} no momento.`
@@ -6044,12 +6142,27 @@ function setupPendenciasReport() {
     pendAplicarFiltro({ tipo: 'idade', id: f.id, min: f.min, max: f.max, rotulo: 'paradas há ' + f.rotulo.toLowerCase() });
   });
   document.getElementById('pendFiltroInfo').addEventListener('click', (ev) => {
+    if (ev.target.id === 'pendRestaurarLargurasBtn') {
+      pendGravarLarguras({});
+      pendAplicarLarguras();
+      renderPendCorpoTabela();
+      return;
+    }
     if (ev.target.id !== 'pendLimparFiltroBtn') return;
     PEND_TABELA.filtros = {};
     pendAplicarFiltro(null);
   });
   const cabecalho = document.getElementById('pendTabelaHead');
+  cabecalho.addEventListener('pointerdown', (ev) => {
+    const alca = ev.target.closest('.pend-resize');
+    if (alca && ev.button === 0) pendIniciarRedimensionar(ev, alca);
+  });
+  cabecalho.addEventListener('dblclick', (ev) => {
+    const alca = ev.target.closest('.pend-resize');
+    if (alca) pendAjustarAoConteudo(alca.dataset.col);
+  });
   cabecalho.addEventListener('click', (ev) => {
+    if (ev.target.closest('.pend-resize')) return; // soltar a borda não classifica a coluna
     const btn = ev.target.closest('.pend-af-btn');
     if (btn) { pendAbrirAutofiltro(btn); return; }
     const th = ev.target.closest('th.pend-sort');
