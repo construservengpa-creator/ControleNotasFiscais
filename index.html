@@ -9,7 +9,13 @@
 <!-- Supabase: banco de dados compartilhado (substitui o localStorage por um backend real). -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  /* tema escolhido pelo usuário (fica salvo neste navegador, com a mesma chave
+     do Painel de Suprimentos, então a escolha vale para as duas aplicações);
+     aplicado antes de desenhar a página para não piscar o tema padrão */
+  (function(){ try{ var t = localStorage.getItem('painel-tema'); if(t === 'estoque') document.documentElement.setAttribute('data-tema', t); }catch(e){} })();
+</script>
 <style>
 :root {
   color-scheme: dark;
@@ -654,6 +660,82 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
   .modal { width: 94vw !important; max-width: 94vw !important; padding: 18px !important; }
   .login-card { width: 92vw; padding: 26px 20px; }
 }
+/* ============================================================
+   TEMA "ESTOQUE" (opcional, escolhido pelo botão Tema no topo)
+   Mesmo esquema do Painel de Suprimentos: moldura azul-marinho escura
+   (topo, menu e margens), destaque âmbar e tipografia IBM Plex Sans; a
+   área de conteúdo fica em bege claro com cartões brancos e texto escuro.
+   Só redefine as variáveis de cor e fonte, mais os poucos pontos que
+   usam cor fixa pensada para fundo escuro.
+   ============================================================ */
+html[data-tema="estoque"] {
+  --page: #0E131A;
+  --surface-2: #141A22;
+  --surface-1: #1F2834;
+  --grid: #2A3441;
+  --border: #2A3441;
+  --baseline: #2A3441;
+  --text-primary: #E9EDF2;
+  --text-secondary: #8E99A8;
+  --text-muted: #5F6B7A;
+  --accent: #F5A524;
+  --accent-dim: #8C6219;
+  --series-yellow: #F5A524;
+  --series-blue: #5B9BFF;
+  --font-display: 'IBM Plex Sans', sans-serif;
+  --font-body: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Sans', sans-serif;
+}
+html[data-tema="estoque"] body { font-variant-numeric: tabular-nums; }
+html[data-tema="estoque"] .roadline { background: linear-gradient(90deg, var(--accent), rgba(245,165,36,0) 60%); opacity: 0.6; height: 2px; }
+html[data-tema="estoque"] .btn:not(.secondary):not(.danger):hover { background: #FFBC4D; }
+html[data-tema="estoque"] ::selection { background: #F5A524; color: #12151A; }
+
+/* centro claro */
+html[data-tema="estoque"] main.content {
+  background: #F3F0EA; border-radius: 18px; margin: 16px 20px 20px 16px; width: auto;
+  --page: #E9E5DD; --surface-2: #FFFFFF; --surface-1: #F7F5F1;
+  --grid: rgba(27,33,41,.10); --border: rgba(27,33,41,.12); --baseline: rgba(27,33,41,.18);
+  --text-primary: #1B2129; --text-secondary: #5A6371; --text-muted: #8A919B;
+  --accent-dim: #D9B57A; --series-blue: #2F6FDB;
+  --status-good-text: #1A7F45;
+  color: var(--text-primary); color-scheme: light;
+}
+html[data-tema="estoque"] main.content .panel,
+html[data-tema="estoque"] main.content .kpi-tile {
+  border-color: rgba(27,33,41,.07);
+  box-shadow: 0 1px 2px rgba(27,33,41,.05), 0 10px 24px -18px rgba(27,33,41,.35);
+}
+html[data-tema="estoque"] main.content .col { box-shadow: 0 1px 2px rgba(27,33,41,.06); }
+html[data-tema="estoque"] main.content .card { background: #FFFFFF; box-shadow: 0 1px 2px rgba(27,33,41,.06); }
+html[data-tema="estoque"] main.content .card.selecionado { background: #FFF6E5; }
+html[data-tema="estoque"] main.content .field input,
+html[data-tema="estoque"] main.content .field select,
+html[data-tema="estoque"] main.content .field textarea { background: #FFFFFF; }
+html[data-tema="estoque"] main.content .btn.secondary { background: #FFFFFF; }
+html[data-tema="estoque"] main.content .btn.secondary:hover { background: #EFEBE4; border-color: rgba(27,33,41,.28); }
+/* textos em âmbar/amarelo ficam ilegíveis no fundo claro: versão escura do âmbar */
+html[data-tema="estoque"] main.content .selecao-mover-bar .contador,
+html[data-tema="estoque"] main.content .hint a,
+html[data-tema="estoque"] main.content .badge.role-supervisor,
+html[data-tema="estoque"] main.content .col-filter-toggle:not(.mostrando-todas) { color: #A86200; }
+html[data-tema="estoque"] main.content .badge.prioridade-media { color: #9A5B00; }
+html[data-tema="estoque"] main.content .badge.prioridade-alta,
+html[data-tema="estoque"] main.content .badge.status-inactive,
+html[data-tema="estoque"] main.content .badge.role-pendente,
+html[data-tema="estoque"] main.content .pend-vencida { color: #C2333A; }
+html[data-tema="estoque"] main.content .dest-aviso { color: #9A5B00; }
+html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
+
+/* botão de tema (mesmo do Painel de Suprimentos) */
+.tema-btn .tema-amostra {
+  width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--accent) 50%, var(--surface-2) 50%); box-shadow: 0 0 0 1px var(--baseline);
+}
+
+@media (max-width: 640px) {
+  html[data-tema="estoque"] main.content { margin: 8px; border-radius: 12px; }
+}
 </style>
 </head>
 <body>
@@ -758,6 +840,7 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
         </button>
         <button type="button" class="msg-badge hidden" id="histNotifBtn" title="Histórico de notificações (mensagens e atribuições, lidas e não lidas)">📜</button>
         <a class="btn secondary small inicio-btn" href="https://construservengpa-creator.github.io/Painel-suprimentos/inicio.html" title="Voltar à página inicial do Capivara (Suprimentos, Notas e Estoque)"><span aria-hidden="true">⌂</span> Início</a>
+        <button class="btn secondary small tema-btn" id="temaBtn" type="button" title="Trocar o tema (fica salvo neste navegador)"><span class="tema-amostra"></span><span id="temaBtnTxt">Tema: Asfalto</span></button>
         <button class="btn secondary small" id="minhaContaBtn">Minha conta</button>
         <button class="btn secondary small" id="logoutBtn">Sair</button>
       </div>
@@ -2459,6 +2542,21 @@ function restaurarPreferenciaSidebar() {
   atualizarBotaoSidebar(collapsed);
 }
 
+// botão de tema: alterna entre o padrão (Asfalto) e o Estoque. Tudo vem das
+// variáveis CSS, então troca na hora, sem recarregar a página.
+function atualizarBotaoTema() {
+  const NOMES = { estoque: 'Estoque', '': 'Asfalto' };
+  const txt = document.getElementById('temaBtnTxt');
+  if (txt) txt.textContent = 'Tema: ' + NOMES[document.documentElement.getAttribute('data-tema') || ''];
+}
+
+function alternarTema() {
+  const novo = document.documentElement.getAttribute('data-tema') === 'estoque' ? '' : 'estoque';
+  if (novo) document.documentElement.setAttribute('data-tema', novo); else document.documentElement.removeAttribute('data-tema');
+  try { localStorage.setItem('painel-tema', novo); } catch (e) { /* modo privado etc. — sem persistência, sem problema */ }
+  atualizarBotaoTema();
+}
+
 async function init() {
   iniciarVerificacaoDeVersao();
   if (!SUPABASE_CONFIGURADO) {
@@ -2471,6 +2569,8 @@ async function init() {
   document.getElementById('minhaContaBtn').addEventListener('click', openChangePasswordModal);
   document.getElementById('sidebarToggleBtn').addEventListener('click', toggleSidebar);
   restaurarPreferenciaSidebar();
+  document.getElementById('temaBtn').addEventListener('click', alternarTema);
+  atualizarBotaoTema();
   document.getElementById('msgBadgeBtn').addEventListener('click', toggleMsgPanel);
   document.addEventListener('click', (ev) => {
     const panel = document.getElementById('msgPanel');
