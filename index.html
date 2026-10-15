@@ -2445,7 +2445,7 @@ let CURRENT_USER = null;
    IMPORTANTE ao editar este arquivo: mude APP_VERSION a cada publicação. A tela compara com a versão do arquivo
    no servidor (a cada 2 min e ao voltar para a aba) e, se mudou, mostra a faixa "Nova versão — Recarregar".
    Assim ninguém fica dias com uma aba antiga rodando lógica velha. */
-const APP_VERSION = '2026-10-08T15:00:00-03:00';
+const APP_VERSION = '2026-10-15T17:00:00-03:00';
 let _versaoAvisoMostrado = false, _versaoUltimaChecagem = 0;
 function iniciarVerificacaoDeVersao() {
   const logo = document.getElementById('appLogo');
@@ -6438,18 +6438,18 @@ document.addEventListener('DOMContentLoaded', () => {
   Promise.resolve().then(init).finally(() => window.capivaraFecharAbertura && window.capivaraFecharAbertura());
 });
 </script>
-<!-- ===== Controle de inatividade (padrão Capivara): desconecta após 5 minutos sem uso =====
+<!-- ===== Controle de inatividade (padrão Capivara): desconecta após 10 minutos sem uso =====
      Conta como uso: clique, toque, tecla, rolagem ou movimento do mouse em qualquer aba aberta deste
-     sistema (o horário do último uso fica no navegador, compartilhado entre as abas). Aos 4 minutos
-     aparece um aviso com contagem regressiva; aos 5 a sessão é encerrada pelo logout normal do app.
-     Quem fecha o navegador e volta depois de 5 minutos também é desconectado ao abrir. -->
+     sistema (o horário do último uso fica no navegador, compartilhado entre as abas). Aos 9 minutos
+     aparece um aviso com contagem regressiva; aos 10 a sessão é encerrada pelo logout normal do app.
+     Quem fecha o navegador e volta depois de 10 minutos também é desconectado ao abrir. -->
 <script>
 (function(){
   var PROJETO = 'kygainafarusnsstvvhc';                          // projeto Supabase deste app
   function cliente(){ return (typeof supabaseClient !== 'undefined' ? supabaseClient : null); }
   function sairDoApp(){ return onLogout(); }              // o mesmo "Sair" do app
 
-  var LIMITE = 5 * 60 * 1000, AVISO = 60 * 1000;
+  var LIMITE = 10 * 60 * 1000, AVISO = 60 * 1000;
   var CHAVE_SESSAO = 'sb-' + PROJETO + '-auth-token';
   var CHAVE_USO = 'capivara_ultimo_uso_' + PROJETO;
   var CHAVE_MSG = 'capivara_saiu_inatividade';
@@ -6495,7 +6495,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function mostrarEncerrada(){
     var el = abrir('fim',
       '<div style="font-size:17px;font-weight:700;margin-bottom:6px;">🔒 Sessão encerrada</div>' +
-      '<div style="font-size:14px;color:#B3BCC8;">Você foi desconectado depois de 5 minutos sem uso. Entre novamente para continuar.</div>' +
+      '<div style="font-size:14px;color:#B3BCC8;">Você foi desconectado depois de 10 minutos sem uso. Entre novamente para continuar.</div>' +
       '<button type="button" style="' + BOTAO + '">Entendi</button>');
     el.querySelector('button').addEventListener('click', fechar);
   }
@@ -6543,7 +6543,7 @@ document.addEventListener('DOMContentLoaded', () => {
   var veioDeSaida = false; try { veioDeSaida = sessionStorage.getItem(CHAVE_MSG) === '1'; sessionStorage.removeItem(CHAVE_MSG); } catch(e){}
   if(veioDeSaida) mostrarEncerrada();
   if(estavaLogado && usoGuardado && Date.now() - usoGuardado >= LIMITE){
-    // voltou depois de mais de 5 minutos: espera o app terminar de abrir e encerra a sessão
+    // voltou depois de mais de 10 minutos: espera o app terminar de abrir e encerra a sessão
     saindo = true;
     setTimeout(function(){ saindo = false; sair(); }, 1500);
   } else {
