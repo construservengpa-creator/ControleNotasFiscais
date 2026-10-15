@@ -440,6 +440,11 @@ table.data-table tbody tr:hover { background: var(--surface-1); }
 .pend-kpis .kpi-tile { background: var(--page); }
 .pend-kpis .kpi-tile.alerta::before { background: var(--status-critical); }
 .pend-kpis .kpi-tile .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pend-kpis .kpi-tile.clicavel { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.pend-kpis .kpi-tile.clicavel:hover { background: var(--surface-1); }
+.pend-kpis .kpi-tile.clicavel:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pend-kpis .kpi-tile.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.pend-kpis .kpi-tile.alerta.sel { border-color: var(--status-critical); box-shadow: inset 0 0 0 1px var(--status-critical); }
 .pend-charts { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); gap: 14px; margin-bottom: 16px; }
 .pend-chart-box { background: var(--page); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; min-width: 0; }
 .pend-chart-box h3 { font-family: var(--font-display); font-weight: 500; font-size: 14px; margin: 0 0 2px; letter-spacing: 0.01em; }
@@ -5504,7 +5509,7 @@ const PEND_FAIXAS = [
 ];
 const PEND_MAX_BARRAS = 370;
 
-let PEND_REPORT = { todos: [], itens: [], escopo: 'pendencias', filtro: null, hoje: null, geradoEm: null, movimentosIndisponiveis: false };
+let PEND_REPORT = { todos: [], daObra: [], itens: [], kpi: null, escopo: 'pendencias', filtro: null, hoje: null, geradoEm: null, movimentosIndisponiveis: false };
 
 const pendDiaFmt = new Intl.DateTimeFormat('en-CA', { timeZone: PEND_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
 // Data/hora do banco (UTC) -> dia no fuso do escritório, como 'AAAA-MM-DD'.
@@ -5537,7 +5542,7 @@ async function loadPendenciasReport() {
         vencida: !!(n.vencimento && String(n.vencimento).slice(0, 10) < hoje),
       };
     }).sort((a, b) => new Date(a.pendenteDesde) - new Date(b.pendenteDesde)); // mais antiga primeiro
-    PEND_REPORT = { todos: itens, itens, escopo: resp.escopo, filtro: null, hoje, geradoEm: resp.geradoEm, movimentosIndisponiveis: resp.movimentosIndisponiveis };
+    PEND_REPORT = { todos: itens, daObra: itens, itens, kpi: null, escopo: resp.escopo, filtro: null, hoje, geradoEm: resp.geradoEm, movimentosIndisponiveis: resp.movimentosIndisponiveis };
     pendPopularObras();
     pendFiltrarPorObra();
     renderPendencias();
@@ -5574,11 +5579,45 @@ function pendPopularObras() {
 
 function pendFiltrarPorObra() {
   const obra = document.getElementById('pendObra').value;
-  PEND_REPORT.itens = obra ? PEND_REPORT.todos.filter((n) => pendChaveObra(n) === obra) : PEND_REPORT.todos;
+  PEND_REPORT.daObra = obra ? PEND_REPORT.todos.filter((n) => pendChaveObra(n) === obra) : PEND_REPORT.todos;
+  pendAplicarKpi();
+}
+
+// ---- Filtro pelos cards (indicadores) ----
+// Clicar num card restringe o relatório inteiro (gráficos e lista) às notas
+// daquele indicador; os cards continuam mostrando os números da obra toda.
+// Clicar de novo no mesmo card (ou em "Notas em aberto") volta a mostrar tudo.
+const PEND_KPIS = {
+  antiga: {
+    rotulo: (emAberto) => emAberto ? 'paradas há mais tempo' : 'pendências mais antigas',
+    filtrar: (base) => { const max = Math.max(...base.map((i) => i.pendDias)); return base.filter((i) => i.pendDias === max); },
+  },
+  media: {
+    rotulo: () => 'paradas acima do tempo médio',
+    filtrar: (base) => { const media = base.reduce((s, i) => s + i.pendDias, 0) / (base.length || 1); return base.filter((i) => i.pendDias > media); },
+  },
+  vencidas: {
+    rotulo: () => 'com vencimento ultrapassado',
+    filtrar: (base) => base.filter((i) => i.vencida),
+  },
+};
+function pendAplicarKpi() {
+  const { daObra, kpi } = PEND_REPORT;
+  const lista = kpi && PEND_KPIS[kpi] ? PEND_KPIS[kpi].filtrar(daObra) : daObra;
+  // Indicador que deixou de ter notas (ex.: trocou de obra) não filtra nada.
+  if (kpi && !lista.length) PEND_REPORT.kpi = null;
+  PEND_REPORT.itens = PEND_REPORT.kpi ? lista : daObra;
+}
+function pendSelecionarKpi(id) {
+  PEND_REPORT.kpi = !id || PEND_REPORT.kpi === id ? null : id;
+  // As barras e faixas mudam junto, então o filtro vindo de um clique nos gráficos é desfeito.
+  PEND_REPORT.filtro = null;
+  pendAplicarKpi();
+  renderPendencias();
 }
 
 function renderPendencias() {
-  const { itens, escopo, geradoEm, movimentosIndisponiveis } = PEND_REPORT;
+  const { daObra: itens, escopo, geradoEm, movimentosIndisponiveis } = PEND_REPORT;
   const emAberto = escopo === 'abertas';
   const estimadas = itens.filter((i) => i.pendenteDesdeEstimada).length;
   let desc = emAberto
@@ -5600,7 +5639,7 @@ function renderPendencias() {
 }
 
 function renderPendKpis() {
-  const { itens, escopo } = PEND_REPORT;
+  const { daObra: itens, escopo, kpi } = PEND_REPORT;
   const emAberto = escopo === 'abertas';
   const total = itens.length;
   const dias = itens.map((i) => i.pendDias).sort((a, b) => a - b);
@@ -5610,11 +5649,19 @@ function renderPendKpis() {
   const vencidas = itens.filter((i) => i.vencida);
   const antigaSub = antiga ? `NF ${antiga.numero} · ${antiga.fornecedor || '—'} · desde ${pendFmtDia(antiga.pendDia, true)}` : 'Nenhuma nota parada';
   const totalSub = `${fmtMoney(pendSomaValor(itens))} em valor`;
+  // Card clicável: data-kpi diz qual filtro aplica ('' = mostrar todas).
+  const card = (id, qtd, classe, dica, html) => {
+    const ativo = !!id && kpi === id;
+    const clicavel = qtd > 0;
+    return `<div class="kpi-tile${classe ? ' ' + classe : ''}${clicavel ? ' clicavel' : ''}${ativo && clicavel ? ' sel' : ''}"${clicavel
+      ? ` data-kpi="${id}" role="button" tabindex="0" aria-pressed="${ativo}" title="${escapeHtml(dica)}"` : ''}>${html}</div>`;
+  };
+  const acimaMedia = media != null ? itens.filter((i) => i.pendDias > media).length : 0;
   document.getElementById('pendKpiRow').innerHTML = `
-    <div class="kpi-tile"><div class="label">${emAberto ? 'Notas em aberto' : 'Notas em Pendências'}</div><div class="value">${total}</div><div class="sub" title="${escapeHtml(totalSub)}">${escapeHtml(totalSub)}</div></div>
-    <div class="kpi-tile"><div class="label">${emAberto ? 'Parada há mais tempo' : 'Pendência mais antiga'}</div><div class="value">${antiga ? pendTextoDias(antiga.pendDias) : '—'}</div><div class="sub" title="${escapeHtml(antigaSub)}">${escapeHtml(antigaSub)}</div></div>
-    <div class="kpi-tile"><div class="label">Tempo médio parada</div><div class="value">${media != null ? media.toFixed(1).replace('.', ',') + ' dias' : '—'}</div><div class="sub">${mediana != null ? 'Mediana: ' + String(mediana).replace('.', ',') + ' dia(s)' : 'Sem notas no momento'}</div></div>
-    <div class="kpi-tile ${vencidas.length ? 'alerta' : ''}"><div class="label">Com vencimento ultrapassado</div><div class="value">${vencidas.length}</div><div class="sub">${vencidas.length ? fmtMoney(pendSomaValor(vencidas)) + ' em valor' : 'Nenhuma vencida'}</div></div>
+    ${card('', total, '', 'Mostrar todas as notas no relatório', `<div class="label">${emAberto ? 'Notas em aberto' : 'Notas em Pendências'}</div><div class="value">${total}</div><div class="sub">${escapeHtml(totalSub)}</div>`)}
+    ${card('antiga', total, '', 'Mostrar só as notas paradas há mais tempo', `<div class="label">${emAberto ? 'Parada há mais tempo' : 'Pendência mais antiga'}</div><div class="value">${antiga ? pendTextoDias(antiga.pendDias) : '—'}</div><div class="sub" title="${escapeHtml(antigaSub)}">${escapeHtml(antigaSub)}</div>`)}
+    ${card('media', acimaMedia, '', `Mostrar só as ${acimaMedia} nota(s) paradas acima do tempo médio`, `<div class="label">Tempo médio parada</div><div class="value">${media != null ? media.toFixed(1).replace('.', ',') + ' dias' : '—'}</div><div class="sub">${mediana != null ? 'Mediana: ' + String(mediana).replace('.', ',') + ' dia(s)' : 'Sem notas no momento'}</div>`)}
+    ${card('vencidas', vencidas.length, vencidas.length ? 'alerta' : '', 'Mostrar só as notas com vencimento ultrapassado', `<div class="label">Com vencimento ultrapassado</div><div class="value">${vencidas.length}</div><div class="sub">${vencidas.length ? fmtMoney(pendSomaValor(vencidas)) + ' em valor' : 'Nenhuma vencida'}</div>`)}
   `;
 }
 
@@ -5922,11 +5969,12 @@ function renderPendCorpoTabela() {
   const descOrdem = o && cols.find((c) => c.id === o.col)
     ? `classificadas por ${cols.find((c) => c.id === o.col).rotulo.toLowerCase()} (${o.dir === 'asc' ? 'crescente' : 'decrescente'})`
     : 'da mais antiga para a mais recente';
-  const partes = [filtro && escapeHtml(filtro.rotulo), filtrosColuna.length && escapeHtml(filtrosColuna.join(', '))].filter(Boolean);
+  const kpiRotulo = PEND_REPORT.kpi && PEND_KPIS[PEND_REPORT.kpi].rotulo(emAberto);
+  const partes = [kpiRotulo && escapeHtml(kpiRotulo), filtro && escapeHtml(filtro.rotulo), filtrosColuna.length && escapeHtml(filtrosColuna.join(', '))].filter(Boolean);
   const info = document.getElementById('pendFiltroInfo');
   info.innerHTML = partes.length
-    ? `<span>Filtrando por <strong>${partes.join('</strong> e <strong>')}</strong> — ${lista.length} de ${itens.length} nota(s), ${descOrdem}.</span><button type="button" class="btn secondary small" id="pendLimparFiltroBtn">Limpar filtros</button>`
-    : (itens.length ? `<span>${itens.length} nota(s), ${descOrdem}. Clique no título de uma coluna para classificar ou no botão ▼ para filtrar, como no Excel; arraste a borda do título para ajustar a largura. Clique numa linha para abrir a nota.</span>` : '');
+    ? `<span>Filtrando por <strong>${partes.join('</strong> e <strong>')}</strong> — ${lista.length} de ${PEND_REPORT.daObra.length} nota(s), ${descOrdem}.</span><button type="button" class="btn secondary small" id="pendLimparFiltroBtn">Limpar filtros</button>`
+    : (itens.length ? `<span>${itens.length} nota(s), ${descOrdem}. Clique num card para filtrar o relatório, no título de uma coluna para classificar ou no botão ▼ para filtrar, como no Excel; arraste a borda do título para ajustar a largura. Clique numa linha para abrir a nota.</span>` : '');
   if (Object.keys(pendLerLarguras()).length) info.insertAdjacentHTML('beforeend', '<button type="button" class="btn secondary small" id="pendRestaurarLargurasBtn">Restaurar largura das colunas</button>');
 
   const vazio = !itens.length
@@ -6130,6 +6178,19 @@ function setupPendenciasReport() {
     renderPendChartDatas();
     renderPendTabela();
   });
+  const kpis = document.getElementById('pendKpiRow');
+  kpis.addEventListener('click', (ev) => {
+    const c = ev.target.closest('.kpi-tile.clicavel');
+    if (c) pendSelecionarKpi(c.dataset.kpi);
+  });
+  kpis.addEventListener('keydown', (ev) => {
+    const c = ev.target.closest('.kpi-tile.clicavel');
+    if (!c || (ev.key !== 'Enter' && ev.key !== ' ')) return;
+    ev.preventDefault();
+    pendSelecionarKpi(c.dataset.kpi);
+    const novo = document.querySelector(`#pendKpiRow .kpi-tile[data-kpi="${c.dataset.kpi}"]`);
+    if (novo) novo.focus();
+  });
   document.getElementById('pendChartDatas').addEventListener('click', (ev) => {
     const b = ev.target.closest('.pend-bar');
     if (!b || b.disabled) return;
@@ -6150,6 +6211,7 @@ function setupPendenciasReport() {
     }
     if (ev.target.id !== 'pendLimparFiltroBtn') return;
     PEND_TABELA.filtros = {};
+    if (PEND_REPORT.kpi) { PEND_REPORT.kpi = null; PEND_REPORT.filtro = null; pendAplicarKpi(); renderPendencias(); return; }
     pendAplicarFiltro(null);
   });
   const cabecalho = document.getElementById('pendTabelaHead');
