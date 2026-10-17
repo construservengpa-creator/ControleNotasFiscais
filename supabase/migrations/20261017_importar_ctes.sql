@@ -76,6 +76,31 @@ as $function$
     from n;
 $function$;
 
+-- Reabre uma nota já concluída/encerrada e a coloca em Pendências com a observação de que o
+-- lançamento do frete está pendente. Devolve null quando deu certo, ou o motivo da recusa
+-- (a nota continua com o CT-e gravado, só não é reaberta).
+create or replace function public.cte_reabrir_em_pendencias(p_nota_id bigint, p_cte_numero text, p_emitente text, p_valor numeric)
+ returns text
+ language plpgsql
+ set search_path to 'public', 'pg_temp'
+as $function$
+declare
+  v_msg text := 'Lançamento do frete pendente — CT-e ' || coalesce(nullif(trim(p_cte_numero), ''), '?')
+                || coalesce(' de ' || nullif(trim(p_emitente), ''), '')
+                || coalesce(' (R$ ' || replace(to_char(p_valor, 'FM999999990.00'), '.', ',') || ')', '')
+                || ' recebido depois da conclusão da nota.';
+begin
+  perform public.rpc_reabrir(p_nota_id);
+  if (select status from public.notas where id = p_nota_id) is distinct from 'pendencias' then
+    perform public.aplicar_mudanca_status(p_nota_id, 'pendencias', null, v_msg, null);
+  end if;
+  return null;
+exception when others then
+  return sqlerrm;
+end;
+$function$;
+revoke all on function public.cte_reabrir_em_pendencias(bigint, text, text, numeric) from public, anon, authenticated;
+
 create or replace function public.rpc_vincular_ctes(p_ctes jsonb)
  returns jsonb
  language plpgsql
@@ -93,7 +118,6 @@ declare
   v_ids bigint[];
   v_nota public.notas;
   v_status_antes text;
-  v_msg text;
   v_resultado text;
   v_erro text;
   v_saida jsonb := '[]'::jsonb;
@@ -169,20 +193,8 @@ begin
 
     -- nota já encerrada: reabre e coloca em Pendências com a observação do frete
     if v_status_antes = 'concluido' then
-      v_msg := 'Lançamento do frete pendente — CT-e ' || coalesce(c->>'numero', v_num)
-               || coalesce(' de ' || v_emit, '')
-               || coalesce(' (R$ ' || replace(to_char(v_valor, 'FM999999990.00'), '.', ',') || ')', '')
-               || ' recebido depois da conclusão da nota.';
-      begin
-        perform public.rpc_reabrir(v_nota.id);
-        if (select status from public.notas where id = v_nota.id) is distinct from 'pendencias' then
-          perform public.aplicar_mudanca_status(v_nota.id, 'pendencias', null, v_msg, null);
-        end if;
-        v_resultado := 'reaberto';
-      exception when others then
-        v_resultado := 'vinculado_sem_reabrir';
-        v_erro := sqlerrm;
-      end;
+      v_erro := public.cte_reabrir_em_pendencias(v_nota.id, c->>'numero', v_emit, v_valor);
+      v_resultado := case when v_erro is null then 'reaberto' else 'vinculado_sem_reabrir' end;
     end if;
 
     v_saida := v_saida || jsonb_build_object('chave', v_chave, 'resultado', v_resultado, 'notaId', v_nota.id,

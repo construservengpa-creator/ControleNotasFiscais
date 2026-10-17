@@ -1027,7 +1027,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
         </div>
         <div class="panel" id="importarCtesPanel">
           <h2>Importar CT-es do relatório SIENGE</h2>
-          <p class="desc">Selecione o relatório "CT-es Recebidos" exportado do SIENGE (.xlsx). Entram só os CT-es cujo tomador é a AMETA, a RAF ou um dos consórcios, e que ainda não foram escriturados (cancelados e escriturados são desprezados). Quando a nota fiscal que informou esse CT-e no frete é encontrada (pelo nº do CT-e e o transportador ou o valor do frete), os dados do CT-e entram no registro dela, marcados como "lançamento do frete pendente"; se a nota já tinha sido concluída/encerrada, o card é reaberto e vai para "Pendências" com essa observação. CT-es sem nota correspondente caem em "Importadas SIENGE" como cards próprios.</p>
+          <p class="desc">Selecione o relatório "CT-es Recebidos" exportado do SIENGE (.xlsx). Entram só os CT-es cujo tomador é a AMETA, a RAF ou um dos consórcios, e que ainda não foram escriturados (cancelados e escriturados são desprezados). Quando a nota fiscal que informou esse CT-e no frete é encontrada (pelo nº do CT-e e o transportador ou o valor do frete), os dados do CT-e entram no registro dela, marcados como "lançamento do frete pendente"; se a nota já tinha sido concluída/encerrada, o card é reaberto e vai para "Pendências" com essa observação. CT-es sem nota correspondente caem em "Importadas SIENGE" como cards próprios. Todo card ligado a um CT-e só pode ser concluído ou movido depois que o XML do CT-e for anexado nele (seção "XML do CT-e" do card) — ao anexar, o XML é analisado de novo e o CT-e vai para as notas fiscais que ele transporta.</p>
           <div class="filters-row">
             <div class="field">
               <label for="ctesArquivoInput">Arquivo do relatório de CT-es (.xlsx)</label>
@@ -1596,6 +1596,11 @@ function fmtNotaRow(n, nomes, obras) {
     freteVencimento: n.frete_vencimento || null,
     numeroTitulo: n.numero_titulo || null,
     freteCteChave: n.frete_cte_chave || null, freteLancamentoPendente: !!n.frete_lancamento_pendente,
+    freteCteCompartilhado: n.frete_cte_compartilhado || null,
+    cteXmlRecebidoEm: n.cte_xml_recebido_em || null,
+    cteXmlDispensadoPor: n.cte_xml_dispensado_por || null,
+    cteXmlDispensadoPorNome: n.cte_xml_dispensado_por ? (nomes[n.cte_xml_dispensado_por] || null) : null,
+    cteXmlDispensadoEm: n.cte_xml_dispensado_em || null, cteXmlDispensaObs: n.cte_xml_dispensa_obs || null,
     anexosCount: n._anexosCount || 0, anexosFreteCount: n._anexosFreteCount || 0,
   };
 }
@@ -1607,7 +1612,7 @@ async function shapeNotas(rows) {
   const ids = new Set();
   const obraIds = new Set();
   rows.forEach((n) => {
-    [n.assigned_to, n.created_by, n.homologado_por, n.lancamento_validado_por].forEach((v) => v && ids.add(v));
+    [n.assigned_to, n.created_by, n.homologado_por, n.lancamento_validado_por, n.cte_xml_dispensado_por].forEach((v) => v && ids.add(v));
     if (n.obra_id) obraIds.add(n.obra_id);
   });
   const notaIds = rows.map((n) => n.id);
@@ -2267,6 +2272,19 @@ async function apiPost(path, body) {
     return { nota };
   }
 
+  if (seg[3] === 'cte-xml') {
+    const { data, error } = await supabaseClient.rpc('rpc_analisar_cte_xml', { p_nota_id: Number(seg[2]), p_cte: body.cte });
+    throwSupabaseError(error);
+    return data;
+  }
+
+  if (seg[3] === 'dispensar-xml-cte') {
+    const { data, error } = await supabaseClient.rpc('rpc_dispensar_xml_cte', { p_nota_id: Number(seg[2]), p_justificativa: body.justificativa || null });
+    throwSupabaseError(error);
+    const [nota] = await shapeNotas([data]);
+    return { nota };
+  }
+
   if (seg[3] === 'homologar') {
     const { data, error } = await supabaseClient.rpc('rpc_homologar', { p_nota_id: Number(seg[2]), p_observacao: body.observacao || null });
     throwSupabaseError(error);
@@ -2569,7 +2587,8 @@ function toast(msg, type) {
   el.textContent = msg;
   el.className = 'show' + (type ? ` ${type}` : '');
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => { el.className = ''; }, 3200);
+  // mensagens longas (resumos de importação) ficam mais tempo na tela
+  toast._t = setTimeout(() => { el.className = ''; }, Math.max(3200, String(msg).length * 45));
 }
 function isoDaysAgo(n) { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); }
 
@@ -3158,6 +3177,9 @@ function renderCard(nota, coluna) {
     const decorrido = fmtDuration(new Date() - new Date(nota.assignedAt));
     tempoHtml = `<div class="meta">⏱ Em tratamento há ${decorrido}</div>`;
   }
+  if (precisaXmlCte(nota)) {
+    tempoHtml += `<div class="meta">📄 XML do CT-e obrigatório — abra o card e anexe o XML para liberar.</div>`;
+  }
   if (nota.freteLancamentoPendente) {
     tempoHtml += `<div class="meta">🚚 Lançamento do frete pendente${nota.freteCte ? ' — CT-e ' + escapeHtml(nota.freteCte) : ''}</div>`;
   }
@@ -3208,7 +3230,7 @@ function renderCard(nota, coluna) {
   }
 
   let actionsHtml = '<div class="actions">';
-  if (coluna !== 'entradas' && coluna !== 'importadas_sienge' && coluna !== 'concluido' && !(precisaHomologar && !nota.homologadoPor) && canConcluir) {
+  if (coluna !== 'entradas' && coluna !== 'importadas_sienge' && coluna !== 'concluido' && !(precisaHomologar && !nota.homologadoPor) && !precisaXmlCte(nota) && canConcluir) {
     actionsHtml += `<button class="btn small" data-action="concluir" data-id="${nota.id}">Concluir</button>`;
   }
   if (coluna === 'concluido' && !nota.lancamentoValidadoPor && canDistribuir) {
@@ -3217,7 +3239,7 @@ function renderCard(nota, coluna) {
   if (coluna === 'concluido' && canDistribuir) {
     actionsHtml += `<button class="btn secondary small" data-action="reabrir" data-id="${nota.id}">Reabrir</button>`;
   }
-  if (precisaHomologar && nota.obra && !nota.homologadoPor && podeHomologar(nota)) {
+  if (precisaHomologar && nota.obra && !nota.homologadoPor && podeHomologar(nota) && !precisaXmlCte(nota)) {
     actionsHtml += `<button class="btn small" data-action="homologar" data-id="${nota.id}" data-obra="${escapeHtml(nota.obra)}">Homologar recebimento</button>`;
   }
   if (canEscalar) {
@@ -3957,6 +3979,141 @@ function ehChaveCte(chave) {
   return d.length === 44 && d.slice(20, 22) === '57';
 }
 
+// Card ligado a um CT-e (o card do próprio CT-e ou a nota que recebeu um CT-e)
+// sem o XML anexado nem liberação do administrador — não pode ser concluído
+// nem movido (a regra vale também no banco, ver notas_cte_xml_obrigatorio).
+function precisaXmlCte(nota) {
+  return !!(nota.freteCteChave || ehChaveCte(nota.chaveAcesso)) && !nota.cteXmlRecebidoEm && !nota.cteXmlDispensadoEm;
+}
+
+// Lê no navegador o XML do CT-e (cteProc/CTe) e devolve só o que a análise usa.
+function lerXmlCte(texto) {
+  const doc = new DOMParser().parseFromString(texto, 'application/xml');
+  if (doc.getElementsByTagName('parsererror').length) throw new Error('O arquivo não é um XML válido.');
+  const el = (pai, nome) => (pai ? pai.getElementsByTagNameNS('*', nome)[0] || null : null);
+  const txt = (pai, nome) => { const e = el(pai, nome); return e ? e.textContent.trim() : ''; };
+  const infCte = el(doc, 'infCte');
+  if (!infCte) throw new Error('O arquivo não é um XML de CT-e (não tem o grupo infCte).');
+  const chave = soDigitos(infCte.getAttribute('Id')) || soDigitos(txt(doc, 'chCTe'));
+  if (!ehChaveCte(chave)) throw new Error('Não encontrei a chave de acesso do CT-e no XML.');
+  const ide = el(infCte, 'ide');
+  const emit = el(infCte, 'emit');
+  // Tomador: toma3/toma (0 remetente, 1 expedidor, 2 recebedor, 3 destinatário) ou toma4 com os dados dele.
+  const toma4 = el(ide, 'toma4');
+  const codToma = txt(el(ide, 'toma3') || el(ide, 'toma03') || toma4, 'toma');
+  const grupoToma = toma4 || el(infCte, ({ 0: 'rem', 1: 'exped', 2: 'receb', 3: 'dest' })[codToma] || 'dest');
+  const nfeChaves = Array.from(infCte.getElementsByTagNameNS('*', 'infNFe'))
+    .map((n) => soDigitos(txt(n, 'chave'))).filter((k) => k.length === 44);
+  return {
+    chave, numero: txt(ide, 'nCT'), serie: txt(ide, 'serie'),
+    emitente: txt(emit, 'xNome'), cnpjEmitente: soDigitos(txt(emit, 'CNPJ') || txt(emit, 'CPF')),
+    valor: Number(txt(el(infCte, 'vPrest'), 'vTPrest')) || 0,
+    dataEmissao: (txt(ide, 'dhEmi') || txt(ide, 'dEmi')).slice(0, 10) || null,
+    tomadorNome: txt(grupoToma, 'xNome'), tomadorCnpj: soDigitos(txt(grupoToma, 'CNPJ') || txt(grupoToma, 'CPF')),
+    nfeChaves: [...new Set(nfeChaves)],
+  };
+}
+
+function renderCteXmlSectionHtml(nota) {
+  const cardCte = ehChaveCte(nota.chaveAcesso);
+  if (!cardCte && !nota.freteCteChave && nota.frete !== 'sim') return '';
+  const rotuloCte = nota.freteCte || (cardCte ? nota.numero : '');
+  let situacao;
+  if (nota.cteXmlRecebidoEm) {
+    situacao = `<p class="legend-note">✅ XML do CT-e ${escapeHtml(rotuloCte)} anexado e analisado em ${fmtDateTime(nota.cteXmlRecebidoEm)}.</p>`;
+  } else if (nota.cteXmlDispensadoEm) {
+    situacao = `<p class="legend-note">🔓 Liberado sem o XML do CT-e por ${escapeHtml(nota.cteXmlDispensadoPorNome || '—')} em ${fmtDateTime(nota.cteXmlDispensadoEm)}${nota.cteXmlDispensaObs ? ' — ' + escapeHtml(nota.cteXmlDispensaObs) : ''}.</p>`;
+  } else if (precisaXmlCte(nota)) {
+    situacao = `<div class="dest-aviso dest-erro" style="margin:0 0 8px;">⚠️ Obrigatório: anexe o XML do CT-e ${escapeHtml(rotuloCte)}. Sem ele este card não pode ser concluído nem movido para outra coluna (ir para Pendências continua liberado).</div>`;
+  } else {
+    situacao = '<p class="legend-note">Se tiver o XML do CT-e desta nota, anexe-o aqui: o CT-e é lido e gravado no frete da nota (e das demais notas fiscais que ele transporta).</p>';
+  }
+  const podeDispensar = CURRENT_USER.role === 'admin' && precisaXmlCte(nota);
+  return `
+    <div class="modal-section-title">XML do CT-e</div>
+    ${situacao}
+    <form id="cteXmlForm" class="anexo-upload-form" data-chave-card="${cardCte ? soDigitos(nota.chaveAcesso) : ''}" data-chave-frete="${escapeHtml(nota.freteCteChave || '')}">
+      <input type="file" id="cteXmlInput" accept=".xml,text/xml,application/xml" />
+      <button type="submit" class="btn secondary small">Anexar XML do CT-e e analisar</button>
+      ${podeDispensar ? '<button type="button" class="btn secondary small" id="cteXmlDispensarBtn">Liberar sem XML</button>' : ''}
+      <span id="cteXmlMsg" class="legend-note"></span>
+    </form>
+  `;
+}
+
+function wireCteXmlSection(id, onRefresh) {
+  const form = document.getElementById('cteXmlForm');
+  if (!form) return;
+  const dispensarBtn = document.getElementById('cteXmlDispensarBtn');
+  if (dispensarBtn) {
+    dispensarBtn.addEventListener('click', async () => {
+      const justificativa = prompt('Justificativa para liberar este card sem o XML do CT-e (ex.: CT-e "Indisponível" no SIENGE):');
+      if (justificativa === null) return;
+      try {
+        await api.post(`/api/notas/${id}/dispensar-xml-cte`, { justificativa });
+        toast('Card liberado sem o XML do CT-e.', 'success');
+        onRefresh();
+        loadBoard();
+      } catch (e) {
+        toast(e.message, 'error');
+      }
+    });
+  }
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const input = document.getElementById('cteXmlInput');
+    const msg = document.getElementById('cteXmlMsg');
+    msg.textContent = '';
+    if (!input.files || input.files.length === 0) { msg.textContent = 'Selecione o arquivo XML do CT-e.'; return; }
+    const file = input.files[0];
+    let cte;
+    try {
+      cte = lerXmlCte(await file.text());
+    } catch (e) {
+      msg.textContent = e.message;
+      return;
+    }
+    // confere antes de enviar, para não deixar o XML errado anexado no card
+    const chaveCard = form.dataset.chaveCard;
+    const chaveFrete = form.dataset.chaveFrete;
+    if ((chaveCard && chaveCard !== cte.chave) || (chaveFrete && chaveFrete !== cte.chave)) {
+      msg.textContent = `Este XML é do CT-e ${cte.numero || cte.chave}, não do CT-e deste card. Confira o arquivo.`;
+      return;
+    }
+    const categoria = chaveCard ? 'nota' : 'frete';
+    try {
+      msg.textContent = 'Anexando o XML…';
+      await uploadAnexoLocal(id, file, categoria);
+      msg.textContent = 'Analisando o CT-e…';
+      const r = await api.post(`/api/notas/${id}/cte-xml`, { cte });
+      // as demais notas fiscais do CT-e também ficam com o XML anexado no frete
+      const outras = (r.vinculadas || []).filter((v) => v.id !== id);
+      let falhasAnexo = 0;
+      for (const v of outras) {
+        try { await uploadAnexoLocal(v.id, file, 'frete'); } catch (e) { falhasAnexo++; }
+      }
+
+      const vinculadas = r.vinculadas || [];
+      const partes = [`CT-e ${cte.numero || ''} de ${cte.emitente || '—'} analisado.`];
+      if (vinculadas.length) partes.push(`Gravado no frete da(s) NF ${vinculadas.map((v) => v.numeroNota).join(', ')}.`);
+      const reabertas = vinculadas.filter((v) => v.reaberta);
+      if (reabertas.length) partes.push(`${reabertas.length} nota(s) já concluída(s) reaberta(s) em "Pendências" com o lançamento do frete pendente.`);
+      const naoReabertas = vinculadas.filter((v) => v.erro);
+      if (naoReabertas.length) partes.push(`Não foi possível reabrir a(s) NF ${naoReabertas.map((v) => v.numeroNota).join(', ')}: ${naoReabertas[0].erro}`);
+      if (r.cardEncerrado) partes.push('Este card do CT-e foi encerrado — o lançamento do frete segue na(s) nota(s) fiscal(is).');
+      if (r.ignoradas && r.ignoradas.length) partes.push(`Não alterada(s) por já ter(em) outro CT-e: NF ${r.ignoradas.map((v) => v.numeroNota).join(', ')}.`);
+      if (r.nfesNaoEncontradas && r.nfesNaoEncontradas.length) partes.push(`${r.nfesNaoEncontradas.length} NF-e citada(s) no CT-e não está(ão) no Controle de Notas.`);
+      if (r.cardCte && !vinculadas.length) partes.push('Nenhuma nota fiscal deste CT-e foi encontrada — o card segue liberado para o lançamento do frete.');
+      if (falhasAnexo) partes.push(`O XML não pôde ser anexado em ${falhasAnexo} das outras notas.`);
+      toast(partes.join(' '), naoReabertas.length || falhasAnexo ? 'error' : 'success');
+      if (r.cardEncerrado) closeModal(); else onRefresh();
+      loadBoard();
+    } catch (e) {
+      msg.textContent = e.message;
+    }
+  });
+}
+
 // O relatório de CT-es traz linhas de cabeçalho ("Período…") antes da linha
 // com os títulos das colunas — procura essa linha e monta os objetos a partir dela.
 function linhasRelatorioCtes(sheet) {
@@ -4659,6 +4816,7 @@ function renderAnexosSectionHtml(nota, anexos) {
   const anexosFrete = anexos.filter((a) => a.categoria === 'frete');
   const temFreteSecao = nota.frete === 'sim';
   return `
+    ${renderCteXmlSectionHtml(nota)}
     <div class="modal-section-title">Documentos anexados</div>
     <div id="anexosLista">${renderAnexosList(anexosNota, podeExcluirAnexo)}</div>
     <form id="anexoUploadForm" class="anexo-upload-form">
@@ -4753,6 +4911,8 @@ function wireAnexosEChatSection(id, onRefresh) {
     }
   });
 
+  wireCteXmlSection(id, onRefresh);
+
   const anexoFreteForm = document.getElementById('anexoFreteUploadForm');
   if (anexoFreteForm) {
     anexoFreteForm.addEventListener('submit', async (ev) => {
@@ -4838,6 +4998,7 @@ async function openDetalheModal(id) {
   try {
     const { nota, historico, anexos, comentarios } = await api.get(`/api/notas/${id}`);
     marcarAtribuicaoComoVista(nota); // melhor esforço, não bloqueia a abertura do modal
+    if (precisaXmlCte(nota)) toast('Este card precisa do XML do CT-e — anexe-o em "XML do CT-e" para poder concluir ou mover.', 'error');
     const linhas = historico.map((m) => `
       <div style="padding:8px 0;border-bottom:1px solid var(--grid);font-size:12.5px;">
         <div><strong>${fmtDateTime(m.moved_at)}</strong> — ${COLUNA_LABELS[m.from_status] || 'novo'} → ${COLUNA_LABELS[m.to_status]}</div>
@@ -4870,6 +5031,7 @@ async function openDetalheModal(id) {
             ${nota.formaPagamento ? 'Forma de pagamento: ' + escapeHtml(nota.formaPagamento) + '<br/>' : ''}
             Frete: ${nota.frete === 'sim' ? 'Sim' : 'Não'}${nota.freteLancamentoPendente ? ' — 🚚 <strong>lançamento do frete pendente</strong>' : ''}<br/>
             ${temFreteDetalhe && nota.freteCte ? '&nbsp;&nbsp;Nº do CT-e: ' + escapeHtml(nota.freteCte) + '<br/>' : ''}
+            ${temFreteDetalhe && nota.freteCteCompartilhado ? '&nbsp;&nbsp;' + escapeHtml(nota.freteCteCompartilhado) + '<br/>' : ''}
             ${temFreteDetalhe && nota.freteCteChave ? '&nbsp;&nbsp;Chave do CT-e: ' + escapeHtml(nota.freteCteChave) + '<br/>' : ''}
             ${temFreteDetalhe && nota.freteTransportador ? '&nbsp;&nbsp;Transportador: ' + escapeHtml(nota.freteTransportador) + '<br/>' : ''}
             ${temFreteDetalhe && nota.freteValor ? '&nbsp;&nbsp;Valor do frete: ' + fmtMoney(nota.freteValor) + '<br/>' : ''}
