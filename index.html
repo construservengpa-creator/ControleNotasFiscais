@@ -1314,7 +1314,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
            Página própria (validador/index.html) mostrada aqui dentro. Usa o mesmo login: confere o relatório
            de NF-e do SIENGE, cruza com os cards e grava observações/avisos no diálogo de cada card. -->
       <section class="view" id="view-validador">
-        <iframe id="validadorFrame" title="Validador de Notas Fiscais" style="display:block;width:100%;height:calc(100vh - 150px);min-height:560px;border:0;border-radius:12px;background:#1E2024"></iframe>
+        <iframe id="validadorFrame" title="Validador de Notas Fiscais" style="display:block;width:100%;height:calc(100vh - 150px);min-height:560px;border:0;border-radius:12px;background:transparent"></iframe>
       </section>
 
       <section class="view" id="view-relatorios">
@@ -2650,6 +2650,9 @@ function alternarTema() {
   if (novo) document.documentElement.setAttribute('data-tema', novo); else document.documentElement.removeAttribute('data-tema');
   try { localStorage.setItem('painel-tema', novo); } catch (e) { /* modo privado etc. — sem persistência, sem problema */ }
   atualizarBotaoTema();
+  // o Validador de NF (aba própria) troca de tema junto
+  const fr = document.getElementById('validadorFrame');
+  if (fr && fr.contentWindow) fr.contentWindow.postMessage({ tipo: 'vnf-tema', tema: novo }, location.origin);
 }
 
 async function init() {

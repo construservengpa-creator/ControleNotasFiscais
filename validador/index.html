@@ -10,7 +10,11 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Oswald:wght@500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Oswald:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  /* Tema escolhido no Controle de Notas (botão Tema do topo) — mesma chave do Controle e do Painel de Suprimentos */
+  (function(){ try{ if(localStorage.getItem('painel-tema')==='estoque')document.documentElement.setAttribute('data-tema','estoque'); }catch(e){} })();
+</script>
 <style>
 :root{
   --bg:#1E2024; --s1:#272A30; --s2:#30343B; --line:#3B4048; --tx:#ECEDEF; --mu:#9AA1AC;
@@ -22,7 +26,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 var(--f-body)}
 body{min-height:100dvh}
-button,input,select{font:inherit;color:inherit}
+button,input,select,textarea{font:inherit;color:inherit}
 button{cursor:pointer}
 [hidden]{display:none!important}
 
@@ -38,7 +42,7 @@ button{cursor:pointer}
 main{padding:16px;max-width:1600px;margin:0 auto}
 
 .drop{border:2px dashed var(--line);border-radius:14px;padding:46px 16px;text-align:center;background:var(--s1);cursor:pointer}
-.drop.on{border-color:var(--ac);background:#33302A}
+.drop.on{border-color:var(--ac);background:var(--ac-soft)}
 .drop h2{font:600 22px var(--f-head);text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px}
 .drop p{color:var(--mu);margin:4px 0}
 .drop code{font-family:var(--f-mono);font-size:12.5px;color:var(--ac)}
@@ -121,7 +125,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 .bar{display:flex;gap:2px;height:16px;min-width:0}
 .bar>b{display:block;height:100%;min-width:3px;cursor:pointer}
 .bar>b:last-child{border-radius:0 4px 4px 0}
-.bar>b:hover,.col-st>b:hover{filter:brightness(1.25)}
+.bar>b:hover,.col-st>b:hover{filter:brightness(var(--hov))}
 .bar.cheia{height:26px;border-radius:4px;overflow:hidden}
 .cols{display:flex;align-items:flex-end;gap:6px;height:220px;border-bottom:1px solid var(--line);padding-top:18px;overflow-x:auto}
 .cols .c{flex:1 0 34px;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;gap:4px}
@@ -132,7 +136,7 @@ dialog::backdrop{background:rgba(0,0,0,.55)}
 .cols-x{display:flex;gap:6px;overflow:hidden}
 .cols-x span{flex:1 0 34px;text-align:center;font-size:11px;color:var(--mu);white-space:nowrap}
 .vazio-g{color:var(--mu);font-size:13px;padding:20px 0;text-align:center}
-#tip{position:fixed;z-index:50;pointer-events:none;background:#121418;border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px;max-width:300px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+#tip{position:fixed;z-index:50;pointer-events:none;background:var(--tip);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px;max-width:300px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
 #tip b{display:block;margin-bottom:2px}
 .cfg{display:flex;align-items:center;gap:8px;color:var(--mu);font-size:12.5px}
 .conn{font-size:12px;color:var(--mu);max-width:260px}
@@ -159,7 +163,8 @@ body.emb .top .cap-selo{display:none}
 .cfg input{width:64px;background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
 
 /* ===== visual leve ===== */
-:root{ --bg:#1C1F24; --s1:#24282E; --s2:#2C3138; --line:#353B44; --mu:#949CA8; --mu2:#6F7783; }
+:root{ --bg:#1C1F24; --s1:#24282E; --s2:#2C3138; --line:#353B44; --mu:#949CA8; --mu2:#6F7783;
+  --tip:#121418; --ac-soft:rgba(245,196,51,.08); --hov:1.25; --hov-btn:1.12; --sombra:none; --linha:rgba(255,255,255,.045); }
 html,body{font-size:14px}
 .top{gap:12px;padding:10px 20px;border-bottom:1px solid var(--line);position:relative;flex-wrap:wrap}
 .top h1{flex:0 0 auto;min-width:0;font:600 17px/1 var(--f-head);letter-spacing:.06em}
@@ -171,7 +176,7 @@ html,body{font-size:14px}
 .lnk:hover{text-decoration:underline}
 .conn{font-size:12px;max-width:none;white-space:nowrap}
 .btn{border-radius:9px;padding:8px 13px;font-weight:600;background:var(--s2);border-color:transparent}
-.btn:hover{filter:brightness(1.12)}
+.btn:hover{filter:brightness(var(--hov-btn))}
 .btn.sm{padding:6px 11px;font-size:13px}
 .ib{background:none;border:1px solid transparent;border-radius:9px;color:var(--mu);height:32px;min-width:32px;font-size:16px;cursor:pointer}
 .ib:hover{background:var(--s2);color:var(--tx)}
@@ -219,7 +224,7 @@ body.emb main{padding:14px 16px}
 .cols2{grid-template-columns:minmax(0,1fr) 300px;gap:16px}
 .tw{border:0;border-radius:14px;background:var(--s1);max-height:calc(100vh - 330px);min-height:320px}
 table{font-size:13px}
-th,td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.045)}
+th,td{padding:9px 10px;border-bottom:1px solid var(--linha)}
 th{background:var(--s1);color:var(--mu);font-weight:500;font-size:12px;border-bottom:1px solid var(--line)}
 tbody tr:hover{background:var(--s2)}
 tr.lvE td:first-child,tr.lvA td:first-child,tr.lvOK td:first-child{box-shadow:none}
@@ -266,6 +271,38 @@ td.cel-oc{max-width:260px}
 dialog{border:0;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .ocl li{background:none;border-left:3px solid var(--line);border-radius:0;padding:4px 10px}
 @media(max-width:700px){ .top{padding:10px 16px} main{padding:14px 16px} .barra select{flex:1 1 45%;max-width:none} .kpi .v{font-size:22px} }
+
+/* ===== tema "Estoque" (claro, igual à área de conteúdo do Controle de Notas nesse tema) ===== */
+html[data-tema="estoque"]{ color-scheme:light;
+  --bg:#F3F0EA; --s1:#FFFFFF; --s2:#F1EDE6; --line:rgba(27,33,41,.13); --tx:#1B2129; --mu:#5A6371; --mu2:#8A919B;
+  --ac:#F5A524; --ac-ink:#12151A; --ok:#1A7F45; --bad:#C2412D; --warn:#B4610A; --info:#2F6FDB;
+  --tip:#1B2129; --ac-soft:rgba(245,165,36,.10); --hov:.9; --hov-btn:.96; --linha:rgba(27,33,41,.07);
+  --sombra:0 1px 2px rgba(27,33,41,.05),0 10px 24px -18px rgba(27,33,41,.35);
+  --f-head:'IBM Plex Sans',sans-serif; --f-body:'IBM Plex Sans',sans-serif; --f-mono:'IBM Plex Sans',sans-serif;
+}
+html[data-tema="estoque"] body{font-variant-numeric:tabular-nums}
+html[data-tema="estoque"] #tip{color:#E9EDF2;border-color:transparent}
+html[data-tema="estoque"] .kpi,html[data-tema="estoque"] .tw,html[data-tema="estoque"] .painel,html[data-tema="estoque"] .box{box-shadow:var(--sombra)}
+html[data-tema="estoque"] .kpi:hover{border-color:rgba(27,33,41,.14)}
+html[data-tema="estoque"] .barra input,html[data-tema="estoque"] .barra select,html[data-tema="estoque"] .seg{border:1px solid var(--line)}
+html[data-tema="estoque"] .barra select.ativo{border-color:var(--ac);background:#FFF8EA}
+html[data-tema="estoque"] .seg button.on{background:#1B2129;color:#fff}
+html[data-tema="estoque"] .btn{background:#FFFFFF;border:1px solid var(--line)}
+html[data-tema="estoque"] .btn.pri{background:var(--ac);border-color:var(--ac);color:var(--ac-ink)}
+html[data-tema="estoque"] .chip{background:#FFF1D6;color:#8A5200}
+html[data-tema="estoque"] .lnk{color:#2F6FDB}
+html[data-tema="estoque"] .regra.sel{background:#FFF6E5}
+html[data-tema="estoque"] .kpi.ac .v{color:#A86200}
+html[data-tema="estoque"] .kpi.warn .v{color:#B4610A}
+html[data-tema="estoque"] .tag.E{background:rgba(194,65,45,.10)} html[data-tema="estoque"] .tag.A{background:rgba(180,97,10,.10)}
+html[data-tema="estoque"] .tag.OK{background:rgba(26,127,69,.10)} html[data-tema="estoque"] .tag.I,html[data-tema="estoque"] .tag.card{background:rgba(47,111,219,.10)}
+html[data-tema="estoque"] dialog{background:#FFFFFF;box-shadow:0 24px 60px rgba(27,33,41,.25)}
+html[data-tema="estoque"] dialog::backdrop{background:rgba(27,33,41,.35)}
+html[data-tema="estoque"] .cardbox,html[data-tema="estoque"] .chat .m{background:#F7F5F1}
+html[data-tema="estoque"] .chat .m{background:#FFFFFF;border:1px solid var(--line)}
+html[data-tema="estoque"] .fchat select,html[data-tema="estoque"] .fchat textarea,html[data-tema="estoque"] .pop input{background:#FFFFFF}
+html[data-tema="estoque"] .pop{box-shadow:0 12px 30px rgba(27,33,41,.18)}
+html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.18)}
 </style>
 </head>
 <body>
@@ -722,9 +759,21 @@ function desenhar(){
    Cores do status em ordem fixa (paleta categórica validada para fundo escuro) — a cor segue o status,
    nunca a posição; erro/alerta usam as cores de estado do app, sempre com o rótulo escrito ao lado. */
 let VISTA='tab', MED='qtd';
-const COR_ST={'Lançado':'#3987e5','Apenas Confirmação':'#d95926','Pendente':'#199e70','Aguardando Confirmação':'#c98500','Não realizada':'#d55181','Desconhecida':'#008300'};
+const COR_ST_ESC={'Lançado':'#3987e5','Apenas Confirmação':'#d95926','Pendente':'#199e70','Aguardando Confirmação':'#c98500','Não realizada':'#d55181','Desconhecida':'#008300'};
+const COR_ST_CLA={'Lançado':'#2a78d6','Apenas Confirmação':'#eb6834','Pendente':'#1baf7a','Aguardando Confirmação':'#eda100','Não realizada':'#e87ba4','Desconhecida':'#008300'};
+let COR_ST=COR_ST_ESC, COR_SERIE='#3987e5';
 const FAIXAS=[['até 15 dias',0,15],['16 a 30',16,30],['31 a 60',31,60],['61 a 90',61,90],['91 a 180',91,180],['mais de 180',181,Infinity]];
-const COR_FAIXA=['#184f95','#1c5cab','#2a78d6','#3987e5','#5598e7','#86b6ef']; // mais antiga = mais clara (mais destaque no fundo escuro)
+const COR_FAIXA_ESC=['#184f95','#1c5cab','#2a78d6','#3987e5','#5598e7','#86b6ef']; // mais antiga = mais clara (mais destaque no fundo escuro)
+const COR_FAIXA_CLA=['#86b6ef','#5598e7','#3987e5','#2a78d6','#1c5cab','#184f95']; // no tema claro, mais antiga = mais escura
+let COR_FAIXA=COR_FAIXA_ESC;
+function aplicarTema(t){
+  if(t==='estoque')document.documentElement.setAttribute('data-tema','estoque'); else document.documentElement.removeAttribute('data-tema');
+  const claro=t==='estoque'; COR_ST=claro?COR_ST_CLA:COR_ST_ESC; COR_FAIXA=claro?COR_FAIXA_CLA:COR_FAIXA_ESC; COR_SERIE=claro?'#2a78d6':'#3987e5';
+  if(typeof ROWS!=='undefined'&&ROWS.length)desenhar();
+}
+// O Controle de Notas avisa quando o botão Tema é usado (e a troca também chega pelo localStorage compartilhado).
+window.addEventListener('message',ev=>{ if(ev.origin===location.origin&&ev.data&&ev.data.tipo==='vnf-tema')aplicarTema(ev.data.tema); });
+window.addEventListener('storage',ev=>{ if(ev.key==='painel-tema')aplicarTema(ev.newValue); });
 const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 const ehPendente=o=>o.status==='Pendente'||o.status==='Aguardando Confirmação'||o.status==='Apenas Confirmação';
 const med=o=>MED==='valor'?(o.valor||0):1;
@@ -801,13 +850,13 @@ function graficos(lst){
   if(CARDS_OK&&pend.length){
     const cols=[...COLUNAS_CARD.map(([k,l])=>[k,l]),['sem','Sem card']];
     const itC=cols.map(([k,l],i)=>{ const ns=pend.filter(o=>k==='sem'?!o.card:o.card&&o.card.status===k); const v=ns.reduce((s,o)=>s+med(o),0);
-      return {rot:l,v,cor:k==='sem'?'#5c6570':k==='concluido'?'#62C48F':'#3987e5',f:{card:k,d:'Pendentes · '+(k==='sem'?'sem card':'card em '+l)},tip:[fmtM(v),`${intf(ns.length)} notas pendentes · ${brl(ns.reduce((s,o)=>s+(o.valor||0),0))}`]}; }).filter(i=>i.v>0);
+      return {rot:l,v,cor:k==='sem'?'var(--mu2)':k==='concluido'?'var(--ok)':COR_SERIE,f:{card:k,d:'Pendentes · '+(k==='sem'?'sem card':'card em '+l)},tip:[fmtM(v),`${intf(ns.length)} notas pendentes · ${brl(ns.reduce((s,o)=>s+(o.valor||0),0))}`]}; }).filter(i=>i.v>0);
     out.push(caixa('Pendentes no Controle de Notas','Em que coluna do quadro estão as notas sem lançamento — clique para ver as notas',barrasSimples(itC,fmtCurto)));
   }
 
   // 6. Fornecedores com mais pendência
   const forn=new Map(); pend.forEach(o=>{ const k=o.emitente||'(sem nome)'; const x=forn.get(k)||{v:0,n:0,vl:0}; x.v+=med(o); x.n++; x.vl+=o.valor||0; forn.set(k,x); });
-  const itF=[...forn].sort((a,b)=>b[1].v-a[1].v).slice(0,10).map(([k,x])=>({rot:k,v:x.v,cor:'#3987e5',f:{forn:k,d:'Pendentes de '+k},tip:[`${intf(x.n)} notas pendentes`,brl(x.vl)]}));
+  const itF=[...forn].sort((a,b)=>b[1].v-a[1].v).slice(0,10).map(([k,x])=>({rot:k,v:x.v,cor:COR_SERIE,f:{forn:k,d:'Pendentes de '+k},tip:[`${intf(x.n)} notas pendentes`,brl(x.vl)]}));
   out.push(caixa('Fornecedores com mais notas pendentes',MED==='valor'?'Os 10 maiores em valor ainda não lançado':'Os 10 com mais notas ainda não lançadas',
     itF.length?barrasSimples(itF,fmtCurto):vazioG('Nenhuma nota pendente. ✅')));
 
@@ -1161,6 +1210,7 @@ document.addEventListener('click',e=>{ if(!$('#popCfg').hidden&&!e.target.closes
 $('#cfgDias').onchange=()=>{ lsSet('validador-nf-dias',String(dias())); if(LIDAS.length)processar(); };
 VISTA=lsGet('validador-nf-vista','tab')==='graf'?'graf':'tab';
 $('#segVista').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===VISTA));
+try{ aplicarTema(localStorage.getItem('painel-tema')||''); }catch(e){}
 ensureXLSX().catch(()=>{});
 conectar();
 </script>
