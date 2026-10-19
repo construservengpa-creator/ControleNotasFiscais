@@ -3986,6 +3986,16 @@ function precisaXmlCte(nota) {
   return !!(nota.freteCteChave || ehChaveCte(nota.chaveAcesso)) && !nota.cteXmlRecebidoEm && !nota.cteXmlDispensadoEm;
 }
 
+// O banco liga sozinho a nota fiscal ao card de um CT-e que chegou antes (ver
+// 20261019_cte_vinculo_inverso.sql) — avisa quando isso aconteceu ao gravar a nota.
+function avisoVinculoCteAuto(chaveAntes, notaGravada) {
+  if (!notaGravada || !notaGravada.freteCteChave || notaGravada.freteCteChave === chaveAntes) return '';
+  let aviso = ` Frete ligado ao CT-e ${notaGravada.freteCte || notaGravada.freteCteChave}${notaGravada.freteTransportador ? ' de ' + notaGravada.freteTransportador : ''}, que já estava importado — o card do CT-e foi encerrado`;
+  aviso += notaGravada.freteLancamentoPendente ? ' e o lançamento do frete ficou pendente nesta nota.' : '.';
+  if (precisaXmlCte(notaGravada)) aviso += ' Anexe o XML do CT-e nesta nota antes de movê-la.';
+  return aviso;
+}
+
 // Lê no navegador o XML do CT-e (cteProc/CTe) e devolve só o que a análise usa.
 function lerXmlCte(texto) {
   const doc = new DOMParser().parseFromString(texto, 'application/xml');
@@ -4101,6 +4111,7 @@ function wireCteXmlSection(id, onRefresh) {
       const naoReabertas = vinculadas.filter((v) => v.erro);
       if (naoReabertas.length) partes.push(`Não foi possível reabrir a(s) NF ${naoReabertas.map((v) => v.numeroNota).join(', ')}: ${naoReabertas[0].erro}`);
       if (r.cardEncerrado) partes.push('Este card do CT-e foi encerrado — o lançamento do frete segue na(s) nota(s) fiscal(is).');
+      if (r.cardCteEncerrado) partes.push(`O card próprio do CT-e ${r.cardCteEncerrado.numero || ''} foi encerrado — o lançamento do frete segue na(s) nota(s) fiscal(is).`);
       if (r.ignoradas && r.ignoradas.length) partes.push(`Não alterada(s) por já ter(em) outro CT-e: NF ${r.ignoradas.map((v) => v.numeroNota).join(', ')}.`);
       if (r.nfesNaoEncontradas && r.nfesNaoEncontradas.length) partes.push(`${r.nfesNaoEncontradas.length} NF-e citada(s) no CT-e não está(ão) no Controle de Notas.`);
       if (r.cardCte && !vinculadas.length) partes.push('Nenhuma nota fiscal deste CT-e foi encontrada — o card segue liberado para o lançamento do frete.');
@@ -5247,8 +5258,8 @@ async function openEditModal(id) {
         }
       }
       try {
-        await api.put(`/api/notas/${id}`, body);
-        toast('Nota atualizada com sucesso.', 'success');
+        const { nota: notaGravada } = await api.put(`/api/notas/${id}`, body);
+        toast('Nota atualizada com sucesso.' + avisoVinculoCteAuto(nota.freteCteChave, notaGravada), 'success');
         closeModal();
         // A edição pode ter sido aberta tanto do Quadro quanto da lista de
         // "Últimos cadastros" — atualiza qualquer que seja a tela visível.
@@ -5339,6 +5350,7 @@ function setupCadastroForm() {
           ? ` ${anexosOk} documento(s) anexado(s).`
           : ` ${anexosOk} documento(s) anexado(s), ${anexosErro} falharam.`;
       }
+      msgFinal += avisoVinculoCteAuto(null, nota);
       toast(msgFinal, anexosErro > 0 ? 'error' : 'success');
       ev.target.reset();
       document.getElementById('nfFrete').value = 'nao';
