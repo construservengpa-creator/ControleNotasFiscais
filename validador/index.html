@@ -408,7 +408,9 @@ html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.1
    - Validações: chave de acesso (44 dígitos, dígito verificador e conferência com CNPJ/UF/mês/série/número),
      duplicidades, empresa não cadastrada, datas, valor, manifesto x lançamento e prazos de pendência.
    Tudo roda no navegador; a planilha não sai do computador. */
-const XLSX_SRC='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+// Leitor de planilhas: 0.20.3 do site oficial (a 0.18.5 do npm/cdnjs tem falhas conhecidas ao ler planilhas
+// montadas de propósito — CVE-2023-30533, CVE-2024-22363); a 0.18.5 só entra se o site oficial não responder.
+const XLSX_FONTES=['https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js','https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'];
 
 // CNPJ do destinatário → empresa (igual à coluna condicional "Personalizar" do Power Query).
 const EMPRESAS={
@@ -472,8 +474,14 @@ const fmtCNPJ=s=>{ const d=soAlnum(s); return d.length===14?`${d.slice(0,2)}.${d
 const lsGet=(k,def)=>{ try{ const v=localStorage.getItem(k); return v==null?def:v; }catch(e){ return def; } };
 const lsSet=(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} };
 
-function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('Não consegui carregar o leitor de Excel — confira a internet.')); document.head.appendChild(s); }); }
-async function ensureXLSX(){ if(typeof XLSX==='undefined')await loadScript(XLSX_SRC); }
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>{ s.remove(); rej(new Error('Não consegui carregar o leitor de Excel — confira a internet.')); }; document.head.appendChild(s); }); }
+let _xlsxP=null;
+function ensureXLSX(){
+  if(typeof XLSX!=='undefined')return Promise.resolve();
+  return _xlsxP||(_xlsxP=(async()=>{ let erro;
+    for(const [i,src] of XLSX_FONTES.entries()){ try{ await loadScript(src); if(i)console.warn('Leitor de planilhas: usando a versão de reserva ('+src+').'); return; }catch(e){ erro=e; } }
+    _xlsxP=null; throw erro; })());
+}
 
 /* ---------- leitura dos campos ---------- */
 function paraData(v){
@@ -991,17 +999,21 @@ function exportar(){
    Tudo passa pelas permissões do banco (RLS): cada um vê e altera só o que já podia no quadro. */
 const SUPABASE_URL='https://kygainafarusnsstvvhc.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable_rpMqd16T_46CPrBrOeYldw_6DCwYx8v';
-const sbc=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
+const ARQUIVO_LOCAL=location.protocol==='file:';
+const sbc=window.supabase&&!(window.parent&&window.parent!==window&&(()=>{ try{ return window.parent.location.origin!==location.origin; }catch(e){ return true; } })())
+  ?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,ARQUIVO_LOCAL?{auth:{storage:window.sessionStorage,storageKey:'validador-nf-local'}}:undefined):null;
 const COLUNAS_CARD=[['importadas_sienge','Importadas SIENGE'],['entradas','Entradas'],['lancamento','Lançamento'],['financeiro_cx','Financeiro/CX'],['pendencias','Pendências'],['concluido','Finalização']];
 const COL_LABEL=Object.fromEntries(COLUNAS_CARD);
 const CARD_SEL='id,numero,fornecedor,status,assigned_to,created_by,chave_acesso,numero_titulo,obra_id,origem,created_at';
 const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD'];
 const EMBUTIDO=window.parent&&window.parent!==window;
+const EMBUTIDO_ESTRANHO=EMBUTIDO&&(()=>{ try{ return window.parent.location.origin!==location.origin; }catch(e){ return true; } })();
 let EU=null, CARDS_OK=false, USUARIOS=null;
 if(EMBUTIDO)document.body.classList.add('emb');
 
 function conn(t,cl){ const e=$('#conn'); e.textContent=t; e.className='conn'+(cl?' '+cl:''); }
 async function conectar(){
+  if(EMBUTIDO_ESTRANHO){ conn('Aberto dentro de outro site — integração desligada. Abra pelo Controle de Notas.','off'); return; }
   if(!sbc){ conn('Controle de Notas indisponível (sem conexão)','off'); return; }
   try{
     const {data:{session}}=await sbc.auth.getSession();
@@ -1306,6 +1318,7 @@ $('#bCriar').onclick=async()=>{
 };
 $('#bAvisar').onclick=async()=>{
   if(!CARDS_OK)return alert('Aguarde a consulta dos cards terminar.');
+  const LIMITE_AVISOS=300;
   const lst=filtradas().filter(o=>o.card);
   $('#dlgT').textContent='Avisar sobre as notas filtradas';
   if(!lst.length){ $('#dlgB').innerHTML='<p>Nenhuma das notas filtradas tem card no Controle de Notas — o aviso vai no diálogo do card. Use “➕ Criar cards que faltam” ou mude os filtros.</p>'; $('#dlg').showModal(); return; }
@@ -1318,7 +1331,9 @@ $('#bAvisar').onclick=async()=>{
       <div class="r"><button class="btn pri" id="loEnv">Enviar para ${intf(lst.length)} card(s)</button><span id="loMsg"></span></div>
     </form>`;
   $('#dlg').showModal();
+  if(new Set(lst.map(o=>o.card.id)).size>LIMITE_AVISOS){ $('#loEnv').disabled=true; $('#loMsg').innerHTML=`<span class="errmsg">São mais de ${LIMITE_AVISOS} cards — filtre mais (por empresa, pessoa, status…) e envie em partes.</span>`; }
   $('#fLote').onsubmit=async e=>{ e.preventDefault(); const t=$('#loTxt').value.trim(), dest=$('#loDest').value; if(!t)return;
+    if(new Set(lst.map(o=>o.card.id)).size>LIMITE_AVISOS)return;
     if(!confirm(`Enviar a mensagem para ${lst.length} card(s)?`))return;
     $('#loEnv').disabled=true; $('#loMsg').textContent='Enviando…';
     const vistos=new Set(), linhas=[];

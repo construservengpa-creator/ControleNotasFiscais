@@ -2575,17 +2575,34 @@ function fmtDuration(ms) {
 function initials(name) { if (!name) return '?'; return name.split(' ').filter(Boolean).slice(0, 2).map((p) => p[0].toUpperCase()).join(''); }
 // Leitor de planilhas (~900 KB) só é baixado quando alguém importa o
 // relatório do SIENGE — antes era carregado em toda abertura do sistema.
+// Versão 0.20.3, do site oficial da SheetJS: a 0.18.5 (última publicada no npm/cdnjs) tem falhas conhecidas
+// ao ler planilhas montadas de propósito (CVE-2023-30533, CVE-2024-22363). Se o site oficial não responder,
+// usa a 0.18.5 para não deixar a importação parada (e avisa no console).
+const XLSX_FONTES = [
+  'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+];
 let XLSX_PROMISE = null;
 function carregarXLSX() {
   if (typeof XLSX !== 'undefined') return Promise.resolve();
   if (!XLSX_PROMISE) {
-    XLSX_PROMISE = new Promise((resolve, reject) => {
-      const sc = document.createElement('script');
-      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-      sc.onload = resolve;
-      sc.onerror = () => { XLSX_PROMISE = null; sc.remove(); reject(new Error('xlsx')); };
-      document.head.appendChild(sc);
-    });
+    XLSX_PROMISE = (async () => {
+      for (const [i, src] of XLSX_FONTES.entries()) {
+        try {
+          await new Promise((resolve, reject) => {
+            const sc = document.createElement('script');
+            sc.src = src;
+            sc.onload = resolve;
+            sc.onerror = () => { sc.remove(); reject(new Error('xlsx')); };
+            document.head.appendChild(sc);
+          });
+          if (i > 0) console.warn('Leitor de planilhas: usando a versão de reserva (' + src + ').');
+          return;
+        } catch (e) { /* tenta a próxima fonte */ }
+      }
+      XLSX_PROMISE = null;
+      throw new Error('xlsx');
+    })();
   }
   return XLSX_PROMISE;
 }
