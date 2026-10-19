@@ -157,6 +157,115 @@ body.emb .top .cap-selo{display:none}
 .fchat .r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .okmsg{color:var(--ok);font-size:12.5px} .errmsg{color:var(--bad);font-size:12.5px}
 .cfg input{width:64px;background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+
+/* ===== visual leve ===== */
+:root{ --bg:#1C1F24; --s1:#24282E; --s2:#2C3138; --line:#353B44; --mu:#949CA8; --mu2:#6F7783; }
+html,body{font-size:14px}
+.top{gap:12px;padding:10px 20px;border-bottom:1px solid var(--line);position:relative;flex-wrap:wrap}
+.top h1{flex:0 0 auto;min-width:0;font:600 17px/1 var(--f-head);letter-spacing:.06em}
+.top .esp,.ctx .esp{flex:1}
+.arq{display:inline-flex;align-items:center;gap:6px;color:var(--mu);font-size:12.5px;min-width:0}
+.arq #arqNome{color:var(--tx);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arq .sep{color:var(--mu2)}
+.lnk{background:none;border:0;padding:0;color:var(--info);font-weight:500;cursor:pointer}
+.lnk:hover{text-decoration:underline}
+.conn{font-size:12px;max-width:none;white-space:nowrap}
+.btn{border-radius:9px;padding:8px 13px;font-weight:600;background:var(--s2);border-color:transparent}
+.btn:hover{filter:brightness(1.12)}
+.btn.sm{padding:6px 11px;font-size:13px}
+.ib{background:none;border:1px solid transparent;border-radius:9px;color:var(--mu);height:32px;min-width:32px;font-size:16px;cursor:pointer}
+.ib:hover{background:var(--s2);color:var(--tx)}
+.ib.sm{height:28px;min-width:28px;font-size:15px}
+.pop{position:absolute;right:16px;top:calc(100% + 6px);z-index:20;width:300px;background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:0 12px 30px rgba(0,0,0,.4)}
+.pop label{display:flex;align-items:center;gap:8px;font-size:13px}
+.pop input{width:62px;background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+.pop p{margin:8px 0 0;color:var(--mu);font-size:12px}
+main{padding:18px 20px;max-width:1500px}
+body.emb main{padding:14px 16px}
+
+.drop{border:1.5px dashed var(--line);background:none;border-radius:16px;padding:56px 20px;max-width:720px;margin:6vh auto 0}
+.drop:hover,.drop.on{border-color:var(--ac);background:rgba(245,196,51,.04)}
+.drop-ic{font-size:34px;margin-bottom:8px}
+.drop h2{font:600 19px var(--f-head);letter-spacing:.04em;margin:0 0 8px}
+.drop ul{list-style:none;padding:0;margin:18px 0 0;display:flex;flex-direction:column;gap:4px;color:var(--mu2);font-size:12.5px}
+.drop ul li::before{content:"✓  ";color:var(--ok)}
+
+.kpis{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:0 0 16px}
+.kpi{background:var(--s1);border:1px solid transparent;border-radius:14px;padding:14px 16px;transition:border-color .15s}
+.kpi:hover{border-color:var(--line)}
+.kpi.sel{outline:none;border-color:var(--ac)}
+.kpi .l{font-size:11.5px;letter-spacing:.06em;color:var(--mu)}
+.kpi .v{font:700 26px/1.15 var(--f-mono);margin:4px 0 2px;color:var(--tx)}
+.kpi .s{font-size:12px;color:var(--mu)}
+.kpi .s b{font-weight:600;color:var(--tx)}
+.kpi .barra-k{display:flex;gap:2px;height:4px;border-radius:2px;overflow:hidden;margin-top:9px;background:var(--s2)}
+.kpi .barra-k i{display:block;height:100%}
+.kpi.ok .v{color:var(--ok)} .kpi.warn .v{color:var(--warn)} .kpi.bad .v{color:var(--bad)} .kpi.ac .v{color:var(--ac)}
+
+.barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px}
+.barra input,.barra select{background:var(--s1);border:1px solid transparent;border-radius:9px;padding:8px 10px;min-width:0;height:36px}
+.barra input:focus,.barra select:focus{outline:none;border-color:var(--line)}
+.barra input{flex:1 1 220px}
+.barra select{flex:0 1 auto;max-width:220px;color:var(--mu)}
+.barra select.ativo{color:var(--tx);border-color:rgba(245,196,51,.45)}
+.seg{background:var(--s1);border:0;border-radius:9px;padding:3px}
+.seg button{padding:5px 12px;font-size:13px}
+.seg.sm button{padding:3px 10px;font-size:12px}
+.ctx{display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-height:34px;margin:0 0 10px}
+.ctx .info{margin:0;font-size:12.5px}
+.chip{background:rgba(245,196,51,.12);color:var(--ac);border:0;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600}
+.acoes{display:inline-flex;gap:6px;align-items:center}
+
+.cols2{grid-template-columns:minmax(0,1fr) 300px;gap:16px}
+.tw{border:0;border-radius:14px;background:var(--s1);max-height:calc(100vh - 330px);min-height:320px}
+table{font-size:13px}
+th,td{padding:9px 10px;border-bottom:1px solid rgba(255,255,255,.045)}
+th{background:var(--s1);color:var(--mu);font-weight:500;font-size:12px;border-bottom:1px solid var(--line)}
+tbody tr:hover{background:var(--s2)}
+tr.lvE td:first-child,tr.lvA td:first-child,tr.lvOK td:first-child{box-shadow:none}
+td.cel-emit{max-width:300px;overflow:hidden;text-overflow:ellipsis}
+td.cel-emit small{display:block;color:var(--mu2);font-size:11.5px;overflow:hidden;text-overflow:ellipsis}
+td.cel-oc{max-width:340px;overflow:hidden;text-overflow:ellipsis;color:var(--mu);font-size:12.5px}
+td.cel-oc .mais-oc{color:var(--mu2);margin-left:4px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle}
+.dot.E{background:var(--bad)} .dot.A{background:var(--warn)} .dot.OK{background:var(--ok);opacity:.55} .dot.I{background:var(--info)}
+.st{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.st i{width:7px;height:7px;border-radius:50%;display:inline-block}
+.cardt{font-size:12px;color:var(--info);white-space:nowrap}
+.cardt.fim{color:var(--ok)} .cardt.sem{color:var(--mu2)}
+
+.cel-nf small,.cel-st small{display:block;color:var(--mu2);font-size:11.5px;margin-top:1px}
+.cel-st small .cardt{font-size:11.5px}
+td.cel-emit{max-width:260px}
+td.cel-oc{max-width:260px}
+.cols2{grid-template-columns:minmax(0,1fr) 270px}
+.barra select{max-width:180px}
+.barra input{flex:1 1 180px}
+#vTab table{table-layout:fixed;min-width:760px}
+#vTab th:nth-child(1){width:30px} #vTab th:nth-child(2){width:112px} #vTab th:nth-child(4){width:108px}
+#vTab th:nth-child(5){width:178px} #vTab th:nth-child(6){width:54px}
+#vTab td{overflow:hidden;text-overflow:ellipsis}
+#vTab td.cel-emit,#vTab td.cel-oc{max-width:none}
+#vTab td.cel-oc{white-space:normal}
+.oc2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35}
+.painel{background:var(--s1);border-radius:14px;padding:14px 14px 10px;align-self:start;position:sticky;top:12px}
+.painel h3{font:600 13px var(--f-head);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px;color:var(--mu)}
+.grp{margin:0 0 12px}
+.grp>summary,.grp>.gt{list-style:none;display:flex;align-items:center;gap:7px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mu2);margin:0 0 4px;cursor:default}
+.grp>summary{cursor:pointer}
+.grp>summary::-webkit-details-marker{display:none}
+.regra{background:none;border:0;border-radius:8px;padding:7px 8px;gap:10px;font-size:13px;line-height:1.35;color:var(--tx)}
+.regra:hover{background:var(--s2)}
+.regra.sel{background:rgba(245,196,51,.1);border:0;box-shadow:inset 3px 0 var(--ac)}
+.regra .n{font:600 12.5px var(--f-mono);color:var(--mu)}
+.regra:disabled{opacity:.35}
+.painel .vazio-r{color:var(--mu);font-size:13px;margin:0}
+
+.graf{gap:16px}
+.box{background:var(--s1);border:0;border-radius:14px;padding:16px 18px}
+dialog{border:0;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.ocl li{background:none;border-left:3px solid var(--line);border-radius:0;padding:4px 10px}
+@media(max-width:700px){ .top{padding:10px 16px} main{padding:14px 16px} .barra select{flex:1 1 45%;max-width:none} .kpi .v{font-size:22px} }
 </style>
 </head>
 <body>
@@ -165,60 +274,73 @@ body.emb .top .cap-selo{display:none}
 </svg>
 
 <header class="top">
-  <span class="cap-selo"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></span>
-  <h1>Validador de Notas Fiscais<small id="sub">Confere os lançamentos do relatório de NF-e do SIENGE (aba “Relatório”) e cruza com os cards do Controle de Notas — o arquivo é lido só neste navegador.</small></h1>
-  <span class="conn" id="conn">Controle de Notas: verificando…</span>
-  <button class="btn" id="bEntrar" hidden>Entrar no Controle de Notas</button>
-  <label class="cfg" title="Notas pendentes (sem manifestação, só ciência ou confirmadas sem lançamento) há mais dias que isto viram alerta">Alertar pendência após <input id="cfgDias" type="number" min="1" max="365" value="30"> dias</label>
-  <button class="btn" id="bOutro" hidden>Abrir outro arquivo</button>
-  <button class="btn pri" id="bExp" hidden>⬇ Exportar Excel</button>
+  <h1>Validador de NF</h1>
+  <span class="arq" id="arqChip" hidden><span id="arqNome"></span><span class="sep">·</span><span id="arqQtd"></span><button class="lnk" id="bOutro">trocar arquivo</button></span>
+  <span class="esp"></span>
+  <span class="conn" id="conn">verificando login…</span>
+  <button class="btn sm" id="bEntrar" hidden>Entrar</button>
+  <button class="btn sm" id="bExp" hidden>⬇ Exportar</button>
+  <button class="ib" id="bCfg" title="Ajustes">⚙</button>
+  <div class="pop" id="popCfg" hidden>
+    <label>Alertar pendência após <input id="cfgDias" type="number" min="1" max="365" value="30"> dias</label>
+    <p>Notas sem manifestação, só com ciência ou confirmadas e sem lançamento há mais dias que isto viram alerta.</p>
+  </div>
 </header>
 
 <main>
   <input type="file" id="arq" accept=".xlsx,.xls,.xlsm,.csv" hidden>
   <section id="vDrop" class="drop" tabindex="0">
-    <h2>Solte aqui o relatório de notas</h2>
-    <p>ou toque para escolher o arquivo — ex.: <code>Relatório 2026.xlsx</code></p>
-    <p>Usa as mesmas regras da consulta do Power BI: empresa pelo CNPJ do destinatário, Número/Série separados, UF do emitente vazia = PA e status pelo manifesto e pelo título.</p>
+    <div class="drop-ic">📄</div>
+    <h2>Carregue o relatório de notas do SIENGE</h2>
+    <p>Arraste o arquivo para cá ou <span class="lnk">escolha no computador</span> — ex.: <code>Relatório 2026.xlsx</code></p>
+    <ul>
+      <li>Confere chave de acesso, duplicidades, datas, valor e manifesto × lançamento</li>
+      <li>Mostra quais pendentes já têm card no Controle de Notas</li>
+      <li>O arquivo é lido só neste navegador</li>
+    </ul>
   </section>
   <div id="msg"></div>
 
   <section id="vRes" hidden>
     <div class="kpis" id="kpis"></div>
-    <div class="filtros">
-      <input id="fBusca" type="search" placeholder="Buscar emitente, CNPJ, número, chave, título…">
+
+    <div class="barra">
+      <div class="seg" id="segVista"><button data-v="tab" class="on">Tabela</button><button data-v="graf">Gráficos</button></div>
+      <input id="fBusca" type="search" placeholder="Buscar emitente, CNPJ, número, chave…">
       <select id="fEmp"></select>
       <select id="fSt"></select>
       <select id="fVal">
-        <option value="">Todas as validações</option>
+        <option value="">Validação: todas</option>
+        <option value="EA">Com erro ou alerta</option>
         <option value="E">Só com erro</option>
         <option value="A">Só com alerta</option>
-        <option value="EA">Erro ou alerta</option>
         <option value="OK">Só OK</option>
       </select>
       <select id="fCard" hidden></select>
     </div>
-    <div class="acoes" id="acoes" hidden>
-      <button class="btn" id="bAvisar" title="Manda uma mensagem no diálogo de cada card das notas filtradas — aparece no 💬 de quem recebe">🔔 Avisar sobre as notas filtradas</button>
-      <button class="btn" id="bCriar" hidden title="Cria em “Importadas SIENGE” os cards das notas pendentes filtradas que ainda não têm card">➕ Criar cards que faltam</button>
-      <button class="btn" id="bRecarregar" title="Consulta de novo os cards no Controle de Notas">⟳ Atualizar cards</button>
+
+    <div class="ctx">
+      <span class="info" id="info"></span>
+      <button class="chip" id="bChip" hidden title="Tirar este filtro"></button>
+      <button class="lnk" id="bLimpa" hidden>Limpar filtros</button>
+      <span class="esp"></span>
+      <div class="seg sm" id="segMed" hidden><button data-m="qtd" class="on">Quantidade</button><button data-m="valor">Valor</button></div>
+      <span class="acoes" id="acoes" hidden>
+        <button class="btn sm" id="bAvisar" title="Manda uma mensagem no diálogo de cada card das notas filtradas — aparece no 💬 de quem recebe">🔔 Avisar</button>
+        <button class="btn sm" id="bCriar" hidden title="Cria em “Importadas SIENGE” os cards das notas pendentes filtradas que ainda não têm card">＋ Criar cards</button>
+        <button class="ib sm" id="bRecarregar" title="Consultar de novo os cards no Controle de Notas">⟳</button>
+      </span>
     </div>
-    <div class="abas">
-      <div class="seg" id="segVista"><button data-v="tab" class="on">☰ Tabela</button><button data-v="graf">📊 Gráficos</button></div>
-      <div class="seg" id="segMed" hidden><button data-m="qtd" class="on">Quantidade</button><button data-m="valor">Valor (R$)</button></div>
-      <p class="info" id="info"></p>
-      <button class="btn" id="bChip" hidden title="Tirar este filtro"></button>
-      <button class="btn" id="bLimpa" hidden>✕ Limpar filtros</button>
-    </div>
+
     <div id="vGraf" class="graf" hidden></div>
     <div class="cols2" id="vTab">
       <div>
         <div class="tw"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
         <button class="btn mais" id="bMais" hidden>Mostrar mais</button>
       </div>
-      <aside class="box">
-        <h3>Ocorrências por regra</h3>
-        <div class="regras" id="regras"></div>
+      <aside class="painel">
+        <h3>O que conferir</h3>
+        <div id="regras"></div>
       </aside>
     </div>
   </section>
@@ -482,9 +604,8 @@ const txtRegra=(c,dias)=>REGRAS[c][1].replace('{d}',dias);
 /* ---------- tela ---------- */
 let ROWS=[], ARQ='', ABA='', LIMITE=300, ORD={k:'linha',dir:1}, F={kpi:'',regra:''};
 const COLS_TAB=[
-  ['linha','Linha','num'],['nivel','Validação'],['status','Status'],['cardCol','Card'],['empresa','Empresa'],['emitente','Emitente'],
-  ['numero','Número NF','num'],['serie','Série','num'],['emissao','Emissão'],['recebimento','Recebimento'],
-  ['valor','Valor','num'],['manifesto','Manifesto'],['titulo','Título','num'],['idade','Dias','num'],['ocTexto','Ocorrências']
+  ['nivel','','dotc'],['numero','NF'],['emitente','Emitente'],['valor','Valor','num'],
+  ['status','Status'],['idade','Dias','num'],['ocTexto','Ocorrência']
 ];
 const dias=()=>Math.max(1,parseInt($('#cfgDias').value,10)||30);
 
@@ -505,12 +626,12 @@ async function abrirArquivo(file){
 let LIDAS=[];
 function processar(){
   ROWS=tratar(LIDAS,dias());
-  $('#vDrop').hidden=true; $('#vRes').hidden=false; $('#bOutro').hidden=false; $('#bExp').hidden=false;
-  $('#sub').textContent=`${ARQ} · aba “${ABA}” · ${intf(ROWS.length)} notas`;
+  $('#vDrop').hidden=true; $('#vRes').hidden=false; $('#arqChip').hidden=false; $('#bExp').hidden=false;
+  $('#arqNome').textContent=ARQ; $('#arqNome').title=`${ARQ} · aba “${ABA}”`; $('#arqQtd').textContent=intf(ROWS.length)+' notas';
   const emps=[...new Set(ROWS.map(o=>o.empresa||'(não cadastrada)'))].sort();
-  $('#fEmp').innerHTML='<option value="">Todas as empresas</option>'+emps.map(e=>`<option>${esc(e)}</option>`).join('');
+  $('#fEmp').innerHTML='<option value="">Empresa: todas</option>'+emps.map(e=>`<option>${esc(e)}</option>`).join('');
   const sts=STATUS_ORDEM.filter(s=>ROWS.some(o=>o.status===s));
-  $('#fSt').innerHTML='<option value="">Todos os status</option>'+sts.map(s=>`<option>${esc(s)}</option>`).join('');
+  $('#fSt').innerHTML='<option value="">Status: todos</option>'+sts.map(s=>`<option>${esc(s)}</option>`).join('');
   if(CARDS_OK){ aplicarCards(); }
   desenhar();
   if(EU&&!CARDS_OK)buscarCards(ROWS);
@@ -536,27 +657,34 @@ function desenhar(){
   // KPIs sobre o recorte de empresa/status atual (sem o filtro do próprio KPI).
   const soma=a=>a.reduce((s,o)=>s+(o.valor||0),0);
   const cont=(f)=>{ const a=ROWS.filter(f); return [a.length,soma(a)]; };
+  const pctd=(n,t)=>t?(n/t*100).toLocaleString('pt-BR',{maximumFractionDigits:0})+'%':'0%';
+  const nTot=ROWS.length, lanc=ROWS.filter(o=>o.status==='Lançado'), pend=ROWS.filter(ehPendente);
+  const conf=pend.filter(o=>o.status==='Apenas Confirmação').length, pnd=pend.filter(o=>o.status==='Pendente').length, agu=pend.filter(o=>o.status==='Aguardando Confirmação').length;
+  const nE=ROWS.filter(o=>o.nivel==='E').length, nA=ROWS.filter(o=>o.nivel==='A').length, naoR=ROWS.filter(o=>o.status==='Não realizada'||o.status==='Desconhecida').length;
+  const barraK=parts=>`<div class="barra-k">${parts.filter(([v])=>v).map(([v,c])=>`<i style="flex:${v};background:${c}"></i>`).join('')}</div>`;
   const ks=[
-    ['Notas','',()=>true,'ac'],
-    ['Lançadas','',o=>o.status==='Lançado','ok'],
-    ['Confirmadas sem lançamento','',o=>o.status==='Apenas Confirmação','warn'],
-    ['Pendentes / aguardando','',o=>o.status==='Pendente'||o.status==='Aguardando Confirmação','warn'],
-    ['Não realizadas','',o=>o.status==='Não realizada'||o.status==='Desconhecida',''],
-    ['Com erro','',o=>o.nivel==='E','bad'],
-    ['Com alerta','',o=>o.nivel==='A','warn'],
+    {k:'tot',l:'Notas no relatório',v:intf(nTot),s:`${brl(soma(ROWS))}${naoR?` · ${intf(naoR)} não realizadas`:''}`,f:null},
+    {k:'lanc',l:'Lançadas',v:intf(lanc.length),cl:'ok',s:`<b>${pctd(lanc.length,nTot)}</b> das notas · ${brl(soma(lanc))}`,f:o=>o.status==='Lançado',bar:barraK([[lanc.length,'var(--ok)'],[nTot-lanc.length,'transparent']])},
+    {k:'pend',l:'Pendentes de lançamento',v:intf(pend.length),cl:'warn',s:`${intf(conf)} confirmadas · ${intf(pnd)} pendentes · ${intf(agu)} aguardando`,f:ehPendente,
+      bar:barraK([[conf,COR_ST['Apenas Confirmação']],[pnd,COR_ST['Pendente']],[agu,COR_ST['Aguardando Confirmação']]])},
+    {k:'aten',l:'Precisam de atenção',v:intf(nE+nA),cl:nE?'bad':'warn',s:`<b style="color:var(--bad)">${intf(nE)}</b> com erro · ${intf(nA)} com alerta`,f:o=>o.nivel!=='OK'},
   ];
-  if(CARDS_OK)ks.push(['Pendentes com card','',o=>ehPendente(o)&&!!o.card,'ac'],['Pendentes sem card','',o=>ehPendente(o)&&!o.card,'']);
-  $('#kpis').innerHTML=ks.map(([l,,f,cl],i)=>{ const [n,v]=cont(f);
-    return `<button class="kpi ${cl}${F.kpiI===i&&F.kpi?' sel':''}" data-k="${i}"><div class="l">${esc(l)}</div><div class="v">${intf(n)}</div><div class="s">${brl(v)}</div></button>`; }).join('');
-  $('#kpis').querySelectorAll('.kpi').forEach(b=>b.onclick=()=>{ const i=+b.dataset.k; if(F.kpiI===i&&F.kpi||i===0){F.kpi='';F.kpiI=null;}else{F.kpi=ks[i][2];F.kpiI=i;} LIMITE=300; desenhar(); });
+  if(CARDS_OK){ const cc=pend.filter(o=>o.card).length;
+    ks.push({k:'card',l:'Pendentes já com card',v:intf(cc),cl:'ac',s:`${intf(pend.length-cc)} pendentes ainda sem card`,f:o=>ehPendente(o)&&!!o.card,bar:barraK([[cc,'var(--ac)'],[pend.length-cc,'transparent']])}); }
+  $('#kpis').innerHTML=ks.map(x=>`<button class="kpi ${x.cl||''}${F.kpiK===x.k&&F.kpi?' sel':''}" data-k="${x.k}"><div class="l">${esc(x.l)}</div><div class="v">${x.v}</div><div class="s">${x.s}</div>${x.bar||''}</button>`).join('');
+  $('#kpis').querySelectorAll('.kpi').forEach(b=>b.onclick=()=>{ const x=ks.find(y=>y.k===b.dataset.k); if(!x.f||F.kpiK===x.k&&F.kpi){F.kpi='';F.kpiK=null;}else{F.kpi=x.f;F.kpiK=x.k;} LIMITE=300; desenhar(); });
 
   // Regras
   // Contagem dentro dos outros filtros ativos (sem o da própria regra), para o número bater com a lista ao clicar.
   const cnt={}; ROWS.forEach(o=>new Set(o.oc.map(x=>x.c)).forEach(c=>cnt[c]=0));
   filtradas(true).forEach(o=>new Set(o.oc.map(x=>x.c)).forEach(c=>cnt[c]++));
   const ordem={E:0,A:1,I:2}, regras=Object.keys(cnt).sort((a,b)=>(!cnt[a])-(!cnt[b])||ordem[REGRAS[a][0]]-ordem[REGRAS[b][0]]||cnt[b]-cnt[a]);
-  $('#regras').innerHTML=(temFiltro()?'<p class="info" style="margin:0 0 4px">Contagem dentro dos filtros atuais.</p>':'')+(regras.length?regras.map(c=>`<button class="regra${F.regra===c?' sel':''}" data-c="${c}"${cnt[c]||F.regra===c?'':' disabled title="Nenhuma nota com esta ocorrência nos filtros atuais"'}><span><span class="tag ${REGRAS[c][0]}">${{E:'Erro',A:'Alerta',I:'Info'}[REGRAS[c][0]]}</span> ${esc(txtRegra(c,dias()))}</span><span class="n">${intf(cnt[c])}</span></button>`).join('')
-    :'<p class="info" style="margin:0">Nenhuma ocorrência — todas as notas passaram nas conferências. ✅</p>');
+  const btnR=c=>`<button class="regra${F.regra===c?' sel':''}" data-c="${c}"${cnt[c]||F.regra===c?'':' disabled title="Nenhuma nota com esta ocorrência nos filtros atuais"'}><span>${esc(txtRegra(c,dias()))}</span><span class="n">${intf(cnt[c])}</span></button>`;
+  const grupo=(nv,t,aberto)=>{ const rs=regras.filter(c=>REGRAS[c][0]===nv); if(!rs.length)return '';
+    const tot=rs.reduce((a,c)=>a+cnt[c],0), cab=`<span class="dot ${nv}"></span>${t}<span style="margin-left:auto">${intf(tot)}</span>`;
+    return nv==='I'?`<details class="grp"${aberto||rs.includes(F.regra)?' open':''}><summary>${cab} ▾</summary>${rs.map(btnR).join('')}</details>`:`<div class="grp"><div class="gt">${cab}</div>${rs.map(btnR).join('')}</div>`; };
+  $('#regras').innerHTML=regras.length?grupo('E','Erros')+grupo('A','Alertas')+grupo('I','Informações')
+    :'<p class="vazio-r">Nenhuma ocorrência — todas as notas passaram nas conferências. ✅</p>';
   $('#regras').querySelectorAll('.regra').forEach(b=>b.onclick=()=>{ F.regra=F.regra===b.dataset.c?'':b.dataset.c; LIMITE=300; desenhar(); });
 
   // Tabela
@@ -568,27 +696,25 @@ function desenhar(){
   $('#th').innerHTML='<tr>'+COLS_TAB.map(([c,t,cl])=>`<th class="${cl||''}" data-c="${c}">${esc(t)}${ORD.k===c?(ORD.dir>0?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
   $('#th').querySelectorAll('th').forEach(th=>th.onclick=()=>{ const c=th.dataset.c; ORD=ORD.k===c?{k:c,dir:-ORD.dir}:{k:c,dir:1}; desenhar(); });
   const vis=lst.slice(0,LIMITE);
-  $('#tb').innerHTML=vis.map(o=>`<tr class="lv${o.nivel}" data-l="${o.linha}">
-    <td class="num">${o.linha}</td>
-    <td><span class="tag ${o.nivel}">${{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel]}</span></td>
-    <td><span class="tag st">${esc(o.status)}</span></td>
-    <td>${cardTag(o)}</td>
-    <td>${o.empresa?esc(o.empresa):'<span class="tag E">não cadastrada</span>'}</td>
-    <td>${esc(o.emitente)}</td>
-    <td class="num mono">${esc(o.numero)}</td><td class="num mono">${esc(o.serie)}</td>
-    <td>${dataBR(o.emissao)}</td><td>${dataBR(o.recebimento)}</td>
+  const ocCurta=o=>{ const v=o.oc.filter(x=>REGRAS[x.c][0]!=='I'); if(!v.length)return '';
+    const pri=[...v].sort((a,b)=>(REGRAS[a.c][0]==='E'?0:1)-(REGRAS[b.c][0]==='E'?0:1))[0];
+    return `${esc(txtRegra(pri.c,dias()))}${v.length>1?`<span class="mais-oc">+${v.length-1}</span>`:''}`; };
+  $('#tb').innerHTML=vis.map(o=>`<tr data-l="${o.linha}" title="Linha ${o.linha} do relatório — clique para ver os detalhes">
+    <td><span class="dot ${o.nivel}" title="${{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel]}"></span></td>
+    <td class="cel-nf"><span class="mono">${esc(o.numero)}${o.serie?`<span style="color:var(--mu2)">/${esc(o.serie)}</span>`:''}</span><small>${dataBR(o.emissao)}</small></td>
+    <td class="cel-emit">${esc(o.emitente)}<small>${o.empresa?esc(o.empresa):'<span style="color:var(--bad)">empresa não cadastrada</span>'}</small></td>
     <td class="num">${o.valor==null?'':brl(o.valor)}</td>
-    <td>${esc(o.manifesto)}</td>
-    <td class="num mono">${o.titulo||''}</td>
+    <td class="cel-st"><span class="st"><i style="background:${COR_ST[o.status]||'var(--mu)'}"></i>${esc(o.status)}</span><small>${cardTag(o)}</small></td>
     <td class="num">${o.idade??''}</td>
-    <td class="oc">${esc(o.ocTexto)}</td></tr>`).join('')||`<tr><td colspan="${COLS_TAB.length}" style="text-align:center;color:var(--mu);padding:30px">Nenhuma nota com esses filtros.</td></tr>`;
+    <td class="cel-oc" title="${esc(o.ocTexto)}"><div class="oc2">${ocCurta(o)}</div></td></tr>`).join('')||`<tr><td colspan="${COLS_TAB.length}" style="text-align:center;color:var(--mu);padding:40px">Nenhuma nota com esses filtros.</td></tr>`;
   $('#tb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l)));
-  $('#info').textContent=`Mostrando ${intf(vis.length)} de ${intf(lst.length)} notas filtradas · ${brl(soma(lst))}`+(lst.length<ROWS.length?` (total do arquivo: ${intf(ROWS.length)})`:'');
+  $('#info').textContent=(lst.length<ROWS.length?`${intf(lst.length)} de ${intf(ROWS.length)} notas`:`${intf(lst.length)} notas`)+` · ${brl(soma(lst))}`+(vis.length<lst.length?` · mostrando ${intf(vis.length)}`:'');
+  ['#fEmp','#fSt','#fVal','#fCard'].forEach(id=>$(id).classList.toggle('ativo',!!$(id).value));
   $('#bMais').hidden=lst.length<=LIMITE||VISTA!=='tab';
   $('#bLimpa').hidden=!temFiltro();
-  $('#bChip').hidden=!F.graf; if(F.graf)$('#bChip').textContent='📊 '+F.graf.d+'  ✕';
+  $('#bChip').hidden=!F.graf; if(F.graf)$('#bChip').textContent=F.graf.d+'  ✕';
   $('#vTab').hidden=VISTA!=='tab'; $('#vGraf').hidden=VISTA!=='graf'; $('#segMed').hidden=VISTA!=='graf';
-  if(VISTA==='graf'){ $('#info').textContent=`Gráficos sobre ${intf(lst.length)} notas filtradas · ${brl(soma(lst))}`; graficos(lst); }
+  if(VISTA==='graf'){ $('#info').textContent=(lst.length<ROWS.length?`${intf(lst.length)} de ${intf(ROWS.length)} notas`:`${intf(lst.length)} notas`)+` · ${brl(soma(lst))}`; graficos(lst); }
 }
 
 /* ---------- gráficos ----------
@@ -760,7 +886,7 @@ function detalhe(o,daLista){
   const campos=[['Status',o.status],['Empresa',o.empresa||'(não cadastrada)'],['CNPJ destinatário',o.cnpjDest],['UF destinatário',o.ufDest],
     ['Emitente',o.emitente],['CNPJ emitente',o.cnpjEmit],['UF emitente',o.ufEmit],['Natureza da operação',o.natureza],
     ['Manifesto',o.manifesto],['Emissão',dataBR(o.emissao)],['Recebimento',dataBR(o.recebimento)],['Valor',o.valor==null?'':brl(o.valor)],
-    ['Escrituração',o.escrituracao],['Título/NF avulsa',o.titulo||'0'],['Chave de acesso',o.chave]];
+    ['Escrituração',o.escrituracao],['Título/NF avulsa',o.titulo||'0'],['Chave de acesso',o.chave],['Linha no relatório',o.linha]];
   $('#dlgB').innerHTML=(daLista?'<button class="btn" id="bVolta" style="margin:0 0 12px">← Voltar à lista</button>':'')+oc+cardBoxHtml(o)+`<dl class="dl">${campos.map(([a,b])=>`<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>`;
   if(daLista)$('#bVolta').onclick=renderLista;
   ligarCardBox(o,()=>detalhe(o,daLista));
@@ -816,11 +942,11 @@ async function conectar(){
   if(!sbc){ conn('Controle de Notas indisponível (sem conexão)','off'); return; }
   try{
     const {data:{session}}=await sbc.auth.getSession();
-    if(!session){ conn(EMBUTIDO?'Entre no Controle de Notas para cruzar com os cards':'Sem login — entre para cruzar com os cards','off'); $('#bEntrar').hidden=EMBUTIDO; return; }
+    if(!session){ conn(EMBUTIDO?'entre no Controle de Notas para ver os cards':'sem login no Controle de Notas','off'); $('#bEntrar').hidden=EMBUTIDO; return; }
     $('#bEntrar').hidden=true;
     const {data:p,error}=await sbc.from('profiles').select('id,name,role,coluna,active').eq('id',session.user.id).maybeSingle();
     if(error||!p||!p.active||p.role==='pendente'){ conn('Seu usuário não está liberado no Controle de Notas','off'); return; }
-    EU=p; conn('✓ Controle de Notas · '+p.name,'ok');
+    EU=p; conn('● '+p.name,'ok');
     $('#acoes').hidden=false; $('#bCriar').hidden=!(p.role==='admin'||p.role==='supervisor');
     if(ROWS.length&&!CARDS_OK)buscarCards(ROWS);
   }catch(e){ console.error(e); conn('Não consegui falar com o Controle de Notas','off'); }
@@ -851,7 +977,7 @@ const melhorCard=(a,b)=>!a?b:!b?a:((a.status==='concluido')!==(b.status==='concl
 
 async function buscarCards(rows){
   if(!EU||!rows.length)return;
-  const alvo=rows===ROWS; conn('Consultando os cards no Controle de Notas…','');
+  const alvo=rows===ROWS; conn('consultando os cards…','');
   try{
     const porChave=new Map(), achados=new Map();
     const chaves=[...new Set(rows.filter(o=>o.chave.length===44).map(o=>o.chave))];
@@ -881,7 +1007,7 @@ async function buscarCards(rows){
     rows.forEach(o=>{ o.card=achados.get(o)||null; });
     if(alvo)CARDS_OK=true;
     aplicarCards(); desenhar();
-    conn(`✓ ${EU.name} · ${intf(ROWS.filter(o=>o.card).length)} notas com card no Controle`,'ok');
+    conn(`● ${EU.name} · Controle de Notas conectado`,'ok');
   }catch(e){ console.error(e); conn('Falha ao consultar os cards: '+(e.message||e),'off'); }
 }
 function aplicarCards(){
@@ -896,11 +1022,11 @@ function aplicarCards(){
   finalizar(ROWS,dias());
   const sel=$('#fCard'), v=sel.value;
   sel.hidden=!CARDS_OK;
-  sel.innerHTML=`<option value="">Card: todos</option><option value="com">Com card no Controle</option><option value="sem">Pendentes sem card</option>`+COLUNAS_CARD.map(([k,l])=>`<option value="col:${k}">Card em ${esc(l)}</option>`).join('');
+  sel.innerHTML=`<option value="">Card: todos</option><option value="com">Com card</option><option value="sem">Pendentes sem card</option>`+COLUNAS_CARD.map(([k,l])=>`<option value="col:${k}">Card em ${esc(l)}</option>`).join('');
   sel.value=CARDS_OK?v:'';
 }
 function passaCard(o,fc){ if(fc==='com')return !!o.card; if(fc==='sem')return !o.card&&ehPendente(o); if(fc.startsWith('col:'))return !!o.card&&o.card.status===fc.slice(4); return true; }
-function cardTag(o){ if(!o.card)return CARDS_OK&&ehPendente(o)?'<span style="color:var(--mu)">sem card</span>':''; return `<span class="tag card${o.card.status==='concluido'?' fim':''}">${esc(o.cardCol)}</span>`; }
+function cardTag(o){ if(!o.card)return CARDS_OK&&ehPendente(o)?'<span class="cardt sem">sem card</span>':''; return `<span class="cardt${o.card.status==='concluido'?' fim':''}">card em ${esc(o.cardCol)}</span>`; }
 function abrirCard(id){
   if(EMBUTIDO){ window.parent.postMessage({tipo:'vnf-abrir-nota',id},location.origin); $('#dlg').open&&$('#dlg').close(); }
   else window.open('../#nota='+id,'_blank');
@@ -1030,6 +1156,8 @@ $('#fBusca').oninput=()=>{ LIMITE=300; desenhar(); };
 $('#dlgX').onclick=()=>$('#dlg').close();
 $('#dlg').onclick=e=>{ if(e.target===$('#dlg'))$('#dlg').close(); };
 $('#cfgDias').value=lsGet('validador-nf-dias','30');
+$('#bCfg').onclick=e=>{ e.stopPropagation(); $('#popCfg').hidden=!$('#popCfg').hidden; };
+document.addEventListener('click',e=>{ if(!$('#popCfg').hidden&&!e.target.closest('#popCfg'))$('#popCfg').hidden=true; });
 $('#cfgDias').onchange=()=>{ lsSet('validador-nf-dias',String(dias())); if(LIDAS.length)processar(); };
 VISTA=lsGet('validador-nf-vista','tab')==='graf'?'graf':'tab';
 $('#segVista').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===VISTA));
