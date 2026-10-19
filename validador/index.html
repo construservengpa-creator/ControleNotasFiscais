@@ -244,11 +244,19 @@ td.cel-oc .mais-oc{color:var(--mu2);margin-left:4px}
 td.cel-emit{max-width:260px}
 td.cel-oc{max-width:260px}
 .cols2{grid-template-columns:minmax(0,1fr) 270px}
-.barra select{max-width:180px}
-.barra input{flex:1 1 180px}
+.barra select{max-width:160px}
+.barra input{flex:1 1 150px}
 #vTab table{table-layout:fixed;min-width:760px}
 #vTab th:nth-child(1){width:30px} #vTab th:nth-child(2){width:112px} #vTab th:nth-child(4){width:108px}
-#vTab th:nth-child(5){width:178px} #vTab th:nth-child(6){width:54px}
+#vTab th:nth-child(5){width:170px} #vTab th:nth-child(6){width:150px} #vTab th:nth-child(7){width:50px}
+.cel-ped small{display:block;color:var(--mu2);font-size:11.5px;margin-top:1px;overflow:hidden;text-overflow:ellipsis}
+.cel-ped .vazio{color:var(--mu2)}
+.acomp{display:grid;grid-template-columns:140px 1fr 1fr;gap:8px;align-items:end;margin:0 0 6px}
+.acomp label{display:flex;flex-direction:column;gap:4px;font-size:11.5px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
+.acomp input,.acomp select{background:var(--s1);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:13px;text-transform:none;letter-spacing:0;color:var(--tx)}
+.acomp-r{display:flex;flex-wrap:wrap;gap:10px;align-items:center;font-size:12.5px;color:var(--mu)}
+.acomp-r label{display:inline-flex;gap:6px;align-items:center;cursor:pointer}
+@media(max-width:700px){.acomp{grid-template-columns:1fr}}
 #vTab td{overflow:hidden;text-overflow:ellipsis}
 #vTab td.cel-emit,#vTab td.cel-oc{max-width:none}
 #vTab td.cel-oc{white-space:normal}
@@ -354,6 +362,7 @@ html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.1
         <option value="OK">Só OK</option>
       </select>
       <select id="fCard" hidden></select>
+      <select id="fPessoa" hidden></select>
     </div>
 
     <div class="ctx">
@@ -363,6 +372,7 @@ html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.1
       <span class="esp"></span>
       <div class="seg sm" id="segMed" hidden><button data-m="qtd" class="on">Quantidade</button><button data-m="valor">Valor</button></div>
       <span class="acoes" id="acoes" hidden>
+        <button class="btn sm" id="bPreencher" hidden title="Preencher Pedido, Responsável e Comprador das notas filtradas">✎ Preencher</button>
         <button class="btn sm" id="bAvisar" title="Manda uma mensagem no diálogo de cada card das notas filtradas — aparece no 💬 de quem recebe">🔔 Avisar</button>
         <button class="btn sm" id="bCriar" hidden title="Cria em “Importadas SIENGE” os cards das notas pendentes filtradas que ainda não têm card">＋ Criar cards</button>
         <button class="ib sm" id="bRecarregar" title="Consultar de novo os cards no Controle de Notas">⟳</button>
@@ -642,7 +652,7 @@ const txtRegra=(c,dias)=>REGRAS[c][1].replace('{d}',dias);
 let ROWS=[], ARQ='', ABA='', LIMITE=300, ORD={k:'linha',dir:1}, F={kpi:'',regra:''};
 const COLS_TAB=[
   ['nivel','','dotc'],['numero','NF'],['emitente','Emitente'],['valor','Valor','num'],
-  ['status','Status'],['idade','Dias','num'],['ocTexto','Ocorrência']
+  ['status','Status'],['pedido','Pedido'],['idade','Dias','num'],['ocTexto','Ocorrência']
 ];
 const dias=()=>Math.max(1,parseInt($('#cfgDias').value,10)||30);
 
@@ -675,7 +685,7 @@ function processar(){
 }
 
 function filtradas(semRegra){
-  const b=norm($('#fBusca').value), emp=$('#fEmp').value, st=$('#fSt').value, val=$('#fVal').value, fc=$('#fCard').value;
+  const b=norm($('#fBusca').value), emp=$('#fEmp').value, st=$('#fSt').value, val=$('#fVal').value, fc=$('#fCard').value, fp=$('#fPessoa').value;
   return ROWS.filter(o=>{
     if(emp&&(o.empresa||'(não cadastrada)')!==emp)return false;
     if(st&&o.status!==st)return false;
@@ -684,7 +694,8 @@ function filtradas(semRegra){
     if(F.kpi&&!F.kpi(o))return false;
     if(F.graf&&!predF(F.graf)(o))return false;
     if(fc&&!passaCard(o,fc))return false;
-    if(b&&!norm([o.emitente,o.cnpjEmit,o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto].join(' ')).includes(b))return false;
+    if(fp&&!passaPessoa(o,fp))return false;
+    if(b&&!norm([o.emitente,o.cnpjEmit,o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.pedido,nomeUsr(o.respId),nomeUsr(o.compId)].join(' ')).includes(b))return false;
     return true;
   });
 }
@@ -742,11 +753,12 @@ function desenhar(){
     <td class="cel-emit">${esc(o.emitente)}<small>${o.empresa?esc(o.empresa):'<span style="color:var(--bad)">empresa não cadastrada</span>'}</small></td>
     <td class="num">${o.valor==null?'':brl(o.valor)}</td>
     <td class="cel-st"><span class="st"><i style="background:${COR_ST[o.status]||'var(--mu)'}"></i>${esc(o.status)}</span><small>${cardTag(o)}</small></td>
+    <td class="cel-ped">${celPedido(o)}</td>
     <td class="num">${o.idade??''}</td>
     <td class="cel-oc" title="${esc(o.ocTexto)}"><div class="oc2">${ocCurta(o)}</div></td></tr>`).join('')||`<tr><td colspan="${COLS_TAB.length}" style="text-align:center;color:var(--mu);padding:40px">Nenhuma nota com esses filtros.</td></tr>`;
   $('#tb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l)));
   $('#info').textContent=(lst.length<ROWS.length?`${intf(lst.length)} de ${intf(ROWS.length)} notas`:`${intf(lst.length)} notas`)+` · ${brl(soma(lst))}`+(vis.length<lst.length?` · mostrando ${intf(vis.length)}`:'');
-  ['#fEmp','#fSt','#fVal','#fCard'].forEach(id=>$(id).classList.toggle('ativo',!!$(id).value));
+  ['#fEmp','#fSt','#fVal','#fCard','#fPessoa'].forEach(id=>$(id).classList.toggle('ativo',!!$(id).value));
   $('#bMais').hidden=lst.length<=LIMITE||VISTA!=='tab';
   $('#bLimpa').hidden=!temFiltro();
   $('#bChip').hidden=!F.graf; if(F.graf)$('#bChip').textContent=F.graf.d+'  ✕';
@@ -921,8 +933,8 @@ function desenharLista(){
     ||`<tr><td colspan="${COLS_LISTA.length}" style="text-align:center;color:var(--mu);padding:24px">Nenhuma nota com esses filtros.</td></tr>`;
   $('#lTb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l),true));
 }
-function temFiltro(){ return !!($('#fBusca').value||$('#fEmp').value||$('#fSt').value||$('#fVal').value||$('#fCard').value||F.regra||F.kpi||F.graf); }
-$('#bLimpa').onclick=()=>{ $('#fBusca').value=''; $('#fEmp').value=''; $('#fSt').value=''; $('#fVal').value=''; $('#fCard').value=''; F={kpi:'',regra:''}; LIMITE=300; desenhar(); };
+function temFiltro(){ return !!($('#fBusca').value||$('#fEmp').value||$('#fSt').value||$('#fVal').value||$('#fCard').value||$('#fPessoa').value||F.regra||F.kpi||F.graf); }
+$('#bLimpa').onclick=()=>{ $('#fBusca').value=''; $('#fEmp').value=''; $('#fSt').value=''; $('#fVal').value=''; $('#fCard').value=''; $('#fPessoa').value=''; F={kpi:'',regra:''}; LIMITE=300; desenhar(); };
 $('#bChip').onclick=()=>{ F.graf=null; LIMITE=300; desenhar(); };
 $('#segVista').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; VISTA=b.dataset.v; $('#segVista').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); lsSet('validador-nf-vista',VISTA); desenhar(); };
 $('#segMed').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; MED=b.dataset.m; $('#segMed').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); desenhar(); };
@@ -936,9 +948,10 @@ function detalhe(o,daLista){
     ['Emitente',o.emitente],['CNPJ emitente',o.cnpjEmit],['UF emitente',o.ufEmit],['Natureza da operação',o.natureza],
     ['Manifesto',o.manifesto],['Emissão',dataBR(o.emissao)],['Recebimento',dataBR(o.recebimento)],['Valor',o.valor==null?'':brl(o.valor)],
     ['Escrituração',o.escrituracao],['Título/NF avulsa',o.titulo||'0'],['Chave de acesso',o.chave],['Linha no relatório',o.linha]];
-  $('#dlgB').innerHTML=(daLista?'<button class="btn" id="bVolta" style="margin:0 0 12px">← Voltar à lista</button>':'')+oc+cardBoxHtml(o)+`<dl class="dl">${campos.map(([a,b])=>`<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>`;
+  $('#dlgB').innerHTML=(daLista?'<button class="btn" id="bVolta" style="margin:0 0 12px">← Voltar à lista</button>':'')+oc+acompHtml(o)+cardBoxHtml(o)+`<dl class="dl">${campos.map(([a,b])=>`<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>`;
   if(daLista)$('#bVolta').onclick=renderLista;
   ligarCardBox(o,()=>detalhe(o,daLista));
+  ligarAcomp(o,()=>detalhe(o,daLista));
   if(!$('#dlg').open)$('#dlg').showModal();
 }
 
@@ -950,7 +963,8 @@ function exportar(){
     'Manifesto':o.manifesto,'Natureza da operação':o.natureza,'Recebimento':o.recebimento,'Emissão':o.emissao,'Chave de acesso':o.chave,
     'Número NF':o.numero,'Série':o.serie,'Valor':o.valor,'Escrituração':o.escrituracao,'Título/Nota fiscal avulsa':o.titulo,
     'Empresas':o.empresa,'Status manifestação':o.status,'Validação':{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel],'Ocorrências':o.ocTexto,'Linha no relatório':o.linha,
-    ...(CARDS_OK?{'Card no Controle de Notas':o.card?(COL_LABEL[o.card.status]||o.card.status):'','Responsável do card':o.card?o.card.responsavel||'':''}:{})
+    ...(DADOS_OK?{'Pedido':o.pedido||'','Responsável':nomeUsr(o.respId),'Comprador':nomeUsr(o.compId)}:{}),
+    ...(CARDS_OK?{'Card no Controle de Notas':o.card?(COL_LABEL[o.card.status]||o.card.status):'','Atribuído no card':o.card?o.card.responsavel||'':''}:{})
   }));
   const ocs=[]; lst.forEach(o=>o.oc.forEach(x=>{ if(REGRAS[x.c][0]==='I')return;
     ocs.push({'Linha no relatório':o.linha,'Nível':REGRAS[x.c][0]==='E'?'Erro':'Alerta','Ocorrência':txtRegra(x.c,dias()),'Detalhe':x.extra||'',
@@ -1055,6 +1069,7 @@ async function buscarCards(rows){
     cards.forEach(c=>{ c.responsavel=c.assigned_to?nomes[c.assigned_to]||'':''; c.criadoPor=c.created_by?nomes[c.created_by]||'':''; c.obra=c.obra_id?nomesObra[c.obra_id]||'':''; });
     rows.forEach(o=>{ o.card=achados.get(o)||null; });
     if(alvo)CARDS_OK=true;
+    await buscarDados(rows);
     aplicarCards(); desenhar();
     conn(`● ${EU.name} · Controle de Notas conectado`,'ok');
   }catch(e){ console.error(e); conn('Falha ao consultar os cards: '+(e.message||e),'off'); }
@@ -1090,7 +1105,7 @@ function cardBoxHtml(o){
     return `<div class="cardbox"><h4>Controle de Notas</h4><p class="info" style="margin:0 0 8px">Esta nota ainda não tem card no Controle de Notas${ehPendente(o)?'':' (e já está lançada)'}. As observações e avisos ficam no diálogo do card.</p>
       ${pode?'<button class="btn pri" id="bCriarUm">➕ Criar card em Importadas SIENGE</button> <span id="cbMsg"></span>':''}</div>`; }
   return `<div class="cardbox"><h4>Card no Controle de Notas</h4>
-    <div class="lin"><span>NF <b>${esc(c.numero)}</b></span><span>Coluna <b>${esc(COL_LABEL[c.status]||c.status)}</b></span>${c.responsavel?`<span>Responsável <b>${esc(c.responsavel)}</b></span>`:''}${c.obra?`<span>Obra <b>${esc(c.obra)}</b></span>`:''}${c.numero_titulo?`<span>Título <b>${esc(c.numero_titulo)}</b></span>`:''}</div>
+    <div class="lin"><span>NF <b>${esc(c.numero)}</b></span><span>Coluna <b>${esc(COL_LABEL[c.status]||c.status)}</b></span>${c.responsavel?`<span>Atribuído a <b>${esc(c.responsavel)}</b></span>`:''}${c.obra?`<span>Obra <b>${esc(c.obra)}</b></span>`:''}${c.numero_titulo?`<span>Título <b>${esc(c.numero_titulo)}</b></span>`:''}</div>
     <button class="btn" id="bAbrirCard" style="margin:0 0 10px">↗ Abrir card no quadro</button>
     <div class="modal-t" style="font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin:4px 0 6px">Diálogo / observações</div>
     <div class="chat" id="chat"><span class="info">Carregando…</span></div>
@@ -1114,7 +1129,7 @@ async function ligarCardBox(o,recarregar){
   $('#chat').innerHTML=(msgs||[]).length?msgs.map(m=>`<div class="m${m.destinatario_id?' dir':''}"><div class="q">${esc(nomes[m.autor_id]||'—')} · ${quando(m.created_at)}${m.destinatario_id?' → '+esc(nomes[m.destinatario_id]||'—'):''}</div>${esc(m.mensagem)}</div>`).join(''):'<span class="info">Nenhuma mensagem ainda no diálogo deste card.</span>';
   $('#chat').scrollTop=1e9;
   // destinatários: quem já participa do card primeiro, depois os demais usuários ativos
-  const part=new Map(); [[c.assigned_to,'responsável'],[c.created_by,'cadastrou']].forEach(([id,r])=>{ if(id&&id!==EU.id&&!part.has(id))part.set(id,r); });
+  const part=new Map(); [[c.assigned_to,'atribuído no card'],[c.created_by,'cadastrou']].forEach(([id,r])=>{ if(id&&id!==EU.id&&!part.has(id))part.set(id,r); });
   (msgs||[]).forEach(m=>{ if(m.autor_id&&m.autor_id!==EU.id&&!part.has(m.autor_id))part.set(m.autor_id,'no diálogo'); });
   const outros=(await usuariosAtivos()).filter(u=>u.id!==EU.id&&!part.has(u.id));
   $('#chDest').innerHTML='<option value="">Observação geral (todos os participantes do card)</option>'
@@ -1129,8 +1144,10 @@ async function ligarCardBox(o,recarregar){
 }
 async function usuariosAtivos(){
   if(USUARIOS)return USUARIOS;
-  const {data}=await sbc.from('profiles').select('id,name,role,active').eq('active',true).neq('role','pendente').order('name');
-  return USUARIOS=(data||[]);
+  let {data,error}=await sbc.rpc('validador_usuarios');
+  if(error){ ({data}=await sbc.from('profiles').select('id,name,role,active').eq('active',true).neq('role','pendente').order('name')); }
+  USUARIOS=(data||[]); USUARIOS.forEach(u=>NOMES_USR[u.id]=u.name);
+  return USUARIOS;
 }
 
 /* Criar os cards que faltam (mesmo formato da Importação SIENGE do quadro) */
@@ -1152,6 +1169,131 @@ async function criarCards(lst){
   }catch(e){ alert('Não foi possível criar os cards: '+(e.message||e)); return false; }
 }
 
+
+/* ---------- Pedido, Responsável e Comprador (tabela validador_nf_dados, ligada à chave de acesso) ----------
+   Ficam só no validador: valem para qualquer nota com chave, tenha card ou não. Responsável = quem cuida da
+   nota na obra; Comprador = comprador da nota; os dois são usuários do Controle de Notas (lista vem da
+   função validador_usuarios, que o operador também pode chamar). */
+let DADOS_OK=false, DADOS_ERRO='';
+const NOMES_USR={};
+const nomeUsr=id=>id?(NOMES_USR[id]||'—'):'';
+const temChave=o=>o.chave&&o.chave.length===44;
+async function buscarDados(rows){
+  if(!EU)return;
+  try{
+    const chaves=[...new Set(rows.filter(temChave).map(o=>o.chave))], mapa=new Map();
+    await emParalelo(emLotes(chaves,150),4,async lote=>{
+      const {data,error}=await sbc.from('validador_nf_dados').select('chave,pedido,responsavel_id,comprador_id,atualizado_por,atualizado_em').in('chave',lote);
+      if(error)throw error; (data||[]).forEach(d=>mapa.set(d.chave,d)); });
+    rows.forEach(o=>{ const d=mapa.get(o.chave); o.pedido=d&&d.pedido||''; o.respId=d&&d.responsavel_id||null; o.compId=d&&d.comprador_id||null; o.dadosEm=d&&d.atualizado_em||null; o.dadosPor=d&&d.atualizado_por||null; });
+    await usuariosAtivos();
+    const faltam=[...new Set(rows.flatMap(o=>[o.respId,o.compId,o.dadosPor]).filter(id=>id&&!NOMES_USR[id]))];
+    if(faltam.length){ const {data}=await sbc.rpc('profile_names',{p_ids:faltam}); (data||[]).forEach(r=>NOMES_USR[r.id]=r.name); }
+    DADOS_OK=true; DADOS_ERRO='';
+  }catch(e){ console.error(e); DADOS_OK=false;
+    DADOS_ERRO=/validador_nf_dados|does not exist|schema cache/i.test(e.message||'')?'Os campos Pedido, Responsável e Comprador ainda não foram criados no banco (falta rodar o SQL da atualização).':'Não consegui ler Pedido/Responsável/Comprador: '+(e.message||e); }
+  montarFiltroPessoa(); $('#bPreencher').hidden=!DADOS_OK;
+}
+function celPedido(o){
+  if(!DADOS_OK)return '';
+  const ps=[o.respId?'Resp. '+esc(nomeUsr(o.respId)):'',o.compId?'Comp. '+esc(nomeUsr(o.compId)):''].filter(Boolean).join(' · ');
+  return `${o.pedido?`<span class="mono">${esc(o.pedido)}</span>`:'<span class="vazio">—</span>'}${ps?`<small>${ps}</small>`:''}`;
+}
+function passaPessoa(o,fp){
+  if(fp==='eu')return !!EU&&(o.respId===EU.id||o.compId===EU.id);
+  if(fp==='semresp')return !o.respId; if(fp==='semcomp')return !o.compId; if(fp==='semped')return !o.pedido;
+  if(fp.startsWith('r:'))return o.respId===fp.slice(2); if(fp.startsWith('c:'))return o.compId===fp.slice(2);
+  return true;
+}
+function montarFiltroPessoa(){
+  const sel=$('#fPessoa'), v=sel.value; sel.hidden=!DADOS_OK; if(!DADOS_OK){ sel.value=''; return; }
+  const resp=[...new Set(ROWS.map(o=>o.respId).filter(Boolean))], comp=[...new Set(ROWS.map(o=>o.compId).filter(Boolean))];
+  const ord=a=>a.sort((x,y)=>nomeUsr(x).localeCompare(nomeUsr(y),'pt-BR'));
+  sel.innerHTML=`<option value="">Pessoa: todas</option><option value="eu">Comigo (responsável ou comprador)</option><option value="semresp">Sem responsável</option><option value="semcomp">Sem comprador</option><option value="semped">Sem pedido</option>`
+    +(resp.length?`<optgroup label="Responsável">${ord(resp).map(id=>`<option value="r:${id}">${esc(nomeUsr(id))}</option>`).join('')}</optgroup>`:'')
+    +(comp.length?`<optgroup label="Comprador">${ord(comp).map(id=>`<option value="c:${id}">${esc(nomeUsr(id))}</option>`).join('')}</optgroup>`:'');
+  sel.value=[...sel.options].some(x=>x.value===v)?v:'';
+}
+const opcoesUsr=(us,sel,vazio)=>`<option value="">${vazio}</option>`+us.map(u=>`<option value="${u.id}"${u.id===sel?' selected':''}>${esc(u.name)}</option>`).join('');
+
+// Grava (insere ou atualiza) as linhas; avisa no 💬 do card quem passou a ser responsável/comprador, se pedido.
+async function salvarDados(lst,novo,avisar){
+  const linhas=lst.filter(temChave).map(o=>({chave:o.chave,
+    pedido:novo.pedido!==undefined?(novo.pedido||null):(o.pedido||null),
+    responsavel_id:novo.respId!==undefined?novo.respId:o.respId,
+    comprador_id:novo.compId!==undefined?novo.compId:o.compId}));
+  for(const lote of emLotes(linhas,500)){ const {error}=await sbc.from('validador_nf_dados').upsert(lote,{onConflict:'chave'}); if(error)throw error; }
+  let avisos=0;
+  if(avisar){
+    const msgs=[];
+    lst.filter(o=>o.card).forEach(o=>{
+      const nf=`NF ${o.numero||''} (${o.emitente||''})`;
+      if(novo.respId&&novo.respId!==o.respId&&novo.respId!==EU.id)msgs.push({nota_id:o.card.id,autor_id:EU.id,destinatario_id:novo.respId,mensagem:`Você foi indicado como responsável pela ${nf} no Validador de NF.`});
+      if(novo.compId&&novo.compId!==o.compId&&novo.compId!==EU.id)msgs.push({nota_id:o.card.id,autor_id:EU.id,destinatario_id:novo.compId,mensagem:`Você foi indicado como comprador da ${nf} no Validador de NF.`});
+    });
+    for(const lote of emLotes(msgs,200)){ const {error}=await sbc.from('nota_comentarios').insert(lote); if(error)throw error; }
+    avisos=msgs.length;
+  }
+  lst.filter(temChave).forEach(o=>{ if(novo.pedido!==undefined)o.pedido=novo.pedido||''; if(novo.respId!==undefined)o.respId=novo.respId; if(novo.compId!==undefined)o.compId=novo.compId; o.dadosPor=EU.id; o.dadosEm=new Date().toISOString(); });
+  NOMES_USR[EU.id]=EU.name; montarFiltroPessoa();
+  return {gravadas:linhas.length,avisos};
+}
+
+/* No detalhe da nota */
+function acompHtml(o){
+  if(!EU)return '';
+  if(!DADOS_OK)return DADOS_ERRO?`<div class="cardbox"><h4>Pedido · Responsável · Comprador</h4><p class="info" style="margin:0">${esc(DADOS_ERRO)}</p></div>`:'';
+  if(!temChave(o))return `<div class="cardbox"><h4>Pedido · Responsável · Comprador</h4><p class="info" style="margin:0">Esta linha não tem chave de acesso válida — os campos ficam ligados à chave.</p></div>`;
+  return `<div class="cardbox"><h4>Pedido · Responsável · Comprador</h4>
+    <form id="fAcomp"><div class="acomp">
+      <label>Pedido<input id="acPed" maxlength="60" value="${esc(o.pedido||'')}" placeholder="Nº do pedido"></label>
+      <label>Responsável (obra)<select id="acResp"><option>Carregando…</option></select></label>
+      <label>Comprador<select id="acComp"><option>Carregando…</option></select></label>
+    </div>
+    <div class="acomp-r"><button class="btn pri sm" id="acSalvar">Salvar</button>
+      ${o.card?'<label><input type="checkbox" id="acAvisar" checked> avisar no 💬 do card quem for indicado</label>':''}
+      <span id="acMsg"></span>
+      ${o.dadosEm?`<span style="margin-left:auto">Alterado por ${esc(nomeUsr(o.dadosPor))} em ${new Date(o.dadosEm).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</span>`:''}
+    </div></form></div>`;
+}
+async function ligarAcomp(o,recarregar){
+  if(!$('#fAcomp'))return;
+  const us=await usuariosAtivos(); if(!$('#fAcomp'))return;
+  $('#acResp').innerHTML=opcoesUsr(us,o.respId,'— ninguém —'); $('#acComp').innerHTML=opcoesUsr(us,o.compId,'— ninguém —');
+  $('#fAcomp').onsubmit=async e=>{ e.preventDefault(); $('#acSalvar').disabled=true; $('#acMsg').textContent='Salvando…';
+    try{ const r=await salvarDados([o],{pedido:$('#acPed').value.trim(),respId:$('#acResp').value||null,compId:$('#acComp').value||null},!!($('#acAvisar')&&$('#acAvisar').checked));
+      desenhar(); recarregar(); setTimeout(()=>{ const m=$('#acMsg'); if(m)m.innerHTML=`<span class="okmsg">✓ Salvo${r.avisos?` · ${r.avisos} aviso(s) enviado(s)`:''}</span>`; },50);
+    }catch(err){ $('#acMsg').innerHTML=`<span class="errmsg">Não foi possível salvar: ${esc(err.message||err)}</span>`; $('#acSalvar').disabled=false; } };
+}
+
+/* Em lote, nas notas filtradas */
+$('#bPreencher').onclick=async()=>{
+  const lst=filtradas().filter(temChave);
+  $('#dlgT').textContent='Preencher as notas filtradas';
+  if(!lst.length){ $('#dlgB').innerHTML='<p>Nenhuma nota filtrada com chave de acesso.</p>'; $('#dlg').showModal(); return; }
+  const us=await usuariosAtivos(), comCard=lst.filter(o=>o.card).length;
+  const optLote=v=>`<option value="__manter">— não alterar —</option><option value="__limpar">— deixar sem ninguém —</option>`+us.map(u=>`<option value="${u.id}">${esc(u.name)}</option>`).join('');
+  $('#dlgB').innerHTML=`<p class="info" style="margin:0 0 12px">${intf(lst.length)} notas filtradas (${brl(lst.reduce((s,o)=>s+(o.valor||0),0))}). Só muda o que você escolher; o resto fica como está em cada nota.</p>
+    <form id="fLoteD"><div class="acomp">
+      <label>Pedido<input id="ldPed" maxlength="60" placeholder="não alterar"></label>
+      <label>Responsável (obra)<select id="ldResp">${optLote()}</select></label>
+      <label>Comprador<select id="ldComp">${optLote()}</select></label>
+    </div>
+    <div class="acomp-r"><button class="btn pri sm" id="ldOk">Aplicar em ${intf(lst.length)} nota(s)</button>
+      ${comCard?`<label><input type="checkbox" id="ldAvisar" checked> avisar no 💬 do card quem for indicado (${intf(comCard)} com card)</label>`:''}
+      <span id="ldMsg"></span></div></form>`;
+  $('#dlg').showModal();
+  $('#fLoteD').onsubmit=async e=>{ e.preventDefault();
+    const novo={}, ped=$('#ldPed').value.trim(), r=$('#ldResp').value, c=$('#ldComp').value;
+    if(ped)novo.pedido=ped; if(r!=='__manter')novo.respId=r==='__limpar'?null:r; if(c!=='__manter')novo.compId=c==='__limpar'?null:c;
+    if(!Object.keys(novo).length){ $('#ldMsg').innerHTML='<span class="errmsg">Escolha ao menos um campo.</span>'; return; }
+    if(!confirm(`Aplicar em ${lst.length} nota(s)?`))return;
+    $('#ldOk').disabled=true; $('#ldMsg').textContent='Gravando…';
+    try{ const res=await salvarDados(lst,novo,!!($('#ldAvisar')&&$('#ldAvisar').checked)); desenhar();
+      $('#ldMsg').innerHTML=`<span class="okmsg">✓ ${intf(res.gravadas)} nota(s) atualizada(s)${res.avisos?` · ${res.avisos} aviso(s) enviado(s)`:''}</span>`;
+    }catch(err){ $('#ldMsg').innerHTML=`<span class="errmsg">Falhou: ${esc(err.message||err)}</span>`; $('#ldOk').disabled=false; } };
+};
+
 /* Ações em lote sobre as notas filtradas */
 $('#bRecarregar').onclick=()=>{ CARDS_OK=false; buscarCards(ROWS); };
 $('#bCriar').onclick=async()=>{
@@ -1170,7 +1312,7 @@ $('#bAvisar').onclick=async()=>{
   const us=await usuariosAtivos(), semResp=lst.filter(o=>!o.card.assigned_to).length;
   $('#dlgB').innerHTML=`<p class="info" style="margin:0 0 10px">${intf(lst.length)} notas filtradas têm card (${brl(lst.reduce((s,o)=>s+(o.valor||0),0))}). A mensagem vai para o diálogo de cada card e aparece no 💬 de quem recebe.</p>
     <form class="fchat" id="fLote">
-      <select id="loDest"><option value="__resp">🔔 O responsável de cada card${semResp?` (${semResp} sem responsável recebem como observação geral)`:''}</option><option value="">Observação geral em cada card (todos os participantes)</option>${us.filter(u=>u.id!==EU.id).map(u=>`<option value="${u.id}">🔔 ${esc(u.name)}</option>`).join('')}</select>
+      <select id="loDest"><option value="__resp">🔔 Quem está com cada card${semResp?` (${semResp} sem ninguém atribuído recebem como observação geral)`:''}</option>${DADOS_OK?'<option value="__nfresp">🔔 O responsável de cada nota (campo Responsável)</option><option value="__nfcomp">🔔 O comprador de cada nota (campo Comprador)</option>':''}<option value="">Observação geral em cada card (todos os participantes)</option>${us.filter(u=>u.id!==EU.id).map(u=>`<option value="${u.id}">🔔 ${esc(u.name)}</option>`).join('')}</select>
       <textarea id="loTxt" maxlength="4000">Nota pendente no SIENGE (sem título/nota fiscal avulsa) há {dias} dias — favor verificar o lançamento. (Validador de NF)</textarea>
       <p class="info" style="margin:0">Use {dias} para os dias desde o recebimento, {nf} para o número e {emitente} para o fornecedor de cada nota.</p>
       <div class="r"><button class="btn pri" id="loEnv">Enviar para ${intf(lst.length)} card(s)</button><span id="loMsg"></span></div>
@@ -1181,7 +1323,7 @@ $('#bAvisar').onclick=async()=>{
     $('#loEnv').disabled=true; $('#loMsg').textContent='Enviando…';
     const vistos=new Set(), linhas=[];
     lst.forEach(o=>{ if(vistos.has(o.card.id))return; vistos.add(o.card.id);
-      linhas.push({nota_id:o.card.id,autor_id:EU.id,destinatario_id:dest==='__resp'?(o.card.assigned_to&&o.card.assigned_to!==EU.id?o.card.assigned_to:null):(dest||null),
+      linhas.push({nota_id:o.card.id,autor_id:EU.id,destinatario_id:(()=>{ const id=dest==='__resp'?o.card.assigned_to:dest==='__nfresp'?o.respId:dest==='__nfcomp'?o.compId:dest; return id&&id!==EU.id?id:null; })(),
         mensagem:t.replace(/\{dias\}/g,o.idade??'?').replace(/\{nf\}/g,o.numero||'').replace(/\{emitente\}/g,o.emitente||'')}); });
     try{ for(const lote of emLotes(linhas,200)){ const {error}=await sbc.from('nota_comentarios').insert(lote); if(error)throw error; }
       $('#loMsg').innerHTML=`<span class="okmsg">✓ Enviado para ${intf(linhas.length)} card(s).</span>`;
@@ -1201,7 +1343,7 @@ $('#bOutro').onclick=()=>arq.click();
 $('#bExp').onclick=exportar;
 $('#bMais').onclick=()=>{ LIMITE+=300; desenhar(); };
 $('#fBusca').oninput=()=>{ LIMITE=300; desenhar(); };
-['#fEmp','#fSt','#fVal','#fCard'].forEach(s=>$(s).onchange=()=>{ LIMITE=300; desenhar(); });
+['#fEmp','#fSt','#fVal','#fCard','#fPessoa'].forEach(s=>$(s).onchange=()=>{ LIMITE=300; desenhar(); });
 $('#dlgX').onclick=()=>$('#dlg').close();
 $('#dlg').onclick=e=>{ if(e.target===$('#dlg'))$('#dlg').close(); };
 $('#cfgDias').value=lsGet('validador-nf-dias','30');
