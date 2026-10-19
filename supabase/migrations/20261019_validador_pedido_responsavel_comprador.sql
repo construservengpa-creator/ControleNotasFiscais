@@ -37,13 +37,13 @@ create trigger validador_nf_dados_carimbo before insert or update on public.vali
 alter table public.validador_nf_dados enable row level security;
 drop policy if exists validador_nf_dados_select on public.validador_nf_dados;
 create policy validador_nf_dados_select on public.validador_nf_dados for select to authenticated
-  using (public.current_is_active());
+  using ((select public.current_is_active()));
 drop policy if exists validador_nf_dados_insert on public.validador_nf_dados;
 create policy validador_nf_dados_insert on public.validador_nf_dados for insert to authenticated
-  with check (public.current_is_active());
+  with check ((select public.current_is_active()));
 drop policy if exists validador_nf_dados_update on public.validador_nf_dados;
 create policy validador_nf_dados_update on public.validador_nf_dados for update to authenticated
-  using (public.current_is_active()) with check (public.current_is_active());
+  using ((select public.current_is_active())) with check ((select public.current_is_active()));
 grant select, insert, update on public.validador_nf_dados to authenticated;
 
 -- Lista de usuários ativos para escolher Responsável/Comprador. O operador não enxerga todos os perfis

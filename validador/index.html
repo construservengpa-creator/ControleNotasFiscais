@@ -1383,15 +1383,25 @@ async function carregarBase(){
     if(BASE.ultima){ const {data}=await sbc.rpc('profile_names',{p_ids:[BASE.ultima.enviado_por]}); BASE.ultima.por=(data&&data[0]&&data[0].name)||''; }
     BASE_ERRO='';
     if(!BASE.ultima){ mostrarMsg(''); textoInicial(); return; }
-    const {count,error:e2}=await sbc.from('validador_nf_notas').select('chave',{count:'exact',head:true}); if(e2)throw e2;
-    const pags=Array.from({length:Math.ceil((count||0)/1000)},(_,i)=>i*1000);
-    const partes=await emParalelo(pags,4,async ini=>{ const {data,error}=await sbc.from('validador_nf_notas').select('*').order('chave').range(ini,ini+999); if(error)throw error; return data||[]; });
-    const linhas=partes.flat().sort((a,b)=>(a.emissao||'').localeCompare(b.emissao||'')||a.chave.localeCompare(b.chave));
+    // Lê em sequência, 1.000 por vez, continuando da última chave (usa o índice da chave; sem contagem nem salto
+    // de páginas, que ficam pesados e estouravam o tempo limite do banco).
+    const COLS='chave,emitente,cnpj_emitente,uf_emitente,destinatario,cnpj_destinatario,uf_destinatario,manifesto,natureza,recebimento,emissao,numero_serie,valor,escrituracao,titulo,linha,primeira_carga,ultima_carga,alterada_na_carga,titulo_desde';
+    const todas=[]; let ultimaChave='';
+    for(;;){
+      let q=sbc.from('validador_nf_notas').select(COLS).order('chave').limit(1000);
+      if(ultimaChave)q=q.gt('chave',ultimaChave);
+      const {data,error}=await q; if(error)throw error;
+      todas.push(...(data||[])); mostrarMsg(`Abrindo a base salva… ${intf(todas.length)} notas`);
+      if(!data||data.length<1000)break;
+      ultimaChave=data[data.length-1].chave;
+    }
+    const linhas=todas.sort((a,b)=>(a.emissao||'').localeCompare(b.emissao||'')||a.chave.localeCompare(b.chave));
     LIDAS=linhas.map((r,i)=>({linha:i+1,raw:k=>r[COL_BASE[k]],chaveNumero:false,base:r}));
     MODO='base'; ARQ='Base salva'; ABA='Relatório'; F={kpi:'',regra:''}; LIMITE=300; CARDS_OK=false;
     mostrarMsg(''); processar();
   }catch(e){ console.error(e);
-    BASE_ERRO=/validador_nf_|does not exist|schema cache/i.test(e.message||'')?'A base salva ainda não foi criada no banco (falta rodar o SQL da atualização) — por enquanto o arquivo é só conferido, sem salvar.':'Não consegui abrir a base salva: '+(e.message||e);
+    BASE_ERRO=/statement timeout/i.test(e.message||'')?'A base salva demorou demais para abrir (tempo limite do banco). Rode o SQL de desempenho do validador (20261021_validador_desempenho.sql) e recarregue a página.'
+      :/validador_nf_|does not exist|schema cache/i.test(e.message||'')?'A base salva ainda não foi criada no banco (falta rodar o SQL da atualização) — por enquanto o arquivo é só conferido, sem salvar.':'Não consegui abrir a base salva: '+(e.message||e);
     mostrarMsg(BASE_ERRO,!/falta rodar/.test(BASE_ERRO));
   }
 }
