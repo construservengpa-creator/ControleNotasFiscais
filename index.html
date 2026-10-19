@@ -3335,7 +3335,7 @@ function renderCard(nota, coluna) {
 
   div.innerHTML = `
     ${checkboxHtml}
-    <div class="row1"><span class="numero">NF ${escapeHtml(nota.numero)}</span><span class="valor">${fmtMoney(nota.valor)}</span></div>
+    <div class="row1"><span class="numero">${escapeHtml(rotuloDocumento(nota))}</span><span class="valor">${fmtMoney(nota.valor)}</span></div>
     <div class="fornecedor">${escapeHtml(nota.fornecedor)}</div>
     ${obraHtml}
     ${destinatarioHtml}
@@ -3473,7 +3473,7 @@ function iniciarArraste() {
   const nota = NOTAS_CACHE.find((n) => String(n.id) === String(id));
   const g = document.createElement('div');
   g.className = 'drag-ghost';
-  g.textContent = ARRASTE.ids.length > 1 ? `Movendo ${ARRASTE.ids.length} notas` : `NF ${nota ? nota.numero : ''}`;
+  g.textContent = ARRASTE.ids.length > 1 ? `Movendo ${ARRASTE.ids.length} notas` : rotuloDocumento(nota);
   g.style.transform = `translate3d(${ARRASTE.x + 14}px, ${ARRASTE.y + 14}px, 0)`;
   document.body.appendChild(g);
   ARRASTE.ghost = g;
@@ -3656,7 +3656,7 @@ async function moverNotasEmMassa(ids, destino) {
     const res = await Promise.allSettled(fatia.map((n) => api.post(`/api/notas/${n.id}/status`, { status: destino })));
     res.forEach((r, k) => {
       if (r.status === 'fulfilled') sucesso += 1;
-      else falhas.push(`NF ${fatia[k].numero}: ${r.reason?.message || 'erro'}`);
+      else falhas.push(`${rotuloDocumento(fatia[k])}: ${r.reason?.message || 'erro'}`);
     });
   }
 
@@ -4016,6 +4016,12 @@ const TOMADOR_GRUPO_REGEX = /\bAMETA\b|\bRAF\b|CONS[OÓ]RCIO/i;
 function ehChaveCte(chave) {
   const d = soDigitos(chave);
   return d.length === 44 && d.slice(20, 22) === '57';
+}
+
+// Rótulo do documento do card: card só de CT-e (chave modelo 57) aparece como "CT-e <número>"; os demais, "NF <número>".
+function rotuloDocumento(nota) {
+  if (!nota) return 'NF';
+  return (ehChaveCte(nota.chaveAcesso) ? 'CT-e ' : 'NF ') + (nota.numero ?? '');
 }
 
 // Card ligado a um CT-e (o card do próprio CT-e ou a nota que recebeu um CT-e)
@@ -5059,7 +5065,7 @@ async function openDetalheModal(id) {
     const temFreteDetalhe = nota.frete === 'sim';
 
     showModal(`
-      <h3>NF ${escapeHtml(nota.numero)} — ${escapeHtml(nota.fornecedor)}</h3>
+      <h3>${escapeHtml(rotuloDocumento(nota))} — ${escapeHtml(nota.fornecedor)}</h3>
       <div class="modal-two-col">
         <div class="modal-main-col">
           <div style="font-size:13px;color:var(--text-secondary);margin-bottom:10px;">
@@ -5130,7 +5136,7 @@ async function openEditModal(id) {
     const podeMudarStatus = CURRENT_USER.role !== 'operador';
 
     showModal(`
-      <h3>Editar NF ${escapeHtml(nota.numero)}</h3>
+      <h3>Editar ${escapeHtml(rotuloDocumento(nota))}</h3>
       <div class="modal-two-col">
         <div class="modal-main-col">
       <form id="editNotaForm">

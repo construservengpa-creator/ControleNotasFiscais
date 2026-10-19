@@ -320,7 +320,7 @@ html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.1
 
 <header class="top">
   <h1>Validador de NF</h1>
-  <span class="arq" id="arqChip" hidden><span id="arqNome"></span><span class="sep">·</span><span id="arqQtd"></span><button class="lnk" id="bOutro">trocar arquivo</button></span>
+  <span class="arq" id="arqChip" hidden><span id="arqNome"></span><span class="sep">·</span><span id="arqQtd"></span><button class="lnk" id="bOutro">trocar arquivo</button><button class="lnk" id="bHist" hidden>histórico</button><button class="lnk" id="bVoltaBase" hidden>voltar para a base</button></span>
   <span class="esp"></span>
   <span class="conn" id="conn">verificando login…</span>
   <button class="btn sm" id="bEntrar" hidden>Entrar</button>
@@ -336,12 +336,12 @@ html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.1
   <input type="file" id="arq" accept=".xlsx,.xls,.xlsm,.csv" hidden>
   <section id="vDrop" class="drop" tabindex="0">
     <div class="drop-ic">📄</div>
-    <h2>Carregue o relatório de notas do SIENGE</h2>
-    <p>Arraste o arquivo para cá ou <span class="lnk">escolha no computador</span> — ex.: <code>Relatório 2026.xlsx</code></p>
-    <ul>
+    <h2 id="dropT">Carregue o relatório de notas do SIENGE</h2>
+    <p id="dropP">Arraste o arquivo para cá ou <span class="lnk">escolha no computador</span> — ex.: <code>Relatório 2026.xlsx</code></p>
+    <ul id="dropL">
       <li>Confere chave de acesso, duplicidades, datas, valor e manifesto × lançamento</li>
       <li>Mostra quais pendentes já têm card no Controle de Notas</li>
-      <li>O arquivo é lido só neste navegador</li>
+      <li>Com login de administrador/supervisor, o relatório fica salvo na base e é atualizado a cada novo arquivo</li>
     </ul>
   </section>
   <div id="msg"></div>
@@ -363,6 +363,12 @@ html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.1
       </select>
       <select id="fCard" hidden></select>
       <select id="fPessoa" hidden></select>
+      <select id="fAtu" hidden>
+        <option value="">Atualização: todas</option>
+        <option value="novas">Novas no último relatório</option>
+        <option value="alteradas">Alteradas no último relatório</option>
+        <option value="fora">Fora do último relatório</option>
+      </select>
     </div>
 
     <div class="ctx">
@@ -457,6 +463,7 @@ const REGRAS={
   CARD_CONCL:    ['A','Card finalizado no Controle de Notas, mas a nota continua sem título no relatório'],
   CARD_ABERTO:   ['A','Já lançada no relatório (tem título), mas o card continua aberto no Controle de Notas'],
   SEM_CARD:      ['I','Pendente e ainda sem card no Controle de Notas'],
+  FORA_ULTIMO:   ['I','Não veio no último relatório carregado'],
   UF_CHAVE:      ['I','UF do emitente vazia — preenchida pela chave de acesso'],
   NS_CHAVE:      ['I','Número/Série vazio — preenchido pela chave de acesso'],
   UF_PADRAO:     ['I','UF do emitente vazia — preenchida com PA (como no Power Query)']
@@ -668,21 +675,26 @@ function mostrarMsg(t,ruim){ $('#msg').innerHTML=t?`<div class="msg${ruim?' bad'
 
 async function abrirArquivo(file){
   if(!file)return;
+  if(podeCarregar())return escolherDestino(file);
   mostrarMsg('Lendo '+file.name+'…');
   try{
     await ensureXLSX();
     const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
     const {nome,linhas}=lerPlanilha(wb);
     if(!linhas.length)throw new Error('A aba “'+nome+'” não tem notas abaixo do cabeçalho.');
-    LIDAS=linhas; ARQ=file.name; ABA=nome; F={kpi:'',regra:''}; LIMITE=300; CARDS_OK=false;
+    LIDAS=linhas; ARQ=file.name; ABA=nome; F={kpi:'',regra:''}; LIMITE=300; CARDS_OK=false; MODO='arquivo';
     processar(); mostrarMsg('');
   }catch(e){ console.error(e); mostrarMsg(e.message||String(e),true); }
 }
 let LIDAS=[];
 function processar(){
   ROWS=tratar(LIDAS,dias());
+  if(MODO==='base'){
+    ROWS.forEach((o,i)=>{ o.base=LIDAS[i].base; if(BASE.ultima&&o.base.ultima_carga!==BASE.ultima.id)o.oc.push({c:'FORA_ULTIMO',extra:'último em que veio: '+dataCarga(o.base.ultima_carga)}); });
+    finalizar(ROWS,dias());
+  }
+  cabecalhoArquivo();
   $('#vDrop').hidden=true; $('#vRes').hidden=false; $('#arqChip').hidden=false; $('#bExp').hidden=false;
-  $('#arqNome').textContent=ARQ; $('#arqNome').title=`${ARQ} · aba “${ABA}”`; $('#arqQtd').textContent=intf(ROWS.length)+' notas';
   const emps=[...new Set(ROWS.map(o=>o.empresa||'(não cadastrada)'))].sort();
   $('#fEmp').innerHTML='<option value="">Empresa: todas</option>'+emps.map(e=>`<option>${esc(e)}</option>`).join('');
   const sts=STATUS_ORDEM.filter(s=>ROWS.some(o=>o.status===s));
@@ -693,7 +705,7 @@ function processar(){
 }
 
 function filtradas(semRegra){
-  const b=norm($('#fBusca').value), emp=$('#fEmp').value, st=$('#fSt').value, val=$('#fVal').value, fc=$('#fCard').value, fp=$('#fPessoa').value;
+  const b=norm($('#fBusca').value), emp=$('#fEmp').value, st=$('#fSt').value, val=$('#fVal').value, fc=$('#fCard').value, fp=$('#fPessoa').value, fa=MODO==='base'?$('#fAtu').value:'';
   return ROWS.filter(o=>{
     if(emp&&(o.empresa||'(não cadastrada)')!==emp)return false;
     if(st&&o.status!==st)return false;
@@ -703,6 +715,7 @@ function filtradas(semRegra){
     if(F.graf&&!predF(F.graf)(o))return false;
     if(fc&&!passaCard(o,fc))return false;
     if(fp&&!passaPessoa(o,fp))return false;
+    if(fa&&!passaAtu(o,fa))return false;
     if(b&&!norm([o.emitente,o.cnpjEmit,o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.pedido,nomeUsr(o.respId),nomeUsr(o.compId)].join(' ')).includes(b))return false;
     return true;
   });
@@ -719,7 +732,7 @@ function desenhar(){
   const nE=ROWS.filter(o=>o.nivel==='E').length, nA=ROWS.filter(o=>o.nivel==='A').length, naoR=ROWS.filter(o=>o.status==='Não realizada'||o.status==='Desconhecida').length;
   const barraK=parts=>`<div class="barra-k">${parts.filter(([v])=>v).map(([v,c])=>`<i style="flex:${v};background:${c}"></i>`).join('')}</div>`;
   const ks=[
-    {k:'tot',l:'Notas no relatório',v:intf(nTot),s:`${brl(soma(ROWS))}${naoR?` · ${intf(naoR)} não realizadas`:''}`,f:null},
+    {k:'tot',l:MODO==='base'?'Notas na base':'Notas no relatório',v:intf(nTot),s:`${brl(soma(ROWS))}${naoR?` · ${intf(naoR)} não realizadas`:''}`,f:null},
     {k:'lanc',l:'Lançadas',v:intf(lanc.length),cl:'ok',s:`<b>${pctd(lanc.length,nTot)}</b> das notas · ${brl(soma(lanc))}`,f:o=>o.status==='Lançado',bar:barraK([[lanc.length,'var(--ok)'],[nTot-lanc.length,'transparent']])},
     {k:'pend',l:'Pendentes de lançamento',v:intf(pend.length),cl:'warn',s:`${intf(conf)} confirmadas · ${intf(pnd)} pendentes · ${intf(agu)} aguardando`,f:ehPendente,
       bar:barraK([[conf,COR_ST['Apenas Confirmação']],[pnd,COR_ST['Pendente']],[agu,COR_ST['Aguardando Confirmação']]])},
@@ -766,7 +779,7 @@ function desenhar(){
     <td class="cel-oc" title="${esc(o.ocTexto)}"><div class="oc2">${ocCurta(o)}</div></td></tr>`).join('')||`<tr><td colspan="${COLS_TAB.length}" style="text-align:center;color:var(--mu);padding:40px">Nenhuma nota com esses filtros.</td></tr>`;
   $('#tb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l)));
   $('#info').textContent=(lst.length<ROWS.length?`${intf(lst.length)} de ${intf(ROWS.length)} notas`:`${intf(lst.length)} notas`)+` · ${brl(soma(lst))}`+(vis.length<lst.length?` · mostrando ${intf(vis.length)}`:'');
-  ['#fEmp','#fSt','#fVal','#fCard','#fPessoa'].forEach(id=>$(id).classList.toggle('ativo',!!$(id).value));
+  ['#fEmp','#fSt','#fVal','#fCard','#fPessoa','#fAtu'].forEach(id=>$(id).classList.toggle('ativo',!!$(id).value));
   $('#bMais').hidden=lst.length<=LIMITE||VISTA!=='tab';
   $('#bLimpa').hidden=!temFiltro();
   $('#bChip').hidden=!F.graf; if(F.graf)$('#bChip').textContent=F.graf.d+'  ✕';
@@ -941,8 +954,8 @@ function desenharLista(){
     ||`<tr><td colspan="${COLS_LISTA.length}" style="text-align:center;color:var(--mu);padding:24px">Nenhuma nota com esses filtros.</td></tr>`;
   $('#lTb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l),true));
 }
-function temFiltro(){ return !!($('#fBusca').value||$('#fEmp').value||$('#fSt').value||$('#fVal').value||$('#fCard').value||$('#fPessoa').value||F.regra||F.kpi||F.graf); }
-$('#bLimpa').onclick=()=>{ $('#fBusca').value=''; $('#fEmp').value=''; $('#fSt').value=''; $('#fVal').value=''; $('#fCard').value=''; $('#fPessoa').value=''; F={kpi:'',regra:''}; LIMITE=300; desenhar(); };
+function temFiltro(){ return !!($('#fBusca').value||$('#fEmp').value||$('#fSt').value||$('#fVal').value||$('#fCard').value||$('#fPessoa').value||$('#fAtu').value||F.regra||F.kpi||F.graf); }
+$('#bLimpa').onclick=()=>{ $('#fBusca').value=''; $('#fEmp').value=''; $('#fSt').value=''; $('#fVal').value=''; $('#fCard').value=''; $('#fPessoa').value=''; $('#fAtu').value=''; F={kpi:'',regra:''}; LIMITE=300; desenhar(); };
 $('#bChip').onclick=()=>{ F.graf=null; LIMITE=300; desenhar(); };
 $('#segVista').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; VISTA=b.dataset.v; $('#segVista').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); lsSet('validador-nf-vista',VISTA); desenhar(); };
 $('#segMed').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; MED=b.dataset.m; $('#segMed').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); desenhar(); };
@@ -955,7 +968,10 @@ function detalhe(o,daLista){
   const campos=[['Status',o.status],['Empresa',o.empresa||'(não cadastrada)'],['CNPJ destinatário',o.cnpjDest],['UF destinatário',o.ufDest],
     ['Emitente',o.emitente],['CNPJ emitente',o.cnpjEmit],['UF emitente',o.ufEmit],['Natureza da operação',o.natureza],
     ['Manifesto',o.manifesto],['Emissão',dataBR(o.emissao)],['Recebimento',dataBR(o.recebimento)],['Valor',o.valor==null?'':brl(o.valor)],
-    ['Escrituração',o.escrituracao],['Título/NF avulsa',o.titulo||'0'],['Chave de acesso',o.chave],['Linha no relatório',o.linha]];
+    ['Escrituração',o.escrituracao],['Título/NF avulsa',o.titulo||'0'],['Chave de acesso',o.chave],
+    ...(o.base?[['Na base desde',dataCarga(o.base.primeira_carga)],['Último relatório em que veio',dataCarga(o.base.ultima_carga)],
+      ['Dados alterados em',dataCarga(o.base.alterada_na_carga)],['Título desde',o.base.titulo_desde?new Date(o.base.titulo_desde).toLocaleDateString('pt-BR'):'—'],
+      ['Linha no relatório',o.base.linha??'—']]:[['Linha no relatório',o.linha]])];
   $('#dlgB').innerHTML=(daLista?'<button class="btn" id="bVolta" style="margin:0 0 12px">← Voltar à lista</button>':'')+oc+acompHtml(o)+cardBoxHtml(o)+`<dl class="dl">${campos.map(([a,b])=>`<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>`;
   if(daLista)$('#bVolta').onclick=renderLista;
   ligarCardBox(o,()=>detalhe(o,daLista));
@@ -970,12 +986,13 @@ function exportar(){
     'Emitente':o.emitente,'CNPJ emitente':o.cnpjEmit,'UF emitente':o.ufEmit,'CNPJ destinatário':o.cnpjDest,'UF destinatário':o.ufDest,
     'Manifesto':o.manifesto,'Natureza da operação':o.natureza,'Recebimento':o.recebimento,'Emissão':o.emissao,'Chave de acesso':o.chave,
     'Número NF':o.numero,'Série':o.serie,'Valor':o.valor,'Escrituração':o.escrituracao,'Título/Nota fiscal avulsa':o.titulo,
-    'Empresas':o.empresa,'Status manifestação':o.status,'Validação':{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel],'Ocorrências':o.ocTexto,'Linha no relatório':o.linha,
+    'Empresas':o.empresa,'Status manifestação':o.status,'Validação':{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel],'Ocorrências':o.ocTexto,'Linha no relatório':o.base?o.base.linha:o.linha,
+    ...(o.base?{'Na base desde':dataCarga(o.base.primeira_carga),'Último relatório em que veio':dataCarga(o.base.ultima_carga),'Título desde':o.base.titulo_desde?new Date(o.base.titulo_desde):''}:{}),
     ...(DADOS_OK?{'Pedido':o.pedido||'','Responsável':nomeUsr(o.respId),'Comprador':nomeUsr(o.compId)}:{}),
     ...(CARDS_OK?{'Card no Controle de Notas':o.card?(COL_LABEL[o.card.status]||o.card.status):'','Atribuído no card':o.card?o.card.responsavel||'':''}:{})
   }));
   const ocs=[]; lst.forEach(o=>o.oc.forEach(x=>{ if(REGRAS[x.c][0]==='I')return;
-    ocs.push({'Linha no relatório':o.linha,'Nível':REGRAS[x.c][0]==='E'?'Erro':'Alerta','Ocorrência':txtRegra(x.c,dias()),'Detalhe':x.extra||'',
+    ocs.push({'Linha no relatório':o.base?o.base.linha:o.linha,'Nível':REGRAS[x.c][0]==='E'?'Erro':'Alerta','Ocorrência':txtRegra(x.c,dias()),'Detalhe':x.extra||'',
       'Empresa':o.empresa,'Emitente':o.emitente,'Número NF':o.numero,'Série':o.serie,'Emissão':o.emissao,'Valor':o.valor,'Manifesto':o.manifesto,'Título':o.titulo,'Chave de acesso':o.chave}); }));
   const wb=XLSX.utils.book_new();
   const ws1=XLSX.utils.json_to_sheet(notas,{cellDates:true,dateNF:'dd/mm/yyyy'});
@@ -1023,10 +1040,12 @@ async function conectar(){
     if(error||!p||!p.active||p.role==='pendente'){ conn('Seu usuário não está liberado no Controle de Notas','off'); return; }
     EU=p; conn('● '+p.name,'ok');
     $('#acoes').hidden=false; $('#bCriar').hidden=!(p.role==='admin'||p.role==='supervisor');
-    if(ROWS.length&&!CARDS_OK)buscarCards(ROWS);
+    if(!ROWS.length)await carregarBase();
+    else if(!CARDS_OK)buscarCards(ROWS);
+    textoInicial();
   }catch(e){ console.error(e); conn('Não consegui falar com o Controle de Notas','off'); }
 }
-sbc&&sbc.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT'){ EU=null; CARDS_OK=false; $('#acoes').hidden=true; conn('Saiu do Controle de Notas','off'); if(ROWS.length){ aplicarCards(); desenhar(); } } });
+sbc&&sbc.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT'){ EU=null; CARDS_OK=false; $('#acoes').hidden=true; conn('Saiu do Controle de Notas','off'); if(typeof MODO!=='undefined'&&MODO==='base'){ ROWS=[]; LIDAS=[]; MODO='arquivo'; $('#vRes').hidden=true; $('#arqChip').hidden=true; $('#bExp').hidden=true; $('#vDrop').hidden=false; return; } if(ROWS.length){ aplicarCards(); desenhar(); } } });
 
 // Fora do Controle de Notas (arquivo aberto direto), entra com o mesmo e-mail e senha de lá.
 $('#bEntrar').onclick=()=>{
@@ -1306,6 +1325,158 @@ $('#bPreencher').onclick=async()=>{
     }catch(err){ $('#ldMsg').innerHTML=`<span class="errmsg">Falhou: ${esc(err.message||err)}</span>`; $('#ldOk').disabled=false; } };
 };
 
+
+/* ---------- Base salva do relatório (tabelas validador_nf_notas / validador_nf_cargas) ----------
+   Com login, o validador abre direto a base salva — uma linha por chave de acesso, atualizada a cada relatório
+   carregado por admin/supervisor (notas novas entram, as que mudaram são atualizadas, as que não vieram ficam
+   marcadas "fora do último relatório"). O arquivo original de cada carga vai para o armazenamento privado
+   "validador-relatorios". Sem login, ou para quem só quer conferir um arquivo, a análise local continua igual. */
+let MODO='arquivo', BASE={ultima:null,cargas:new Map()}, BASE_ERRO='';
+const BUCKET_REL='validador-relatorios';
+const podeCarregar=()=>!!EU&&(EU.role==='admin'||EU.role==='supervisor')&&!BASE_ERRO;
+const fmtDH=iso=>iso?new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
+function dataCarga(id){ const c=BASE.cargas.get(id); return c?new Date(c.enviado_em).toLocaleDateString('pt-BR'):'—'; }
+const COL_BASE={emitente:'emitente',cnpjEmit:'cnpj_emitente',ufEmit:'uf_emitente',destinatario:'destinatario',cnpjDest:'cnpj_destinatario',
+  ufDest:'uf_destinatario',manifesto:'manifesto',natureza:'natureza',recebimento:'recebimento',emissao:'emissao',chave:'chave',
+  numSerie:'numero_serie',valor:'valor',escrituracao:'escrituracao',titulo:'titulo'};
+function passaAtu(o,fa){
+  if(!o.base||!BASE.ultima)return false; const u=BASE.ultima.id;
+  if(fa==='novas')return o.base.primeira_carga===u;
+  if(fa==='alteradas')return o.base.alterada_na_carga===u&&o.base.primeira_carga!==u;
+  if(fa==='fora')return o.base.ultima_carga!==u;
+  return true;
+}
+function textoInicial(){
+  if(!$('#vDrop').hidden||!ROWS.length){
+    if(EU&&!BASE_ERRO&&!BASE.ultima){
+      $('#dropT').textContent=podeCarregar()?'Carregue o primeiro relatório para criar a base':'Ainda não há relatório salvo';
+      $('#dropP').innerHTML=podeCarregar()?'Arraste o relatório do SIENGE para cá ou <span class="lnk">escolha no computador</span> — ele fica salvo e é atualizado a cada novo arquivo.'
+        :'Um administrador ou supervisor precisa carregar o primeiro relatório. Você ainda pode <span class="lnk">conferir um arquivo</span> sem salvar.';
+    }
+  }
+}
+function cabecalhoArquivo(){
+  $('#vDrop').hidden=true; $('#vRes').hidden=false; $('#arqChip').hidden=false; $('#bExp').hidden=false;
+  $('#fAtu').hidden=MODO!=='base'; if(MODO!=='base')$('#fAtu').value='';
+  if(MODO==='base'){
+    const u=BASE.ultima;
+    $('#arqNome').textContent='Base salva'; $('#arqNome').title=u?`Último relatório: ${u.arquivo}`:'';
+    $('#arqQtd').textContent=`${intf(ROWS.length)} notas`+(u?` · ${fmtDH(u.enviado_em)}`:'');
+    $('#arqQtd').title=u?`Atualizada em ${fmtDH(u.enviado_em)}${u.por?' por '+u.por:''} com ${u.arquivo}`:'';
+    $('#bOutro').textContent='atualizar'; $('#bOutro').title='Atualizar a base com um novo relatório do SIENGE'; $('#bOutro').hidden=!podeCarregar();
+    $('#bHist').hidden=false; $('#bVoltaBase').hidden=true;
+  }else{
+    $('#arqNome').textContent=ARQ; $('#arqNome').title=`${ARQ} · aba “${ABA}”`;
+    $('#arqQtd').textContent=intf(ROWS.length)+' notas'+(EU&&!BASE_ERRO?' · só conferência, não salvo':'');
+    $('#bOutro').textContent='trocar arquivo'; $('#bOutro').hidden=false;
+    $('#bHist').hidden=!EU||!!BASE_ERRO||!BASE.ultima; $('#bVoltaBase').hidden=!(EU&&BASE.ultima&&!BASE_ERRO);
+  }
+}
+
+async function carregarBase(){
+  if(!EU)return;
+  mostrarMsg('Abrindo a base salva…');
+  try{
+    const {data:cargas,error}=await sbc.from('validador_nf_cargas').select('id,arquivo,arquivo_path,enviado_por,enviado_em,linhas,novas,alteradas,ignoradas').eq('concluida',true).order('id',{ascending:false}).limit(500);
+    if(error)throw error;
+    BASE.cargas=new Map((cargas||[]).map(c=>[c.id,c])); BASE.ultima=(cargas||[])[0]||null;
+    if(BASE.ultima){ const {data}=await sbc.rpc('profile_names',{p_ids:[BASE.ultima.enviado_por]}); BASE.ultima.por=(data&&data[0]&&data[0].name)||''; }
+    BASE_ERRO='';
+    if(!BASE.ultima){ mostrarMsg(''); textoInicial(); return; }
+    const {count,error:e2}=await sbc.from('validador_nf_notas').select('chave',{count:'exact',head:true}); if(e2)throw e2;
+    const pags=Array.from({length:Math.ceil((count||0)/1000)},(_,i)=>i*1000);
+    const partes=await emParalelo(pags,4,async ini=>{ const {data,error}=await sbc.from('validador_nf_notas').select('*').order('chave').range(ini,ini+999); if(error)throw error; return data||[]; });
+    const linhas=partes.flat().sort((a,b)=>(a.emissao||'').localeCompare(b.emissao||'')||a.chave.localeCompare(b.chave));
+    LIDAS=linhas.map((r,i)=>({linha:i+1,raw:k=>r[COL_BASE[k]],chaveNumero:false,base:r}));
+    MODO='base'; ARQ='Base salva'; ABA='Relatório'; F={kpi:'',regra:''}; LIMITE=300; CARDS_OK=false;
+    mostrarMsg(''); processar();
+  }catch(e){ console.error(e);
+    BASE_ERRO=/validador_nf_|does not exist|schema cache/i.test(e.message||'')?'A base salva ainda não foi criada no banco (falta rodar o SQL da atualização) — por enquanto o arquivo é só conferido, sem salvar.':'Não consegui abrir a base salva: '+(e.message||e);
+    mostrarMsg(BASE_ERRO,!/falta rodar/.test(BASE_ERRO));
+  }
+}
+
+// Admin/supervisor escolhe: atualizar a base com o arquivo, ou só conferir sem salvar.
+function escolherDestino(file){
+  $('#dlgT').textContent='Relatório '+file.name;
+  $('#dlgB').innerHTML=`<p style="margin:0 0 12px">O que fazer com este arquivo?</p>
+    <div class="acomp-r" style="gap:10px"><button class="btn pri" id="dsSalvar">Atualizar a base salva</button><button class="btn" id="dsVer">Só conferir (não salvar)</button></div>
+    <p class="info" style="margin:12px 0 0">Atualizar: notas novas entram, as que mudaram são atualizadas e as que não vierem continuam na base, marcadas “fora do último relatório”. O arquivo original fica guardado no histórico.</p>`;
+  $('#dlg').showModal();
+  $('#dsSalvar').onclick=()=>{ $('#dlg').close(); atualizarBase(file); };
+  $('#dsVer').onclick=()=>{ $('#dlg').close(); analisarLocal(file); };
+}
+async function analisarLocal(file){
+  mostrarMsg('Lendo '+file.name+'…');
+  try{ await ensureXLSX(); const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true}); const {nome,linhas}=lerPlanilha(wb);
+    if(!linhas.length)throw new Error('A aba “'+nome+'” não tem notas abaixo do cabeçalho.');
+    LIDAS=linhas; ARQ=file.name; ABA=nome; F={kpi:'',regra:''}; LIMITE=300; CARDS_OK=false; MODO='arquivo'; processar(); mostrarMsg('');
+  }catch(e){ console.error(e); mostrarMsg(e.message||String(e),true); }
+}
+const txtOuNull=v=>{ if(v==null)return null; const t=(v instanceof Date?v.toISOString():String(v)).trim(); return t||null; };
+const isoData=d=>d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:null;
+async function atualizarBase(file){
+  mostrarMsg('Lendo '+file.name+'…');
+  let carga=null;
+  try{
+    await ensureXLSX();
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true}); const {nome,linhas}=lerPlanilha(wb);
+    if(!linhas.length)throw new Error('A aba “'+nome+'” não tem notas abaixo do cabeçalho.');
+    const porChave=new Map(); let semChave=0;
+    linhas.forEach(l=>{ const g=l.raw, chave=soAlnum(g('chave'));
+      if(l.chaveNumero||!/^[0-9A-Z]{44}$/.test(chave)){ semChave++; return; }
+      porChave.set(chave,{chave,emitente:txtOuNull(g('emitente')),cnpj_emitente:txtOuNull(g('cnpjEmit')),uf_emitente:txtOuNull(g('ufEmit')),
+        destinatario:txtOuNull(g('destinatario')),cnpj_destinatario:txtOuNull(g('cnpjDest')),uf_destinatario:txtOuNull(g('ufDest')),
+        manifesto:txtOuNull(g('manifesto')),natureza:txtOuNull(g('natureza')),recebimento:isoData(paraData(g('recebimento'))),emissao:isoData(paraData(g('emissao'))),
+        numero_serie:txtOuNull(g('numSerie')),valor:paraNum(g('valor')),escrituracao:txtOuNull(g('escrituracao')),titulo:txtOuNull(g('titulo')),linha:l.linha}); });
+    const regs=[...porChave.values()], repetidas=linhas.length-semChave-regs.length;
+    if(!regs.length)throw new Error('Nenhuma linha com chave de acesso válida — nada para salvar.');
+    // 1) abre a carga e guarda o arquivo original
+    mostrarMsg('Abrindo a atualização…');
+    const {data:id,error:e1}=await sbc.rpc('validador_nf_iniciar_carga',{p_arquivo:file.name}); if(e1)throw e1; carga=id;
+    let path=`carga_${carga}/${file.name.replace(/[^\w.\- ]+/g,'_').slice(0,150)}`;
+    const {error:eUp}=await sbc.storage.from(BUCKET_REL).upload(path,new Blob([buf],{type:file.type||'application/octet-stream'}),{upsert:false});
+    if(eUp){ console.warn('Arquivo original não guardado:',eUp.message); path=null; }
+    // 2) grava as linhas em lotes
+    let novas=0, alteradas=0, ignoradas=0, feitas=0;
+    for(const lote of emLotes(regs,1000)){
+      const {data:r,error}=await sbc.rpc('validador_nf_gravar_lote',{p_carga:carga,p_linhas:lote}); if(error)throw error;
+      novas+=r.novas||0; alteradas+=r.alteradas||0; ignoradas+=r.ignoradas||0; feitas+=lote.length;
+      mostrarMsg(`Salvando na base… ${intf(feitas)} de ${intf(regs.length)}`);
+    }
+    // 3) fecha a carga
+    const {error:e3}=await sbc.rpc('validador_nf_concluir_carga',{p_carga:carga,p_linhas:linhas.length,p_novas:novas,p_alteradas:alteradas,p_ignoradas:semChave+repetidas+ignoradas,p_arquivo_path:path}); if(e3)throw e3;
+    await carregarBase();
+    const fora=ROWS.filter(o=>o.base&&o.base.ultima_carga!==carga).length;
+    $('#dlgT').textContent='Base atualizada';
+    $('#dlgB').innerHTML=`<ul class="ocl">
+      <li><span class="tag OK">Novas</span><span><b>${intf(novas)}</b> notas entraram na base</span></li>
+      <li><span class="tag I">Alteradas</span><span><b>${intf(alteradas)}</b> notas mudaram (manifesto, título, escrituração…)</span></li>
+      <li><span class="tag A">Fora</span><span><b>${intf(fora)}</b> notas da base não vieram neste relatório (continuam salvas)</span></li>
+      ${semChave+repetidas+ignoradas?`<li><span class="tag E">Ignoradas</span><span><b>${intf(semChave+repetidas+ignoradas)}</b> linhas sem chave de acesso válida ou repetidas</span></li>`:''}
+    </ul><p class="info" style="margin:0">${esc(file.name)} · ${intf(linhas.length)} linhas${path?' · arquivo original guardado no histórico':''}. Use o filtro “Atualização” para ver as novas, as alteradas e as que ficaram de fora.</p>`;
+    $('#dlg').showModal();
+  }catch(e){ console.error(e);
+    mostrarMsg('Não foi possível atualizar a base: '+(e.message||e)+(carga?' — a parte já gravada fica salva; carregue o arquivo de novo para completar.':''),true); }
+}
+
+// Histórico das cargas, com o arquivo original para baixar
+$('#bHist').onclick=async()=>{
+  $('#dlgT').textContent='Histórico de relatórios'; $('#dlgB').innerHTML='<p class="info">Carregando…</p>'; $('#dlg').showModal();
+  const cs=[...BASE.cargas.values()];
+  const {data:nm}=cs.length?await sbc.rpc('profile_names',{p_ids:[...new Set(cs.map(c=>c.enviado_por))]}):{data:[]};
+  const nomes={}; (nm||[]).forEach(r=>nomes[r.id]=r.name);
+  $('#dlgB').innerHTML=cs.length?`<div class="tw" style="max-height:60vh"><table><thead><tr><th>Quando</th><th>Arquivo</th><th>Por</th><th class="num">Linhas</th><th class="num">Novas</th><th class="num">Alteradas</th><th class="num">Ignoradas</th><th></th></tr></thead><tbody>
+    ${cs.map(c=>`<tr><td>${esc(fmtDH(c.enviado_em))}</td><td>${esc(c.arquivo)}</td><td>${esc(nomes[c.enviado_por]||'—')}</td><td class="num">${intf(c.linhas)}</td><td class="num">${intf(c.novas)}</td><td class="num">${intf(c.alteradas)}</td><td class="num">${intf(c.ignoradas)}</td>
+      <td>${c.arquivo_path?`<button class="lnk" data-path="${esc(c.arquivo_path)}">⬇ baixar</button>`:'<span style="color:var(--mu2)">sem arquivo</span>'}</td></tr>`).join('')}
+    </tbody></table></div>`:'<p>Nenhum relatório salvo ainda.</p>';
+  $('#dlgB').querySelectorAll('[data-path]').forEach(b=>b.onclick=async()=>{
+    const {data,error}=await sbc.storage.from(BUCKET_REL).createSignedUrl(b.dataset.path,120,{download:true});
+    if(error)return alert('Não foi possível baixar: '+error.message); window.open(data.signedUrl,'_blank'); });
+};
+$('#bVoltaBase').onclick=()=>{ CARDS_OK=false; carregarBase(); };
+
 /* Ações em lote sobre as notas filtradas */
 $('#bRecarregar').onclick=()=>{ CARDS_OK=false; buscarCards(ROWS); };
 $('#bCriar').onclick=async()=>{
@@ -1358,7 +1529,7 @@ $('#bOutro').onclick=()=>arq.click();
 $('#bExp').onclick=exportar;
 $('#bMais').onclick=()=>{ LIMITE+=300; desenhar(); };
 $('#fBusca').oninput=()=>{ LIMITE=300; desenhar(); };
-['#fEmp','#fSt','#fVal','#fCard','#fPessoa'].forEach(s=>$(s).onchange=()=>{ LIMITE=300; desenhar(); });
+['#fEmp','#fSt','#fVal','#fCard','#fPessoa','#fAtu'].forEach(s=>$(s).onchange=()=>{ LIMITE=300; desenhar(); });
 $('#dlgX').onclick=()=>$('#dlg').close();
 $('#dlg').onclick=e=>{ if(e.target===$('#dlg'))$('#dlg').close(); };
 $('#cfgDias').value=lsGet('validador-nf-dias','30');
