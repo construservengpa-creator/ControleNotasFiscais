@@ -902,6 +902,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
       <button data-view="quadro" class="active">Quadro</button>
       <button data-view="cadastro" id="tabCadastro">Cadastrar Nota</button>
       <button data-view="importar-sienge" id="tabImportarSienge">Importar SIENGE</button>
+      <button data-view="validador" id="tabValidador">Validador NF</button>
       <button data-view="obras" id="tabObras">Obras</button>
       <button data-view="usuarios" id="tabUsuarios">Usuários</button>
       <button data-view="auditoria" id="tabAuditoria">Auditoria</button>
@@ -1309,6 +1310,13 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
       </section>
 
       <!-- ---------- RELATÓRIOS ---------- -->
+      <!-- ---------- VALIDADOR DE NF ----------
+           Página própria (validador/index.html) mostrada aqui dentro. Usa o mesmo login: confere o relatório
+           de NF-e do SIENGE, cruza com os cards e grava observações/avisos no diálogo de cada card. -->
+      <section class="view" id="view-validador">
+        <iframe id="validadorFrame" title="Validador de Notas Fiscais" style="display:block;width:100%;height:calc(100vh - 150px);min-height:560px;border:0;border-radius:12px;background:transparent"></iframe>
+      </section>
+
       <section class="view" id="view-relatorios">
         <div class="kpi-row" id="kpiRow"></div>
 
@@ -2642,6 +2650,9 @@ function alternarTema() {
   if (novo) document.documentElement.setAttribute('data-tema', novo); else document.documentElement.removeAttribute('data-tema');
   try { localStorage.setItem('painel-tema', novo); } catch (e) { /* modo privado etc. — sem persistência, sem problema */ }
   atualizarBotaoTema();
+  // o Validador de NF (aba própria) troca de tema junto
+  const fr = document.getElementById('validadorFrame');
+  if (fr && fr.contentWindow) fr.contentWindow.postMessage({ tipo: 'vnf-tema', tema: novo }, location.origin);
 }
 
 async function init() {
@@ -2815,6 +2826,9 @@ function afterLogin(user) {
   }
 
   switchView('quadro');
+  // Link direto para um card (ex.: aberto pelo Validador de NF fora da aba): ...#nota=123
+  const mNota = /^#nota=(\d+)$/.exec(location.hash || '');
+  if (mNota) { history.replaceState(null, '', location.pathname + location.search); openDetalheModal(Number(mNota[1])); }
 }
 
 function setupNav() {
@@ -2855,7 +2869,15 @@ function switchView(view) {
   if (view === 'usuarios') loadUsuarios();
   if (view === 'auditoria') loadAuditoria();
   if (view === 'relatorios') loadRelatorios();
+  if (view === 'validador') { const fr = document.getElementById('validadorFrame'); if (!fr.getAttribute('src')) fr.src = 'validador/'; }
 }
+
+// O Validador de NF (dentro da aba) pede para abrir o card de uma nota no quadro.
+window.addEventListener('message', (ev) => {
+  if (ev.origin !== location.origin || !ev.data || ev.data.tipo !== 'vnf-abrir-nota' || !CURRENT_USER) return;
+  const id = Number(ev.data.id);
+  if (id) openDetalheModal(id);
+});
 
 /* ---------- Atualização automática do Quadro ----------
    Antes, o Quadro só recarregava ao abrir a aba ou depois de uma ação do

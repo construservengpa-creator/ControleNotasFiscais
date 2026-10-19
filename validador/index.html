@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1E2024">
+<title>Capivara Validador NF · AMETA</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23F5C433'/><text x='32' y='44' font-size='30' text-anchor='middle' font-family='Arial' font-weight='700' fill='%231A1E24'>NF</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.1/dist/umd/supabase.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Oswald:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script>
+  /* Tema escolhido no Controle de Notas (botão Tema do topo) — mesma chave do Controle e do Painel de Suprimentos */
+  (function(){ try{ if(localStorage.getItem('painel-tema')==='estoque')document.documentElement.setAttribute('data-tema','estoque'); }catch(e){} })();
+</script>
+<style>
+:root{
+  --bg:#1E2024; --s1:#272A30; --s2:#30343B; --line:#3B4048; --tx:#ECEDEF; --mu:#9AA1AC;
+  --ac:#F5C433; --ac-ink:#1E2024; --ok:#62C48F; --bad:#F26D5B; --info:#7DB4E8; --warn:#F2A65A;
+  --f-head:'Oswald','Arial Narrow',sans-serif;
+  --f-body:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  --f-mono:'JetBrains Mono',ui-monospace,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:14px/1.45 var(--f-body)}
+body{min-height:100dvh}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+[hidden]{display:none!important}
+
+.cap-selo{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:38px;height:38px;border-radius:22%;background:#F5C433;color:#1A1E24}
+.cap-selo svg{width:100%;height:100%;display:block}
+
+.top{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.top h1{font:600 clamp(18px,2vw,26px)/1.1 var(--f-head);letter-spacing:.06em;text-transform:uppercase;margin:0;flex:1;min-width:200px}
+.top h1 small{display:block;font:500 12.5px var(--f-body);color:var(--mu);text-transform:none;letter-spacing:0;margin-top:3px}
+.btn{border:1px solid var(--line);background:var(--s1);border-radius:10px;padding:9px 14px;font-weight:600;white-space:nowrap}
+.btn.pri{background:var(--ac);color:var(--ac-ink);border-color:var(--ac)}
+.btn:disabled{opacity:.5;cursor:default}
+main{padding:16px;max-width:1600px;margin:0 auto}
+
+.drop{border:2px dashed var(--line);border-radius:14px;padding:46px 16px;text-align:center;background:var(--s1);cursor:pointer}
+.drop.on{border-color:var(--ac);background:var(--ac-soft)}
+.drop h2{font:600 22px var(--f-head);text-transform:uppercase;letter-spacing:.05em;margin:0 0 6px}
+.drop p{color:var(--mu);margin:4px 0}
+.drop code{font-family:var(--f-mono);font-size:12.5px;color:var(--ac)}
+.msg{margin:12px 0;padding:10px 14px;border-radius:10px;background:var(--s1);border-left:4px solid var(--info)}
+.msg.bad{border-left-color:var(--bad)}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0 0 14px}
+.kpi{background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer;text-align:left}
+.kpi .l{font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:.04em}
+.kpi .v{font:700 22px var(--f-mono);margin-top:2px}
+.kpi .s{font-size:12px;color:var(--mu)}
+.kpi.bad .v{color:var(--bad)} .kpi.warn .v{color:var(--warn)} .kpi.ok .v{color:var(--ok)} .kpi.ac .v{color:var(--ac)}
+.kpi.sel{outline:2px solid var(--ac)}
+
+.cols2{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+@media(max-width:1100px){.cols2{grid-template-columns:minmax(0,1fr)}}
+.box{background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.box h3{font:600 15px var(--f-head);text-transform:uppercase;letter-spacing:.05em;margin:0 0 10px}
+.regras{display:flex;flex-direction:column;gap:6px}
+.regra{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--s2);border:1px solid transparent;border-radius:9px;padding:7px 10px;text-align:left;width:100%}
+.regra.sel{border-color:var(--ac)}
+.regra:disabled{opacity:.4;cursor:default}
+.regra .n{font:700 13px var(--f-mono)}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;white-space:nowrap}
+.tag.E{background:rgba(242,109,91,.18);color:var(--bad)}
+.tag.A{background:rgba(242,166,90,.18);color:var(--warn)}
+.tag.I{background:rgba(125,180,232,.18);color:var(--info)}
+.tag.OK{background:rgba(98,196,143,.18);color:var(--ok)}
+.tag.st{background:var(--s2);color:var(--tx);font-weight:600}
+
+.filtros{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.filtros input,.filtros select{background:var(--s1);border:1px solid var(--line);border-radius:9px;padding:8px 10px;min-width:0}
+.filtros input{flex:1 1 220px}
+.filtros select{flex:0 1 auto;max-width:100%}
+.info{color:var(--mu);font-size:12.5px;margin:0 0 8px}
+
+.tw{overflow:auto;border:1px solid var(--line);border-radius:12px;max-height:70vh}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:top}
+th{position:sticky;top:0;background:var(--s2);font-weight:600;cursor:pointer;user-select:none;z-index:1}
+th.num,td.num{text-align:right}
+td.mono{font-family:var(--f-mono);font-size:12px}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--s1)}
+tr.lvE td:first-child{box-shadow:inset 4px 0 var(--bad)}
+tr.lvA td:first-child{box-shadow:inset 4px 0 var(--warn)}
+tr.lvOK td:first-child{box-shadow:inset 4px 0 var(--ok)}
+td.oc{white-space:normal;min-width:260px;max-width:420px;color:var(--mu);font-size:12.5px}
+.mais{display:block;margin:10px auto 0}
+
+dialog{background:var(--s1);color:var(--tx);border:1px solid var(--line);border-radius:14px;padding:0;width:min(1180px,calc(100vw - 32px));max-height:88vh}
+td.quebra{white-space:normal;min-width:180px;max-width:340px}
+dialog::backdrop{background:rgba(0,0,0,.55)}
+.dlg-h{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.dlg-h h3{margin:0;font:600 17px var(--f-head);text-transform:uppercase;letter-spacing:.04em}
+.dlg-b{padding:12px 16px;overflow:auto}
+.dl{display:grid;grid-template-columns:170px minmax(0,1fr);gap:4px 12px;font-size:13px}
+.dl dt{color:var(--mu)} .dl dd{margin:0;word-break:break-all}
+.ocl{list-style:none;padding:0;margin:0 0 14px;display:flex;flex-direction:column;gap:6px}
+.ocl li{background:var(--s2);border-radius:9px;padding:8px 10px;display:flex;gap:8px;align-items:baseline}
+/* abas e gráficos */
+.abas{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:0 0 10px}
+.abas .info{margin:0;flex:1 1 200px}
+.seg{display:inline-flex;background:var(--s1);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.seg button{border:0;background:none;border-radius:7px;padding:6px 12px;font-weight:600;color:var(--mu)}
+.seg button.on{background:var(--s2);color:var(--tx)}
+.graf{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media(max-width:1000px){.graf{grid-template-columns:minmax(0,1fr)}}
+.graf .box.larga{grid-column:1/-1}
+.graf .box h3{margin-bottom:2px}
+.graf .sub{color:var(--mu);font-size:12.5px;margin:0 0 12px}
+.leg{display:flex;flex-wrap:wrap;gap:6px 14px;margin:0 0 12px;font-size:12.5px;color:var(--mu)}
+.leg span{display:inline-flex;align-items:center;gap:6px}
+.leg i{width:10px;height:10px;border-radius:3px;display:inline-block}
+.hb{display:grid;grid-template-columns:minmax(90px,200px) minmax(0,1fr) auto;gap:6px 10px;align-items:center;font-size:12.5px}
+.hb .rot{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hb.wrap{grid-template-columns:minmax(140px,300px) minmax(0,1fr) auto}
+.hb.wrap .rot{white-space:normal;line-height:1.3}
+.hb .val{font-family:var(--f-mono);font-size:12px;color:var(--mu);text-align:right;white-space:nowrap}
+.bar{display:flex;gap:2px;height:16px;min-width:0}
+.bar>b{display:block;height:100%;min-width:3px;cursor:pointer}
+.bar>b:last-child{border-radius:0 4px 4px 0}
+.bar>b:hover,.col-st>b:hover{filter:brightness(var(--hov))}
+.bar.cheia{height:26px;border-radius:4px;overflow:hidden}
+.cols{display:flex;align-items:flex-end;gap:6px;height:220px;border-bottom:1px solid var(--line);padding-top:18px;overflow-x:auto}
+.cols .c{flex:1 0 34px;display:flex;flex-direction:column;align-items:center;height:100%;justify-content:flex-end;gap:4px}
+.cols .t{font:500 11px var(--f-mono);color:var(--mu);white-space:nowrap}
+.col-st{width:100%;max-width:46px;display:flex;flex-direction:column-reverse;gap:2px}
+.col-st>b{display:block;width:100%;min-height:2px;cursor:pointer}
+.col-st>b:last-child{border-radius:4px 4px 0 0}
+.cols-x{display:flex;gap:6px;overflow:hidden}
+.cols-x span{flex:1 0 34px;text-align:center;font-size:11px;color:var(--mu);white-space:nowrap}
+.vazio-g{color:var(--mu);font-size:13px;padding:20px 0;text-align:center}
+#tip{position:fixed;z-index:50;pointer-events:none;background:var(--tip);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:12.5px;max-width:300px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+#tip b{display:block;margin-bottom:2px}
+.cfg{display:flex;align-items:center;gap:8px;color:var(--mu);font-size:12.5px}
+.conn{font-size:12px;color:var(--mu);max-width:260px}
+body.emb .top{padding:10px 16px}
+body.emb .top h1{font-size:18px}
+body.emb .top .cap-selo{display:none}
+.conn.ok{color:var(--ok)} .conn.off{color:var(--warn)}
+.acoes{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.tag.card{background:rgba(125,180,232,.16);color:var(--info)}
+.tag.card.fim{background:rgba(98,196,143,.16);color:var(--ok)}
+.cardbox{background:var(--s2);border-radius:10px;padding:10px 12px;margin:0 0 14px}
+.cardbox h4{margin:0 0 6px;font:600 14px var(--f-head);text-transform:uppercase;letter-spacing:.04em}
+.cardbox .lin{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;margin:0 0 8px}
+.cardbox .lin span{color:var(--mu)} .cardbox .lin b{color:var(--tx);font-weight:600}
+.chat{display:flex;flex-direction:column;gap:6px;max-height:240px;overflow:auto;margin:0 0 10px}
+.chat .m{background:var(--s1);border-radius:8px;padding:7px 10px;font-size:13px}
+.chat .m .q{color:var(--mu);font-size:11.5px;margin-bottom:2px}
+.chat .m.dir{border-left:3px solid var(--ac)}
+.fchat{display:flex;flex-direction:column;gap:8px}
+.fchat select,.fchat textarea{background:var(--s1);border:1px solid var(--line);border-radius:9px;padding:8px 10px;width:100%}
+.fchat textarea{min-height:70px;resize:vertical}
+.fchat .r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.okmsg{color:var(--ok);font-size:12.5px} .errmsg{color:var(--bad);font-size:12.5px}
+.cfg input{width:64px;background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+
+/* ===== visual leve ===== */
+:root{ --bg:#1C1F24; --s1:#24282E; --s2:#2C3138; --line:#353B44; --mu:#949CA8; --mu2:#6F7783;
+  --tip:#121418; --ac-soft:rgba(245,196,51,.08); --hov:1.25; --hov-btn:1.12; --sombra:none; --linha:rgba(255,255,255,.045); }
+html,body{font-size:14px}
+.top{gap:12px;padding:10px 20px;border-bottom:1px solid var(--line);position:relative;flex-wrap:wrap}
+.top h1{flex:0 0 auto;min-width:0;font:600 17px/1 var(--f-head);letter-spacing:.06em}
+.top .esp,.ctx .esp{flex:1}
+.arq{display:inline-flex;align-items:center;gap:6px;color:var(--mu);font-size:12.5px;min-width:0}
+.arq #arqNome{color:var(--tx);max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.arq .sep{color:var(--mu2)}
+.lnk{background:none;border:0;padding:0;color:var(--info);font-weight:500;cursor:pointer}
+.lnk:hover{text-decoration:underline}
+.conn{font-size:12px;max-width:none;white-space:nowrap}
+.btn{border-radius:9px;padding:8px 13px;font-weight:600;background:var(--s2);border-color:transparent}
+.btn:hover{filter:brightness(var(--hov-btn))}
+.btn.sm{padding:6px 11px;font-size:13px}
+.ib{background:none;border:1px solid transparent;border-radius:9px;color:var(--mu);height:32px;min-width:32px;font-size:16px;cursor:pointer}
+.ib:hover{background:var(--s2);color:var(--tx)}
+.ib.sm{height:28px;min-width:28px;font-size:15px}
+.pop{position:absolute;right:16px;top:calc(100% + 6px);z-index:20;width:300px;background:var(--s1);border:1px solid var(--line);border-radius:12px;padding:12px 14px;box-shadow:0 12px 30px rgba(0,0,0,.4)}
+.pop label{display:flex;align-items:center;gap:8px;font-size:13px}
+.pop input{width:62px;background:var(--s2);border:1px solid var(--line);border-radius:8px;padding:5px 8px}
+.pop p{margin:8px 0 0;color:var(--mu);font-size:12px}
+main{padding:18px 20px;max-width:1500px}
+body.emb main{padding:14px 16px}
+
+.drop{border:1.5px dashed var(--line);background:none;border-radius:16px;padding:56px 20px;max-width:720px;margin:6vh auto 0}
+.drop:hover,.drop.on{border-color:var(--ac);background:rgba(245,196,51,.04)}
+.drop-ic{font-size:34px;margin-bottom:8px}
+.drop h2{font:600 19px var(--f-head);letter-spacing:.04em;margin:0 0 8px}
+.drop ul{list-style:none;padding:0;margin:18px 0 0;display:flex;flex-direction:column;gap:4px;color:var(--mu2);font-size:12.5px}
+.drop ul li::before{content:"✓  ";color:var(--ok)}
+
+.kpis{grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:0 0 16px}
+.kpi{background:var(--s1);border:1px solid transparent;border-radius:14px;padding:14px 16px;transition:border-color .15s}
+.kpi:hover{border-color:var(--line)}
+.kpi.sel{outline:none;border-color:var(--ac)}
+.kpi .l{font-size:11.5px;letter-spacing:.06em;color:var(--mu)}
+.kpi .v{font:700 26px/1.15 var(--f-mono);margin:4px 0 2px;color:var(--tx)}
+.kpi .s{font-size:12px;color:var(--mu)}
+.kpi .s b{font-weight:600;color:var(--tx)}
+.kpi .barra-k{display:flex;gap:2px;height:4px;border-radius:2px;overflow:hidden;margin-top:9px;background:var(--s2)}
+.kpi .barra-k i{display:block;height:100%}
+.kpi.ok .v{color:var(--ok)} .kpi.warn .v{color:var(--warn)} .kpi.bad .v{color:var(--bad)} .kpi.ac .v{color:var(--ac)}
+
+.barra{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 8px}
+.barra input,.barra select{background:var(--s1);border:1px solid transparent;border-radius:9px;padding:8px 10px;min-width:0;height:36px}
+.barra input:focus,.barra select:focus{outline:none;border-color:var(--line)}
+.barra input{flex:1 1 220px}
+.barra select{flex:0 1 auto;max-width:220px;color:var(--mu)}
+.barra select.ativo{color:var(--tx);border-color:rgba(245,196,51,.45)}
+.seg{background:var(--s1);border:0;border-radius:9px;padding:3px}
+.seg button{padding:5px 12px;font-size:13px}
+.seg.sm button{padding:3px 10px;font-size:12px}
+.ctx{display:flex;flex-wrap:wrap;align-items:center;gap:10px;min-height:34px;margin:0 0 10px}
+.ctx .info{margin:0;font-size:12.5px}
+.chip{background:rgba(245,196,51,.12);color:var(--ac);border:0;border-radius:20px;padding:4px 10px;font-size:12px;font-weight:600}
+.acoes{display:inline-flex;gap:6px;align-items:center}
+
+.cols2{grid-template-columns:minmax(0,1fr) 300px;gap:16px}
+.tw{border:0;border-radius:14px;background:var(--s1);max-height:calc(100vh - 330px);min-height:320px}
+table{font-size:13px}
+th,td{padding:9px 10px;border-bottom:1px solid var(--linha)}
+th{background:var(--s1);color:var(--mu);font-weight:500;font-size:12px;border-bottom:1px solid var(--line)}
+tbody tr:hover{background:var(--s2)}
+tr.lvE td:first-child,tr.lvA td:first-child,tr.lvOK td:first-child{box-shadow:none}
+td.cel-emit{max-width:300px;overflow:hidden;text-overflow:ellipsis}
+td.cel-emit small{display:block;color:var(--mu2);font-size:11.5px;overflow:hidden;text-overflow:ellipsis}
+td.cel-oc{max-width:340px;overflow:hidden;text-overflow:ellipsis;color:var(--mu);font-size:12.5px}
+td.cel-oc .mais-oc{color:var(--mu2);margin-left:4px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle}
+.dot.E{background:var(--bad)} .dot.A{background:var(--warn)} .dot.OK{background:var(--ok);opacity:.55} .dot.I{background:var(--info)}
+.st{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.st i{width:7px;height:7px;border-radius:50%;display:inline-block}
+.cardt{font-size:12px;color:var(--info);white-space:nowrap}
+.cardt.fim{color:var(--ok)} .cardt.sem{color:var(--mu2)}
+
+.cel-nf small,.cel-st small{display:block;color:var(--mu2);font-size:11.5px;margin-top:1px}
+.cel-st small .cardt{font-size:11.5px}
+td.cel-emit{max-width:260px}
+td.cel-oc{max-width:260px}
+.cols2{grid-template-columns:minmax(0,1fr) 270px}
+.barra select{max-width:180px}
+.barra input{flex:1 1 180px}
+#vTab table{table-layout:fixed;min-width:760px}
+#vTab th:nth-child(1){width:30px} #vTab th:nth-child(2){width:112px} #vTab th:nth-child(4){width:108px}
+#vTab th:nth-child(5){width:178px} #vTab th:nth-child(6){width:54px}
+#vTab td{overflow:hidden;text-overflow:ellipsis}
+#vTab td.cel-emit,#vTab td.cel-oc{max-width:none}
+#vTab td.cel-oc{white-space:normal}
+.oc2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.35}
+.painel{background:var(--s1);border-radius:14px;padding:14px 14px 10px;align-self:start;position:sticky;top:12px}
+.painel h3{font:600 13px var(--f-head);letter-spacing:.06em;text-transform:uppercase;margin:0 0 10px;color:var(--mu)}
+.grp{margin:0 0 12px}
+.grp>summary,.grp>.gt{list-style:none;display:flex;align-items:center;gap:7px;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--mu2);margin:0 0 4px;cursor:default}
+.grp>summary{cursor:pointer}
+.grp>summary::-webkit-details-marker{display:none}
+.regra{background:none;border:0;border-radius:8px;padding:7px 8px;gap:10px;font-size:13px;line-height:1.35;color:var(--tx)}
+.regra:hover{background:var(--s2)}
+.regra.sel{background:rgba(245,196,51,.1);border:0;box-shadow:inset 3px 0 var(--ac)}
+.regra .n{font:600 12.5px var(--f-mono);color:var(--mu)}
+.regra:disabled{opacity:.35}
+.painel .vazio-r{color:var(--mu);font-size:13px;margin:0}
+
+.graf{gap:16px}
+.box{background:var(--s1);border:0;border-radius:14px;padding:16px 18px}
+dialog{border:0;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.ocl li{background:none;border-left:3px solid var(--line);border-radius:0;padding:4px 10px}
+@media(max-width:700px){ .top{padding:10px 16px} main{padding:14px 16px} .barra select{flex:1 1 45%;max-width:none} .kpi .v{font-size:22px} }
+
+/* ===== tema "Estoque" (claro, igual à área de conteúdo do Controle de Notas nesse tema) ===== */
+html[data-tema="estoque"]{ color-scheme:light;
+  --bg:#F3F0EA; --s1:#FFFFFF; --s2:#F1EDE6; --line:rgba(27,33,41,.13); --tx:#1B2129; --mu:#5A6371; --mu2:#8A919B;
+  --ac:#F5A524; --ac-ink:#12151A; --ok:#1A7F45; --bad:#C2412D; --warn:#B4610A; --info:#2F6FDB;
+  --tip:#1B2129; --ac-soft:rgba(245,165,36,.10); --hov:.9; --hov-btn:.96; --linha:rgba(27,33,41,.07);
+  --sombra:0 1px 2px rgba(27,33,41,.05),0 10px 24px -18px rgba(27,33,41,.35);
+  --f-head:'IBM Plex Sans',sans-serif; --f-body:'IBM Plex Sans',sans-serif; --f-mono:'IBM Plex Sans',sans-serif;
+}
+html[data-tema="estoque"] body{font-variant-numeric:tabular-nums}
+html[data-tema="estoque"] #tip{color:#E9EDF2;border-color:transparent}
+html[data-tema="estoque"] .kpi,html[data-tema="estoque"] .tw,html[data-tema="estoque"] .painel,html[data-tema="estoque"] .box{box-shadow:var(--sombra)}
+html[data-tema="estoque"] .kpi:hover{border-color:rgba(27,33,41,.14)}
+html[data-tema="estoque"] .barra input,html[data-tema="estoque"] .barra select,html[data-tema="estoque"] .seg{border:1px solid var(--line)}
+html[data-tema="estoque"] .barra select.ativo{border-color:var(--ac);background:#FFF8EA}
+html[data-tema="estoque"] .seg button.on{background:#1B2129;color:#fff}
+html[data-tema="estoque"] .btn{background:#FFFFFF;border:1px solid var(--line)}
+html[data-tema="estoque"] .btn.pri{background:var(--ac);border-color:var(--ac);color:var(--ac-ink)}
+html[data-tema="estoque"] .chip{background:#FFF1D6;color:#8A5200}
+html[data-tema="estoque"] .lnk{color:#2F6FDB}
+html[data-tema="estoque"] .regra.sel{background:#FFF6E5}
+html[data-tema="estoque"] .kpi.ac .v{color:#A86200}
+html[data-tema="estoque"] .kpi.warn .v{color:#B4610A}
+html[data-tema="estoque"] .tag.E{background:rgba(194,65,45,.10)} html[data-tema="estoque"] .tag.A{background:rgba(180,97,10,.10)}
+html[data-tema="estoque"] .tag.OK{background:rgba(26,127,69,.10)} html[data-tema="estoque"] .tag.I,html[data-tema="estoque"] .tag.card{background:rgba(47,111,219,.10)}
+html[data-tema="estoque"] dialog{background:#FFFFFF;box-shadow:0 24px 60px rgba(27,33,41,.25)}
+html[data-tema="estoque"] dialog::backdrop{background:rgba(27,33,41,.35)}
+html[data-tema="estoque"] .cardbox,html[data-tema="estoque"] .chat .m{background:#F7F5F1}
+html[data-tema="estoque"] .chat .m{background:#FFFFFF;border:1px solid var(--line)}
+html[data-tema="estoque"] .fchat select,html[data-tema="estoque"] .fchat textarea,html[data-tema="estoque"] .pop input{background:#FFFFFF}
+html[data-tema="estoque"] .pop{box-shadow:0 12px 30px rgba(27,33,41,.18)}
+html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.18)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="capivaraSilhueta" viewBox="0 0 64 64"><g fill="currentColor"><rect x="12" y="40" width="6" height="12" rx="2.5"/><rect x="22" y="41" width="5.5" height="11" rx="2.5"/><rect x="35.5" y="40" width="6" height="12" rx="2.5"/><circle cx="41.5" cy="18.8" r="2.7"/><path fill-rule="evenodd" d="M10 44C5.5 40 5.5 30 9.5 25.5C13.5 20 21 17 28.5 17.8C33 18.3 35.5 20 38 20L44 19.6C50.5 19.8 55.5 21 58.5 23.5C60.8 25.5 61 31 59.5 33.5C58.3 35.2 55.5 35.8 52.5 35.8L46 35.8C44.5 40.5 41 44.5 36 45.5L16 46.5C13.5 46.5 11.3 45.5 10 44ZM48.6 24.3a1.6 1.6 0 1 0-3.2 0a1.6 1.6 0 1 0 3.2 0ZM59.2 26.6a.8 1.1 0 1 0-1.6 0a.8 1.1 0 1 0 1.6 0Z"/></g></symbol>
+</svg>
+
+<header class="top">
+  <h1>Validador de NF</h1>
+  <span class="arq" id="arqChip" hidden><span id="arqNome"></span><span class="sep">·</span><span id="arqQtd"></span><button class="lnk" id="bOutro">trocar arquivo</button></span>
+  <span class="esp"></span>
+  <span class="conn" id="conn">verificando login…</span>
+  <button class="btn sm" id="bEntrar" hidden>Entrar</button>
+  <button class="btn sm" id="bExp" hidden>⬇ Exportar</button>
+  <button class="ib" id="bCfg" title="Ajustes">⚙</button>
+  <div class="pop" id="popCfg" hidden>
+    <label>Alertar pendência após <input id="cfgDias" type="number" min="1" max="365" value="30"> dias</label>
+    <p>Notas sem manifestação, só com ciência ou confirmadas e sem lançamento há mais dias que isto viram alerta.</p>
+  </div>
+</header>
+
+<main>
+  <input type="file" id="arq" accept=".xlsx,.xls,.xlsm,.csv" hidden>
+  <section id="vDrop" class="drop" tabindex="0">
+    <div class="drop-ic">📄</div>
+    <h2>Carregue o relatório de notas do SIENGE</h2>
+    <p>Arraste o arquivo para cá ou <span class="lnk">escolha no computador</span> — ex.: <code>Relatório 2026.xlsx</code></p>
+    <ul>
+      <li>Confere chave de acesso, duplicidades, datas, valor e manifesto × lançamento</li>
+      <li>Mostra quais pendentes já têm card no Controle de Notas</li>
+      <li>O arquivo é lido só neste navegador</li>
+    </ul>
+  </section>
+  <div id="msg"></div>
+
+  <section id="vRes" hidden>
+    <div class="kpis" id="kpis"></div>
+
+    <div class="barra">
+      <div class="seg" id="segVista"><button data-v="tab" class="on">Tabela</button><button data-v="graf">Gráficos</button></div>
+      <input id="fBusca" type="search" placeholder="Buscar emitente, CNPJ, número, chave…">
+      <select id="fEmp"></select>
+      <select id="fSt"></select>
+      <select id="fVal">
+        <option value="">Validação: todas</option>
+        <option value="EA">Com erro ou alerta</option>
+        <option value="E">Só com erro</option>
+        <option value="A">Só com alerta</option>
+        <option value="OK">Só OK</option>
+      </select>
+      <select id="fCard" hidden></select>
+    </div>
+
+    <div class="ctx">
+      <span class="info" id="info"></span>
+      <button class="chip" id="bChip" hidden title="Tirar este filtro"></button>
+      <button class="lnk" id="bLimpa" hidden>Limpar filtros</button>
+      <span class="esp"></span>
+      <div class="seg sm" id="segMed" hidden><button data-m="qtd" class="on">Quantidade</button><button data-m="valor">Valor</button></div>
+      <span class="acoes" id="acoes" hidden>
+        <button class="btn sm" id="bAvisar" title="Manda uma mensagem no diálogo de cada card das notas filtradas — aparece no 💬 de quem recebe">🔔 Avisar</button>
+        <button class="btn sm" id="bCriar" hidden title="Cria em “Importadas SIENGE” os cards das notas pendentes filtradas que ainda não têm card">＋ Criar cards</button>
+        <button class="ib sm" id="bRecarregar" title="Consultar de novo os cards no Controle de Notas">⟳</button>
+      </span>
+    </div>
+
+    <div id="vGraf" class="graf" hidden></div>
+    <div class="cols2" id="vTab">
+      <div>
+        <div class="tw"><table><thead id="th"></thead><tbody id="tb"></tbody></table></div>
+        <button class="btn mais" id="bMais" hidden>Mostrar mais</button>
+      </div>
+      <aside class="painel">
+        <h3>O que conferir</h3>
+        <div id="regras"></div>
+      </aside>
+    </div>
+  </section>
+</main>
+
+<div id="tip" hidden></div>
+<dialog id="dlg">
+  <div class="dlg-h"><h3 id="dlgT"></h3><button class="btn" id="dlgX">Fechar</button></div>
+  <div class="dlg-b" id="dlgB"></div>
+</dialog>
+
+<script>
+/* Validador de lançamentos de notas fiscais.
+   Reproduz a consulta do Power Query ("Relatório 2026.xlsx" → aba Relatório) e acrescenta conferências:
+   - Empresas: nome pelo CNPJ do destinatário (mesma tabela da coluna condicional do Power Query);
+   - Número/Série dividido em "Número NF" e "Série"; UF emitente vazia vira "PA"; Título vazio vira 0;
+   - Status: rótulos do Power Query, com o título lançado decidindo primeiro (ver statusDe());
+   - Validações: chave de acesso (44 dígitos, dígito verificador e conferência com CNPJ/UF/mês/série/número),
+     duplicidades, empresa não cadastrada, datas, valor, manifesto x lançamento e prazos de pendência.
+   Tudo roda no navegador; a planilha não sai do computador. */
+const XLSX_SRC='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+
+// CNPJ do destinatário → empresa (igual à coluna condicional "Personalizar" do Power Query).
+const EMPRESAS={
+  '54344984000157':'CONSÓRCIO AMETA - OCC',
+  '04101986000147':'AMETA ENGENHARIA LTDA',
+  '57080615000192':'CONSÓRCIO MAGUARI',
+  '38006053000192':'RAF INFRAESTRUTURA LTDA',
+  '65862352000100':'CONSÓRCIO VIAS GUAJARÁ',
+  '66026460000105':'CONSÓRCIO INFRAVIAS',
+  '66650954000158':'CONSÓRCIO VIAS CAPIXABA',
+  '66603136000102':'CONSÓRCIO ATL XINGU',
+  '67546476000101':'CONSÓRCIO AC MARAJO'
+};
+const UF_COD={11:'RO',12:'AC',13:'AM',14:'RR',15:'PA',16:'AP',17:'TO',21:'MA',22:'PI',23:'CE',24:'RN',25:'PB',26:'PE',27:'AL',28:'SE',29:'BA',31:'MG',32:'ES',33:'RJ',35:'SP',41:'PR',42:'SC',43:'RS',50:'MS',51:'MT',52:'GO',53:'DF'};
+
+// Regras de validação: nível E = erro, A = alerta, I = informação (não conta como problema).
+const REGRAS={
+  EMP_NAO_CAD:   ['E','CNPJ do destinatário não está na tabela de empresas'],
+  CHAVE_VAZIA:   ['E','Chave de acesso vazia'],
+  CHAVE_NUMERO:  ['E','Chave gravada como número no Excel (perde dígitos) — formate a coluna como texto'],
+  CHAVE_TAM:     ['E','Chave de acesso sem 44 caracteres'],
+  CHAVE_DV:      ['E','Dígito verificador da chave não confere'],
+  CHAVE_DUP:     ['E','Chave de acesso repetida no relatório'],
+  NF_DUP:        ['E','Mesmo emitente, número e série em mais de uma linha'],
+  CHAVE_CNPJ:    ['A','CNPJ do emitente diferente do que está na chave'],
+  CHAVE_NUM:     ['A','Número da NF diferente do que está na chave'],
+  CHAVE_SERIE:   ['A','Série diferente da que está na chave'],
+  CHAVE_UF:      ['A','UF do emitente diferente da UF da chave'],
+  CHAVE_MES:     ['A','Mês/ano da emissão diferente do que está na chave'],
+  CHAVE_MOD:     ['A','Chave não é de NF-e (modelo diferente de 55)'],
+  VALOR:         ['E','Valor zerado, negativo ou vazio'],
+  EMISSAO_VAZIA: ['E','Data de emissão vazia ou inválida'],
+  EMISSAO_FUT:   ['E','Emissão com data futura'],
+  RECEB_ANTES:   ['E','Recebimento antes da emissão'],
+  LANC_RECUSADA: ['E','Lançada (tem título) com operação não realizada ou desconhecida'],
+  LANC_SEM_CONF: ['A','Lançada (tem título) sem nenhuma manifestação'],
+  CONF_SEM_LANC: ['A','Operação confirmada e ainda sem lançamento há mais de {d} dias'],
+  PEND_DIAS:     ['A','Sem manifestação ou só com ciência há mais de {d} dias'],
+  PRAZO_180:     ['A','Sem lançamento e sem manifestação conclusiva há mais de 180 dias da emissão'],
+  CNPJ_EMIT:     ['A','CNPJ do emitente inválido'],
+  NUM_SERIE:     ['A','Número/Série fora do formato "número/série"'],
+  MANIF_DESC:    ['A','Manifesto com texto não reconhecido'],
+  CARD_PEND:     ['A','Pendente no relatório e já tem card no Controle de Notas'],
+  CARD_CONCL:    ['A','Card finalizado no Controle de Notas, mas a nota continua sem título no relatório'],
+  CARD_ABERTO:   ['A','Já lançada no relatório (tem título), mas o card continua aberto no Controle de Notas'],
+  SEM_CARD:      ['I','Pendente e ainda sem card no Controle de Notas'],
+  UF_CHAVE:      ['I','UF do emitente vazia — preenchida pela chave de acesso'],
+  NS_CHAVE:      ['I','Número/Série vazio — preenchido pela chave de acesso'],
+  UF_PADRAO:     ['I','UF do emitente vazia — preenchida com PA (como no Power Query)']
+};
+const STATUS_ORDEM=['Lançado','Apenas Confirmação','Pendente','Aguardando Confirmação','Não realizada','Desconhecida'];
+
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm=s=>String(s==null?'':s).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/\s+/g,' ').trim();
+const soAlnum=s=>String(s==null?'':s).toUpperCase().replace(/[^0-9A-Z]/g,'');
+const brl=n=>(Number(n)||0).toLocaleString('pt-BR',{style:'currency',currency:'BRL'});
+const intf=n=>(Number(n)||0).toLocaleString('pt-BR');
+const dataBR=d=>d?d.toLocaleDateString('pt-BR'):'';
+const fmtCNPJ=s=>{ const d=soAlnum(s); return d.length===14?`${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`:String(s||''); };
+const lsGet=(k,def)=>{ try{ const v=localStorage.getItem(k); return v==null?def:v; }catch(e){ return def; } };
+const lsSet=(k,v)=>{ try{ localStorage.setItem(k,v); }catch(e){} };
+
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=()=>rej(new Error('Não consegui carregar o leitor de Excel — confira a internet.')); document.head.appendChild(s); }); }
+async function ensureXLSX(){ if(typeof XLSX==='undefined')await loadScript(XLSX_SRC); }
+
+/* ---------- leitura dos campos ---------- */
+function paraData(v){
+  if(v==null||v==='')return null;
+  if(v instanceof Date)return isNaN(v)?null:new Date(v.getFullYear(),v.getMonth(),v.getDate());
+  if(typeof v==='number'){ const p=XLSX.SSF.parse_date_code(v); return p?new Date(p.y,p.m-1,p.d):null; }
+  const s=String(v).trim(); let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+  if(m){ const y=+m[3]<100?2000+ +m[3]:+m[3]; return new Date(y,+m[2]-1,+m[1]); }
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m)return new Date(+m[1],+m[2]-1,+m[3]);
+  return null;
+}
+function paraNum(v){
+  if(v==null||v==='')return null;
+  if(typeof v==='number')return v;
+  let s=String(v).replace(/[R$\s]/g,'');
+  if(s.includes(','))s=s.replace(/\./g,'').replace(',','.');
+  const n=Number(s); return isFinite(n)?n:null;
+}
+// Dígito verificador módulo 11 (pesos 2..9 da direita para a esquerda). Aceita letras (CNPJ alfanumérico):
+// cada caractere vale código ASCII − 48, como na regra da Receita.
+function dvMod11(s,pesoMax){ let soma=0,p=2; for(let i=s.length-1;i>=0;i--){ soma+=(s.charCodeAt(i)-48)*p; p=p===pesoMax?2:p+1; } const r=soma%11; return r<2?0:11-r; }
+function cnpjValido(c){
+  if(c.length===11)return cpfValido(c);
+  if(c.length!==14||/^(\d)\1+$/.test(c)||!/^\d{12}$/.test(c.slice(0,12).replace(/[A-Z]/g,'0')))return false;
+  return dvMod11(c.slice(0,12),9)===+c[12]&&dvMod11(c.slice(0,13),9)===+c[13];
+}
+function cpfValido(c){
+  if(!/^\d{11}$/.test(c)||/^(\d)\1+$/.test(c))return false;
+  const dv=n=>{ let s=0; for(let i=0;i<n;i++)s+=+c[i]*(n+1-i); const r=(s*10)%11; return r===10?0:r; };
+  return dv(9)===+c[9]&&dv(10)===+c[10];
+}
+// Manifesto do destinatário → código. Compara sem acento/maiúscula e aceita "de"/"da".
+function manifCod(m){
+  const n=norm(m).replace(/ de /g,' da ');
+  if(!n)return '';
+  if(n.startsWith('sem manifest'))return 'SEM';
+  if(n.startsWith('ciencia'))return 'CIENCIA';
+  if(n.startsWith('confirmacao'))return 'CONF';
+  if(n.includes('nao realizada'))return 'NAO_REAL';
+  if(n.startsWith('desconhec'))return 'DESC';
+  return '?';
+}
+/* Status do lançamento — mesmos rótulos do Power Query. O título (lançamento no Sienge) decide primeiro:
+   na consulta original os textos do manifesto estão com maiúsculas diferentes das do relatório
+   ("Confirmação da Operação" × "Confirmação da operação"), então na prática quem tem título já sai "Lançado". */
+function statusDe(cod,titulo){
+  if(titulo>0)return 'Lançado';
+  return {SEM:'Aguardando Confirmação',CIENCIA:'Pendente',CONF:'Apenas Confirmação',NAO_REAL:'Não realizada',DESC:'Desconhecida'}[cod]||'Pendente';
+}
+
+/* ---------- planilha → linhas ---------- */
+const COLS={emitente:'emitente',cnpjEmit:'cnpj emitente',ufEmit:'uf emitente',destinatario:'destinatario',cnpjDest:'cnpj destinatario',
+  ufDest:'uf destinatario',manifesto:'manifesto',natureza:'natureza da operacao',recebimento:'recebimento',emissao:'emissao',
+  chave:'chave de acesso',numSerie:'numero/serie',valor:'valor',escrituracao:'escrituracao',titulo:'titulo/nota fiscal avulsa'};
+
+function lerPlanilha(wb){
+  const nome=wb.SheetNames.find(n=>norm(n)==='relatorio')||wb.SheetNames[0];
+  const ws=wb.Sheets[nome];
+  const aoa=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:false});
+  // Cabeçalho: primeira linha que tenha "Chave de acesso" e "Emitente" (o Power Query promove a 1ª linha).
+  const hi=aoa.findIndex(r=>r&&r.some(c=>norm(c)==='chave de acesso')&&r.some(c=>norm(c)==='emitente'));
+  if(hi<0)throw new Error(`Não achei o cabeçalho na aba “${nome}” (precisa ter as colunas “Emitente” e “Chave de acesso”).`);
+  const cab=aoa[hi].map(norm), idx={}, faltam=[];
+  for(const [k,n] of Object.entries(COLS)){ idx[k]=cab.indexOf(n); if(idx[k]<0&&k!=='destinatario'&&k!=='escrituracao'&&k!=='natureza'&&k!=='ufDest')faltam.push(n); }
+  if(faltam.length)throw new Error('Faltam colunas no relatório: '+faltam.join(', '));
+  // Texto exato da chave: se a célula for número, a precisão já se perdeu (44 dígitos não cabem num número).
+  const rng=XLSX.utils.decode_range(ws['!ref']);
+  const linhas=[];
+  for(let i=hi+1;i<aoa.length;i++){
+    const r=aoa[i]; if(!r||r.every(c=>c==null||c===''))continue;
+    const g=k=>idx[k]>=0?r[idx[k]]:null;
+    const cel=ws[XLSX.utils.encode_cell({r:rng.s.r+i,c:rng.s.c+idx.chave})];
+    linhas.push({linha:rng.s.r+i+1,raw:g,chaveNumero:!!cel&&cel.t==='n'});
+  }
+  return {nome,linhas};
+}
+
+function tratar(lidas,dias){
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const rows=lidas.map(({linha,raw,chaveNumero})=>{
+    const o={linha,oc:[]}, add=(c,extra)=>o.oc.push({c,extra});
+    o.emitente=String(raw('emitente')??'').trim();
+    o.cnpjEmit=String(raw('cnpjEmit')??'').trim();
+    // Chave de acesso: cUF(2) AAMM(4) CNPJ(14) modelo(2) série(3) número(9) tpEmis(1) código(8) DV(1)
+    let ch=raw('chave'); ch=ch==null?'':(typeof ch==='number'?ch.toLocaleString('fullwide',{useGrouping:false}):String(ch));
+    o.chave=soAlnum(ch);
+    const chOk=!chaveNumero&&o.chave.length===44, ufCh=chOk?UF_COD[+o.chave.slice(0,2)]:null;
+    // Notas sem manifestação vêm do relatório sem UF e sem Número/Série: completa pela chave quando ela é válida
+    // (o Power Query põe "PA" fixo na UF; aqui só cai no PA se a chave não ajudar).
+    o.ufEmit=String(raw('ufEmit')??'').trim().toUpperCase();
+    if(!o.ufEmit){ if(ufCh){ o.ufEmit=ufCh; add('UF_CHAVE'); }else{ o.ufEmit='PA'; add('UF_PADRAO'); } }
+    o.destinatarioOrig=String(raw('destinatario')??'').trim();
+    o.cnpjDest=String(raw('cnpjDest')??'').trim();
+    o.ufDest=String(raw('ufDest')??'').trim();
+    o.manifesto=String(raw('manifesto')??'').trim();
+    o.natureza=String(raw('natureza')??'').trim();
+    o.recebimento=paraData(raw('recebimento'));
+    o.emissao=paraData(raw('emissao'));
+    o.valor=paraNum(raw('valor'));
+    o.escrituracao=String(raw('escrituracao')??'').trim();
+    o.titulo=paraNum(raw('titulo'))||0;
+    const ns=String(raw('numSerie')??'').trim(), p=ns.split('/');
+    o.numero=(p[0]||'').trim(); o.serie=(p[1]||'').trim();
+    if(!o.numero&&!o.serie&&chOk){ o.numero=String(+o.chave.slice(25,34)); o.serie=String(+o.chave.slice(22,25)); add('NS_CHAVE'); }
+    else if(!ns||p.length!==2||!/^\d+$/.test(o.numero)||!/^\d+$/.test(o.serie))add('NUM_SERIE');
+
+    const cd=soAlnum(o.cnpjDest);
+    o.empresa=EMPRESAS[cd]||null;
+    if(!o.empresa)add('EMP_NAO_CAD',o.cnpjDest||'vazio');
+
+    const ce=soAlnum(o.cnpjEmit);
+    if(ce&&!cnpjValido(ce))add('CNPJ_EMIT',o.cnpjEmit);
+
+    if(!o.chave)add('CHAVE_VAZIA');
+    else if(chaveNumero)add('CHAVE_NUMERO');
+    else if(o.chave.length!==44)add('CHAVE_TAM',o.chave.length+' caracteres');
+    else{
+      if(dvMod11(o.chave.slice(0,43),9)!==+o.chave[43])add('CHAVE_DV');
+      if(ufCh&&o.ufEmit&&ufCh!==o.ufEmit)add('CHAVE_UF',`chave: ${ufCh}, relatório: ${o.ufEmit}`);
+      // Séries 890 a 899 = NF-e avulsa, emitida pela SEFAZ: a chave leva o CNPJ da SEFAZ, não o do emitente.
+      const cnpjCh=o.chave.slice(6,20), avulsa=+o.chave.slice(22,25)>=890&&+o.chave.slice(22,25)<=899;
+      if(ce&&!avulsa&&cnpjCh!==ce.padStart(14,'0'))add('CHAVE_CNPJ',`chave: ${fmtCNPJ(cnpjCh)}`);
+      if(o.chave.slice(20,22)!=='55')add('CHAVE_MOD','modelo '+o.chave.slice(20,22));
+      if(/^\d+$/.test(o.serie)&&+o.chave.slice(22,25)!==+o.serie)add('CHAVE_SERIE',`chave: ${+o.chave.slice(22,25)}`);
+      if(/^\d+$/.test(o.numero)&&+o.chave.slice(25,34)!==+o.numero)add('CHAVE_NUM',`chave: ${+o.chave.slice(25,34)}`);
+      if(o.emissao){ const aamm=String(o.emissao.getFullYear()%100).padStart(2,'0')+String(o.emissao.getMonth()+1).padStart(2,'0');
+        if(o.chave.slice(2,6)!==aamm)add('CHAVE_MES',`chave: ${o.chave.slice(4,6)}/${o.chave.slice(2,4)}`); }
+    }
+
+    if(o.valor==null||o.valor<=0)add('VALOR');
+    if(!o.emissao)add('EMISSAO_VAZIA');
+    else{
+      if(o.emissao>hoje)add('EMISSAO_FUT');
+      if(o.recebimento&&o.recebimento<o.emissao)add('RECEB_ANTES');
+    }
+
+    o.manifCod=manifCod(o.manifesto);
+    if(o.manifCod==='?')add('MANIF_DESC',o.manifesto);
+    o.status=statusDe(o.manifCod,o.titulo);
+    const base=o.recebimento||o.emissao, idade=base?Math.floor((hoje-base)/864e5):null;
+    o.idade=idade;
+    if(o.titulo>0){
+      if(o.manifCod==='NAO_REAL'||o.manifCod==='DESC')add('LANC_RECUSADA',o.manifesto);
+      else if(o.manifCod==='SEM')add('LANC_SEM_CONF',o.manifesto);
+    }else{
+      if(o.manifCod==='CONF'&&idade>dias)add('CONF_SEM_LANC',idade+' dias');
+      if((o.manifCod==='SEM'||o.manifCod==='CIENCIA')&&idade>dias)add('PEND_DIAS',idade+' dias');
+    }
+    if(!(o.titulo>0)&&o.emissao&&(o.manifCod==='SEM'||o.manifCod==='CIENCIA')&&(hoje-o.emissao)/864e5>180)add('PRAZO_180');
+    return o;
+  });
+
+  // Duplicidades (depois de todas as linhas lidas).
+  const porChave=new Map(), porNF=new Map();
+  rows.forEach(o=>{
+    if(o.chave.length===44){ if(!porChave.has(o.chave))porChave.set(o.chave,[]); porChave.get(o.chave).push(o); }
+    const k=soAlnum(o.cnpjEmit)+'|'+(+o.numero||o.numero)+'|'+(+o.serie||o.serie);
+    if(o.numero&&soAlnum(o.cnpjEmit)){ if(!porNF.has(k))porNF.set(k,[]); porNF.get(k).push(o); }
+  });
+  porChave.forEach(g=>{ if(g.length>1)g.forEach(o=>o.oc.push({c:'CHAVE_DUP',extra:'linhas '+g.map(x=>x.linha).join(', ')})); });
+  porNF.forEach(g=>{ if(g.length>1&&new Set(g.map(x=>x.chave)).size>1)g.forEach(o=>o.oc.push({c:'NF_DUP',extra:'linhas '+g.map(x=>x.linha).join(', ')})); });
+
+  finalizar(rows,dias);
+  return rows;
+}
+function finalizar(rows,dias){
+  rows.forEach(o=>{
+    const nv=o.oc.map(x=>REGRAS[x.c][0]);
+    o.nivel=nv.includes('E')?'E':nv.includes('A')?'A':'OK';
+    o.ocTexto=o.oc.filter(x=>REGRAS[x.c][0]!=='I').map(x=>txtRegra(x.c,dias)+(x.extra?` (${x.extra})`:'')).join('; ');
+  });
+}
+const txtRegra=(c,dias)=>REGRAS[c][1].replace('{d}',dias);
+
+/* ---------- tela ---------- */
+let ROWS=[], ARQ='', ABA='', LIMITE=300, ORD={k:'linha',dir:1}, F={kpi:'',regra:''};
+const COLS_TAB=[
+  ['nivel','','dotc'],['numero','NF'],['emitente','Emitente'],['valor','Valor','num'],
+  ['status','Status'],['idade','Dias','num'],['ocTexto','Ocorrência']
+];
+const dias=()=>Math.max(1,parseInt($('#cfgDias').value,10)||30);
+
+function mostrarMsg(t,ruim){ $('#msg').innerHTML=t?`<div class="msg${ruim?' bad':''}">${esc(t)}</div>`:''; }
+
+async function abrirArquivo(file){
+  if(!file)return;
+  mostrarMsg('Lendo '+file.name+'…');
+  try{
+    await ensureXLSX();
+    const wb=XLSX.read(await file.arrayBuffer(),{type:'array',cellDates:true});
+    const {nome,linhas}=lerPlanilha(wb);
+    if(!linhas.length)throw new Error('A aba “'+nome+'” não tem notas abaixo do cabeçalho.');
+    LIDAS=linhas; ARQ=file.name; ABA=nome; F={kpi:'',regra:''}; LIMITE=300; CARDS_OK=false;
+    processar(); mostrarMsg('');
+  }catch(e){ console.error(e); mostrarMsg(e.message||String(e),true); }
+}
+let LIDAS=[];
+function processar(){
+  ROWS=tratar(LIDAS,dias());
+  $('#vDrop').hidden=true; $('#vRes').hidden=false; $('#arqChip').hidden=false; $('#bExp').hidden=false;
+  $('#arqNome').textContent=ARQ; $('#arqNome').title=`${ARQ} · aba “${ABA}”`; $('#arqQtd').textContent=intf(ROWS.length)+' notas';
+  const emps=[...new Set(ROWS.map(o=>o.empresa||'(não cadastrada)'))].sort();
+  $('#fEmp').innerHTML='<option value="">Empresa: todas</option>'+emps.map(e=>`<option>${esc(e)}</option>`).join('');
+  const sts=STATUS_ORDEM.filter(s=>ROWS.some(o=>o.status===s));
+  $('#fSt').innerHTML='<option value="">Status: todos</option>'+sts.map(s=>`<option>${esc(s)}</option>`).join('');
+  if(CARDS_OK){ aplicarCards(); }
+  desenhar();
+  if(EU&&!CARDS_OK)buscarCards(ROWS);
+}
+
+function filtradas(semRegra){
+  const b=norm($('#fBusca').value), emp=$('#fEmp').value, st=$('#fSt').value, val=$('#fVal').value, fc=$('#fCard').value;
+  return ROWS.filter(o=>{
+    if(emp&&(o.empresa||'(não cadastrada)')!==emp)return false;
+    if(st&&o.status!==st)return false;
+    if(val&&!(val==='EA'?o.nivel!=='OK':o.nivel===val))return false;
+    if(!semRegra&&F.regra&&!o.oc.some(x=>x.c===F.regra))return false;
+    if(F.kpi&&!F.kpi(o))return false;
+    if(F.graf&&!predF(F.graf)(o))return false;
+    if(fc&&!passaCard(o,fc))return false;
+    if(b&&!norm([o.emitente,o.cnpjEmit,o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto].join(' ')).includes(b))return false;
+    return true;
+  });
+}
+
+function desenhar(){
+  const lst=filtradas();
+  // KPIs sobre o recorte de empresa/status atual (sem o filtro do próprio KPI).
+  const soma=a=>a.reduce((s,o)=>s+(o.valor||0),0);
+  const cont=(f)=>{ const a=ROWS.filter(f); return [a.length,soma(a)]; };
+  const pctd=(n,t)=>t?(n/t*100).toLocaleString('pt-BR',{maximumFractionDigits:0})+'%':'0%';
+  const nTot=ROWS.length, lanc=ROWS.filter(o=>o.status==='Lançado'), pend=ROWS.filter(ehPendente);
+  const conf=pend.filter(o=>o.status==='Apenas Confirmação').length, pnd=pend.filter(o=>o.status==='Pendente').length, agu=pend.filter(o=>o.status==='Aguardando Confirmação').length;
+  const nE=ROWS.filter(o=>o.nivel==='E').length, nA=ROWS.filter(o=>o.nivel==='A').length, naoR=ROWS.filter(o=>o.status==='Não realizada'||o.status==='Desconhecida').length;
+  const barraK=parts=>`<div class="barra-k">${parts.filter(([v])=>v).map(([v,c])=>`<i style="flex:${v};background:${c}"></i>`).join('')}</div>`;
+  const ks=[
+    {k:'tot',l:'Notas no relatório',v:intf(nTot),s:`${brl(soma(ROWS))}${naoR?` · ${intf(naoR)} não realizadas`:''}`,f:null},
+    {k:'lanc',l:'Lançadas',v:intf(lanc.length),cl:'ok',s:`<b>${pctd(lanc.length,nTot)}</b> das notas · ${brl(soma(lanc))}`,f:o=>o.status==='Lançado',bar:barraK([[lanc.length,'var(--ok)'],[nTot-lanc.length,'transparent']])},
+    {k:'pend',l:'Pendentes de lançamento',v:intf(pend.length),cl:'warn',s:`${intf(conf)} confirmadas · ${intf(pnd)} pendentes · ${intf(agu)} aguardando`,f:ehPendente,
+      bar:barraK([[conf,COR_ST['Apenas Confirmação']],[pnd,COR_ST['Pendente']],[agu,COR_ST['Aguardando Confirmação']]])},
+    {k:'aten',l:'Precisam de atenção',v:intf(nE+nA),cl:nE?'bad':'warn',s:`<b style="color:var(--bad)">${intf(nE)}</b> com erro · ${intf(nA)} com alerta`,f:o=>o.nivel!=='OK'},
+  ];
+  if(CARDS_OK){ const cc=pend.filter(o=>o.card).length;
+    ks.push({k:'card',l:'Pendentes já com card',v:intf(cc),cl:'ac',s:`${intf(pend.length-cc)} pendentes ainda sem card`,f:o=>ehPendente(o)&&!!o.card,bar:barraK([[cc,'var(--ac)'],[pend.length-cc,'transparent']])}); }
+  $('#kpis').innerHTML=ks.map(x=>`<button class="kpi ${x.cl||''}${F.kpiK===x.k&&F.kpi?' sel':''}" data-k="${x.k}"><div class="l">${esc(x.l)}</div><div class="v">${x.v}</div><div class="s">${x.s}</div>${x.bar||''}</button>`).join('');
+  $('#kpis').querySelectorAll('.kpi').forEach(b=>b.onclick=()=>{ const x=ks.find(y=>y.k===b.dataset.k); if(!x.f||F.kpiK===x.k&&F.kpi){F.kpi='';F.kpiK=null;}else{F.kpi=x.f;F.kpiK=x.k;} LIMITE=300; desenhar(); });
+
+  // Regras
+  // Contagem dentro dos outros filtros ativos (sem o da própria regra), para o número bater com a lista ao clicar.
+  const cnt={}; ROWS.forEach(o=>new Set(o.oc.map(x=>x.c)).forEach(c=>cnt[c]=0));
+  filtradas(true).forEach(o=>new Set(o.oc.map(x=>x.c)).forEach(c=>cnt[c]++));
+  const ordem={E:0,A:1,I:2}, regras=Object.keys(cnt).sort((a,b)=>(!cnt[a])-(!cnt[b])||ordem[REGRAS[a][0]]-ordem[REGRAS[b][0]]||cnt[b]-cnt[a]);
+  const btnR=c=>`<button class="regra${F.regra===c?' sel':''}" data-c="${c}"${cnt[c]||F.regra===c?'':' disabled title="Nenhuma nota com esta ocorrência nos filtros atuais"'}><span>${esc(txtRegra(c,dias()))}</span><span class="n">${intf(cnt[c])}</span></button>`;
+  const grupo=(nv,t,aberto)=>{ const rs=regras.filter(c=>REGRAS[c][0]===nv); if(!rs.length)return '';
+    const tot=rs.reduce((a,c)=>a+cnt[c],0), cab=`<span class="dot ${nv}"></span>${t}<span style="margin-left:auto">${intf(tot)}</span>`;
+    return nv==='I'?`<details class="grp"${aberto||rs.includes(F.regra)?' open':''}><summary>${cab} ▾</summary>${rs.map(btnR).join('')}</details>`:`<div class="grp"><div class="gt">${cab}</div>${rs.map(btnR).join('')}</div>`; };
+  $('#regras').innerHTML=regras.length?grupo('E','Erros')+grupo('A','Alertas')+grupo('I','Informações')
+    :'<p class="vazio-r">Nenhuma ocorrência — todas as notas passaram nas conferências. ✅</p>';
+  $('#regras').querySelectorAll('.regra').forEach(b=>b.onclick=()=>{ F.regra=F.regra===b.dataset.c?'':b.dataset.c; LIMITE=300; desenhar(); });
+
+  // Tabela
+  const k=ORD.k, d=ORD.dir, nivOrd={E:0,A:1,OK:2};
+  lst.sort((a,b)=>{ let x=a[k],y=b[k]; if(k==='nivel'){x=nivOrd[x];y=nivOrd[y];}
+    if(x instanceof Date||y instanceof Date){x=x?+x:-Infinity;y=y?+y:-Infinity;}
+    if(x==null)x=''; if(y==null)y='';
+    return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR',{numeric:true}))*d; });
+  $('#th').innerHTML='<tr>'+COLS_TAB.map(([c,t,cl])=>`<th class="${cl||''}" data-c="${c}">${esc(t)}${ORD.k===c?(ORD.dir>0?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
+  $('#th').querySelectorAll('th').forEach(th=>th.onclick=()=>{ const c=th.dataset.c; ORD=ORD.k===c?{k:c,dir:-ORD.dir}:{k:c,dir:1}; desenhar(); });
+  const vis=lst.slice(0,LIMITE);
+  const ocCurta=o=>{ const v=o.oc.filter(x=>REGRAS[x.c][0]!=='I'); if(!v.length)return '';
+    const pri=[...v].sort((a,b)=>(REGRAS[a.c][0]==='E'?0:1)-(REGRAS[b.c][0]==='E'?0:1))[0];
+    return `${esc(txtRegra(pri.c,dias()))}${v.length>1?`<span class="mais-oc">+${v.length-1}</span>`:''}`; };
+  $('#tb').innerHTML=vis.map(o=>`<tr data-l="${o.linha}" title="Linha ${o.linha} do relatório — clique para ver os detalhes">
+    <td><span class="dot ${o.nivel}" title="${{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel]}"></span></td>
+    <td class="cel-nf"><span class="mono">${esc(o.numero)}${o.serie?`<span style="color:var(--mu2)">/${esc(o.serie)}</span>`:''}</span><small>${dataBR(o.emissao)}</small></td>
+    <td class="cel-emit">${esc(o.emitente)}<small>${o.empresa?esc(o.empresa):'<span style="color:var(--bad)">empresa não cadastrada</span>'}</small></td>
+    <td class="num">${o.valor==null?'':brl(o.valor)}</td>
+    <td class="cel-st"><span class="st"><i style="background:${COR_ST[o.status]||'var(--mu)'}"></i>${esc(o.status)}</span><small>${cardTag(o)}</small></td>
+    <td class="num">${o.idade??''}</td>
+    <td class="cel-oc" title="${esc(o.ocTexto)}"><div class="oc2">${ocCurta(o)}</div></td></tr>`).join('')||`<tr><td colspan="${COLS_TAB.length}" style="text-align:center;color:var(--mu);padding:40px">Nenhuma nota com esses filtros.</td></tr>`;
+  $('#tb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l)));
+  $('#info').textContent=(lst.length<ROWS.length?`${intf(lst.length)} de ${intf(ROWS.length)} notas`:`${intf(lst.length)} notas`)+` · ${brl(soma(lst))}`+(vis.length<lst.length?` · mostrando ${intf(vis.length)}`:'');
+  ['#fEmp','#fSt','#fVal','#fCard'].forEach(id=>$(id).classList.toggle('ativo',!!$(id).value));
+  $('#bMais').hidden=lst.length<=LIMITE||VISTA!=='tab';
+  $('#bLimpa').hidden=!temFiltro();
+  $('#bChip').hidden=!F.graf; if(F.graf)$('#bChip').textContent=F.graf.d+'  ✕';
+  $('#vTab').hidden=VISTA!=='tab'; $('#vGraf').hidden=VISTA!=='graf'; $('#segMed').hidden=VISTA!=='graf';
+  if(VISTA==='graf'){ $('#info').textContent=(lst.length<ROWS.length?`${intf(lst.length)} de ${intf(ROWS.length)} notas`:`${intf(lst.length)} notas`)+` · ${brl(soma(lst))}`; graficos(lst); }
+}
+
+/* ---------- gráficos ----------
+   Tudo em HTML/CSS (sem biblioteca). Usam as notas filtradas acima; clicar numa barra aplica o filtro.
+   Cores do status em ordem fixa (paleta categórica validada para fundo escuro) — a cor segue o status,
+   nunca a posição; erro/alerta usam as cores de estado do app, sempre com o rótulo escrito ao lado. */
+let VISTA='tab', MED='qtd';
+const COR_ST_ESC={'Lançado':'#3987e5','Apenas Confirmação':'#d95926','Pendente':'#199e70','Aguardando Confirmação':'#c98500','Não realizada':'#d55181','Desconhecida':'#008300'};
+const COR_ST_CLA={'Lançado':'#2a78d6','Apenas Confirmação':'#eb6834','Pendente':'#1baf7a','Aguardando Confirmação':'#eda100','Não realizada':'#e87ba4','Desconhecida':'#008300'};
+let COR_ST=COR_ST_ESC, COR_SERIE='#3987e5';
+const FAIXAS=[['até 15 dias',0,15],['16 a 30',16,30],['31 a 60',31,60],['61 a 90',61,90],['91 a 180',91,180],['mais de 180',181,Infinity]];
+const COR_FAIXA_ESC=['#184f95','#1c5cab','#2a78d6','#3987e5','#5598e7','#86b6ef']; // mais antiga = mais clara (mais destaque no fundo escuro)
+const COR_FAIXA_CLA=['#86b6ef','#5598e7','#3987e5','#2a78d6','#1c5cab','#184f95']; // no tema claro, mais antiga = mais escura
+let COR_FAIXA=COR_FAIXA_ESC;
+function aplicarTema(t){
+  if(t==='estoque')document.documentElement.setAttribute('data-tema','estoque'); else document.documentElement.removeAttribute('data-tema');
+  const claro=t==='estoque'; COR_ST=claro?COR_ST_CLA:COR_ST_ESC; COR_FAIXA=claro?COR_FAIXA_CLA:COR_FAIXA_ESC; COR_SERIE=claro?'#2a78d6':'#3987e5';
+  if(typeof ROWS!=='undefined'&&ROWS.length)desenhar();
+}
+// O Controle de Notas avisa quando o botão Tema é usado (e a troca também chega pelo localStorage compartilhado).
+window.addEventListener('message',ev=>{ if(ev.origin===location.origin&&ev.data&&ev.data.tipo==='vnf-tema')aplicarTema(ev.data.tema); });
+window.addEventListener('storage',ev=>{ if(ev.key==='painel-tema')aplicarTema(ev.newValue); });
+const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+const ehPendente=o=>o.status==='Pendente'||o.status==='Aguardando Confirmação'||o.status==='Apenas Confirmação';
+const med=o=>MED==='valor'?(o.valor||0):1;
+const fmtM=v=>MED==='valor'?brl(v):intf(v)+(v===1?' nota':' notas');
+const fmtCurto=v=>MED==='valor'?(v>=1e6?(v/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mi':v>=1e3?(v/1e3).toLocaleString('pt-BR',{maximumFractionDigits:0})+' mil':intf(Math.round(v))):intf(v);
+const tipAttr=(t,linhas,f)=>` data-tip="${esc(JSON.stringify([t,...linhas]))}"${f?` data-f="${esc(JSON.stringify(f))}"`:''}`;
+
+// Soma por status de um grupo de notas → segmentos na ordem fixa dos status.
+function porStatus(a){ const m={}; a.forEach(o=>m[o.status]=(m[o.status]||0)+med(o)); return STATUS_ORDEM.filter(s=>m[s]).map(s=>[s,m[s]]); }
+function legenda(sts){ return `<div class="leg">${sts.map(s=>`<span><i style="background:${COR_ST[s]}"></i>${esc(s)}</span>`).join('')}</div>`; }
+function caixa(titulo,sub,corpo,larga){ return `<section class="box${larga?' larga':''}"><h3>${esc(titulo)}</h3><p class="sub">${esc(sub)}</p>${corpo}</section>`; }
+function vazioG(t){ return `<div class="vazio-g">${esc(t)}</div>`; }
+
+// Barras horizontais empilhadas por status: itens = [{rot, notas, f}]
+function barrasStatus(itens){
+  const max=Math.max(...itens.map(it=>it.notas.reduce((s,o)=>s+med(o),0)),0)||1;
+  return `<div class="hb">${itens.map(it=>{ const segs=porStatus(it.notas), tot=segs.reduce((s,x)=>s+x[1],0);
+    return `<div class="rot" title="${esc(it.rot)}">${esc(it.rot)}</div>
+      <div class="bar" style="width:${Math.max(tot/max*100,0.5)}%">${segs.map(([s,v])=>`<b style="flex:${v} 1 0;background:${COR_ST[s]}"${tipAttr(it.rot,[`${s}: ${fmtM(v)} (${Math.round(v/tot*100)}%)`,`Total: ${fmtM(tot)}`],{...it.f,st:s,d:`${it.rot} · ${s}`})}></b>`).join('')}</div>
+      <div class="val">${fmtCurto(tot)}</div>`; }).join('')}</div>`;
+}
+// Barras horizontais de uma cor: itens = [{rot, v, cor, tip, f}]
+function barrasSimples(itens,fmt,cls){
+  const max=Math.max(...itens.map(i=>i.v),0)||1;
+  return `<div class="hb${cls?' '+cls:''}">${itens.map(i=>`<div class="rot" title="${esc(i.rot)}">${i.pre||''}${esc(i.rot)}</div>
+    <div class="bar" style="width:${Math.max(i.v/max*100,0.5)}%"><b style="flex:1;background:${i.cor}"${tipAttr(i.rot,i.tip,i.f)}></b></div>
+    <div class="val">${fmt(i.v)}</div>`).join('')}</div>`;
+}
+
+function graficos(lst){
+  if(!lst.length){ $('#vGraf').innerHTML=caixa('Sem dados','Nenhuma nota com esses filtros.','',true); return; }
+  const sts=STATUS_ORDEM.filter(s=>lst.some(o=>o.status===s)), out=[];
+
+  // 1. Visão geral: uma barra 100% por status
+  const segs=porStatus(lst), tot=segs.reduce((s,x)=>s+x[1],0);
+  out.push(caixa('Situação dos lançamentos',MED==='valor'?'Quanto do valor das notas já foi lançado':'Quantas notas já foram lançadas',
+    legenda(sts)+`<div class="bar cheia">${segs.map(([s,v])=>`<b style="flex:${v} 1 0;background:${COR_ST[s]}"${tipAttr(s,[fmtM(v)+` (${(v/tot*100).toLocaleString('pt-BR',{maximumFractionDigits:1})}%)`],{st:s,d:s})}></b>`).join('')}</div>
+    <div class="leg" style="margin:10px 0 0">${segs.map(([s,v])=>`<span style="color:var(--tx)"><b style="font-family:var(--f-mono)">${(v/tot*100).toLocaleString('pt-BR',{maximumFractionDigits:1})}%</b>&nbsp;<span style="color:var(--mu)">${esc(s)} · ${fmtCurto(v)}</span></span>`).join('')}</div>`,true));
+
+  // 2. Por empresa
+  const emp=new Map(); lst.forEach(o=>{ const k=o.empresa||'(não cadastrada)'; if(!emp.has(k))emp.set(k,[]); emp.get(k).push(o); });
+  const itEmp=[...emp].map(([k,a])=>({rot:k,notas:a,f:{emp:k}})).sort((a,b)=>b.notas.reduce((s,o)=>s+med(o),0)-a.notas.reduce((s,o)=>s+med(o),0));
+  out.push(caixa('Por empresa','Status dos lançamentos de cada empresa — clique para ver as notas',legenda(sts)+barrasStatus(itEmp)));
+
+  // 3. Envelhecimento das pendências
+  const pend=lst.filter(ehPendente);
+  const itFx=FAIXAS.map(([r,a,b],i)=>{ const ns=pend.filter(o=>o.idade!=null&&o.idade>=a&&o.idade<=b); const v=ns.reduce((s,o)=>s+med(o),0);
+    return {rot:r,v,cor:COR_FAIXA[i],f:{faixa:i,d:'Pendentes há '+r},tip:[fmtM(v),`${intf(ns.length)} notas pendentes · ${brl(ns.reduce((s,o)=>s+(o.valor||0),0))}`]}; });
+  out.push(caixa('Há quanto tempo estão pendentes','Notas sem lançamento (aguardando, pendentes e confirmadas), pelos dias desde o recebimento',
+    pend.length?barrasSimples(itFx,fmtCurto):vazioG('Nenhuma nota pendente. ✅')));
+
+  // 4. Evolução mensal pela emissão
+  const mes=new Map(); lst.forEach(o=>{ if(!o.emissao)return; const k=o.emissao.getFullYear()*100+o.emissao.getMonth(); if(!mes.has(k))mes.set(k,[]); mes.get(k).push(o); });
+  const ks=[...mes.keys()].sort((a,b)=>a-b);
+  if(ks.length){
+    const ini=ks[0], fim=ks[ks.length-1], todos=[]; // inclui meses sem nota, para o eixo do tempo não pular
+    for(let y=Math.floor(ini/100),m=ini%100;y*100+m<=fim;m===11?(y++,m=0):m++)todos.push(y*100+m);
+    const tots=todos.map(k=>(mes.get(k)||[]).reduce((s,o)=>s+med(o),0)), max=Math.max(...tots)||1;
+    const rot=k=>MESES[k%100]+'/'+String(Math.floor(k/100)).slice(2);
+    out.push(caixa('Notas por mês de emissão','Clique numa parte da coluna para ver as notas daquele mês e status',legenda(sts)+
+      `<div class="cols">${todos.map((k,i)=>{ const a=mes.get(k)||[], sg=porStatus(a);
+        return `<div class="c"><span class="t">${tots[i]?fmtCurto(tots[i]):''}</span><div class="col-st" style="height:${tots[i]/max*100}%">${sg.map(([s,v])=>`<b style="flex:${v} 1 0;background:${COR_ST[s]}"${tipAttr(rot(k),[`${s}: ${fmtM(v)}`,`Total do mês: ${fmtM(tots[i])}`],{mes:k,st:s,d:`${rot(k)} · ${s}`})}></b>`).join('')}</div></div>`; }).join('')}</div>
+      <div class="cols-x">${todos.map(k=>`<span>${rot(k)}</span>`).join('')}</div>`,true));
+  }
+
+  // 5. Ocorrências por regra
+  const cnt={}; lst.forEach(o=>new Set(o.oc.map(x=>x.c)).forEach(c=>{ if(REGRAS[c][0]!=='I')cnt[c]=(cnt[c]||0)+1; }));
+  const itR=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a]).slice(0,10).map(c=>({rot:txtRegra(c,dias()),v:cnt[c],cor:REGRAS[c][0]==='E'?'var(--bad)':'var(--warn)',
+    pre:`<span class="tag ${REGRAS[c][0]}">${REGRAS[c][0]==='E'?'Erro':'Alerta'}</span> `,tip:[`${REGRAS[c][0]==='E'?'Erro':'Alerta'} · ${intf(cnt[c])} notas`],f:{regra:c,d:txtRegra(c,dias())}}));
+  out.push(caixa('Principais problemas encontrados','Notas por ocorrência (as 10 mais frequentes) — clique para ver as notas',
+    itR.length?barrasSimples(itR,intf,'wrap'):vazioG('Nenhum erro ou alerta. ✅')));
+
+  // 5b. Pendências x cards do Controle de Notas
+  if(CARDS_OK&&pend.length){
+    const cols=[...COLUNAS_CARD.map(([k,l])=>[k,l]),['sem','Sem card']];
+    const itC=cols.map(([k,l],i)=>{ const ns=pend.filter(o=>k==='sem'?!o.card:o.card&&o.card.status===k); const v=ns.reduce((s,o)=>s+med(o),0);
+      return {rot:l,v,cor:k==='sem'?'var(--mu2)':k==='concluido'?'var(--ok)':COR_SERIE,f:{card:k,d:'Pendentes · '+(k==='sem'?'sem card':'card em '+l)},tip:[fmtM(v),`${intf(ns.length)} notas pendentes · ${brl(ns.reduce((s,o)=>s+(o.valor||0),0))}`]}; }).filter(i=>i.v>0);
+    out.push(caixa('Pendentes no Controle de Notas','Em que coluna do quadro estão as notas sem lançamento — clique para ver as notas',barrasSimples(itC,fmtCurto)));
+  }
+
+  // 6. Fornecedores com mais pendência
+  const forn=new Map(); pend.forEach(o=>{ const k=o.emitente||'(sem nome)'; const x=forn.get(k)||{v:0,n:0,vl:0}; x.v+=med(o); x.n++; x.vl+=o.valor||0; forn.set(k,x); });
+  const itF=[...forn].sort((a,b)=>b[1].v-a[1].v).slice(0,10).map(([k,x])=>({rot:k,v:x.v,cor:COR_SERIE,f:{forn:k,d:'Pendentes de '+k},tip:[`${intf(x.n)} notas pendentes`,brl(x.vl)]}));
+  out.push(caixa('Fornecedores com mais notas pendentes',MED==='valor'?'Os 10 maiores em valor ainda não lançado':'Os 10 com mais notas ainda não lançadas',
+    itF.length?barrasSimples(itF,fmtCurto):vazioG('Nenhuma nota pendente. ✅')));
+
+  $('#vGraf').innerHTML=out.join('');
+}
+
+// Dica ao passar o mouse (ou tocar) e filtro ao clicar.
+const tip=$('#tip');
+document.addEventListener('pointerover',e=>{ const el=e.target.closest('[data-tip]'); if(!el){ tip.hidden=true; return; }
+  const [t,...l]=JSON.parse(el.dataset.tip); tip.innerHTML=`<b>${esc(t)}</b>${l.map(x=>`<div>${esc(x)}</div>`).join('')}`; tip.hidden=false; });
+document.addEventListener('pointermove',e=>{ if(tip.hidden)return; const w=tip.offsetWidth,h=tip.offsetHeight;
+  let x=e.clientX+14,y=e.clientY+14; if(x+w>innerWidth-8)x=e.clientX-w-14; if(y+h>innerHeight-8)y=e.clientY-h-14; tip.style.left=Math.max(8,x)+'px'; tip.style.top=Math.max(8,y)+'px'; });
+document.addEventListener('scroll',()=>{ tip.hidden=true; },true);
+// Recorte de um pedaço do gráfico (empresa, status, mês, faixa de idade, regra ou fornecedor).
+function predF(f){ return o=>(!f.emp||(o.empresa||'(não cadastrada)')===f.emp)&&(!f.st||o.status===f.st)
+  &&(f.mes==null||(!!o.emissao&&o.emissao.getFullYear()*100+o.emissao.getMonth()===f.mes))
+  &&(f.faixa==null||(ehPendente(o)&&o.idade!=null&&o.idade>=FAIXAS[f.faixa][1]&&o.idade<=FAIXAS[f.faixa][2]))
+  &&(!f.card||(ehPendente(o)&&passaCard(o,f.card==='sem'?'sem':'col:'+f.card)))
+  &&(!f.regra||o.oc.some(x=>x.c===f.regra))&&(!f.forn||(ehPendente(o)&&(o.emitente||'(sem nome)')===f.forn)); }
+// Clicar numa barra abre a lista das notas daquele pedaço (o gráfico continua como está), com filtros no topo.
+let LISTA=null; // {f, base, q:{b,emp,st,val}, ord:{k,dir}}
+$('#vGraf').addEventListener('click',e=>{ const el=e.target.closest('[data-f]'); if(!el)return; tip.hidden=true; abrirLista(JSON.parse(el.dataset.f)); });
+function abrirLista(f){
+  LISTA={f,base:filtradas().filter(predF(f)),q:{b:'',emp:'',st:'',val:''},ord:{k:'valor',dir:-1}};
+  renderLista(); if(!$('#dlg').open)$('#dlg').showModal();
+}
+const COLS_LISTA=[['numero','NF'],['emitente','Emitente'],['empresa','Empresa'],['emissao','Emissão'],['valor','Valor','num'],['status','Status'],['nivel','Validação'],['idade','Dias','num']];
+function renderLista(){
+  const {base,q}=LISTA, opt=(v,t,sel)=>`<option value="${esc(v)}"${v===sel?' selected':''}>${esc(t)}</option>`;
+  const emps=[...new Set(base.map(o=>o.empresa||'(não cadastrada)'))].sort(), sts=STATUS_ORDEM.filter(s=>base.some(o=>o.status===s));
+  $('#dlgT').textContent=LISTA.f.d;
+  $('#dlgB').innerHTML=`<div class="filtros">
+      <input id="lBusca" type="search" placeholder="Buscar emitente, CNPJ, número, chave, título…" value="${esc(q.b)}">
+      <select id="lEmp">${opt('','Todas as empresas',q.emp)}${emps.map(e=>opt(e,e,q.emp)).join('')}</select>
+      <select id="lSt">${opt('','Todos os status',q.st)}${sts.map(s=>opt(s,s,q.st)).join('')}</select>
+      <select id="lVal">${[['','Todas as validações'],['E','Só com erro'],['A','Só com alerta'],['EA','Erro ou alerta'],['OK','Só OK']].map(([v,t])=>opt(v,t,q.val)).join('')}</select>
+    </div>
+    <div class="abas"><p class="info" id="lInfo"></p><button class="btn" id="lLimpa" hidden>✕ Limpar</button><button class="btn pri" id="bVerTab">☰ Ver na tabela</button></div>
+    <div class="tw" style="max-height:52vh"><table><thead id="lTh"></thead><tbody id="lTb"></tbody></table></div>`;
+  const upd=()=>{ q.b=$('#lBusca').value; q.emp=$('#lEmp').value; q.st=$('#lSt').value; q.val=$('#lVal').value; desenharLista(); };
+  $('#lBusca').oninput=upd; ['#lEmp','#lSt','#lVal'].forEach(s=>$(s).onchange=upd);
+  $('#lLimpa').onclick=()=>{ LISTA.q={b:'',emp:'',st:'',val:''}; renderLista(); };
+  $('#bVerTab').onclick=()=>{ // leva o recorte do gráfico + os filtros da lista para a tabela principal
+    F.graf=LISTA.f; if(q.b)$('#fBusca').value=q.b; if(q.emp)$('#fEmp').value=q.emp; if(q.st)$('#fSt').value=q.st; if(q.val)$('#fVal').value=q.val;
+    VISTA='tab'; $('#segVista').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v==='tab')); $('#dlg').close(); LIMITE=300; desenhar(); };
+  desenharLista();
+}
+function desenharLista(){
+  const {q,ord}=LISTA, b=norm(q.b), max=300, nivOrd={E:0,A:1,OK:2};
+  const ns=LISTA.base.filter(o=>(!q.emp||(o.empresa||'(não cadastrada)')===q.emp)&&(!q.st||o.status===q.st)
+    &&(!q.val||(q.val==='EA'?o.nivel!=='OK':o.nivel===q.val))
+    &&(!b||norm([o.emitente,o.cnpjEmit,o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto].join(' ')).includes(b)));
+  ns.sort((a,c)=>{ let x=a[ord.k],y=c[ord.k]; if(ord.k==='nivel'){x=nivOrd[x];y=nivOrd[y];}
+    if(x instanceof Date||y instanceof Date){x=x?+x:-Infinity;y=y?+y:-Infinity;} if(x==null)x=''; if(y==null)y='';
+    return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR',{numeric:true}))*ord.dir; });
+  const filtrou=q.b||q.emp||q.st||q.val;
+  $('#lInfo').textContent=`${intf(ns.length)} notas · ${brl(ns.reduce((s,o)=>s+(o.valor||0),0))}`+(filtrou?` (de ${intf(LISTA.base.length)})`:'')+(ns.length>max?` — mostrando ${max}`:'');
+  $('#lLimpa').hidden=!filtrou;
+  $('#lTh').innerHTML='<tr>'+COLS_LISTA.map(([c,t,cl])=>`<th class="${cl||''}" data-c="${c}">${esc(t)}${ord.k===c?(ord.dir>0?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
+  $('#lTh').querySelectorAll('th').forEach(th=>th.onclick=()=>{ const c=th.dataset.c; LISTA.ord=ord.k===c?{k:c,dir:-ord.dir}:{k:c,dir:c==='valor'||c==='idade'?-1:1}; desenharLista(); });
+  $('#lTb').innerHTML=ns.slice(0,max).map(o=>`<tr class="lv${o.nivel}" data-l="${o.linha}"><td class="mono">${esc(o.numero)}${o.serie?'/'+esc(o.serie):''}</td><td class="quebra">${esc(o.emitente)}</td><td>${esc(o.empresa||'(não cadastrada)')}</td><td>${dataBR(o.emissao)}</td><td class="num">${o.valor==null?'':brl(o.valor)}</td><td>${esc(o.status)}</td><td><span class="tag ${o.nivel}">${{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel]}</span></td><td class="num">${o.idade??''}</td></tr>`).join('')
+    ||`<tr><td colspan="${COLS_LISTA.length}" style="text-align:center;color:var(--mu);padding:24px">Nenhuma nota com esses filtros.</td></tr>`;
+  $('#lTb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l),true));
+}
+function temFiltro(){ return !!($('#fBusca').value||$('#fEmp').value||$('#fSt').value||$('#fVal').value||$('#fCard').value||F.regra||F.kpi||F.graf); }
+$('#bLimpa').onclick=()=>{ $('#fBusca').value=''; $('#fEmp').value=''; $('#fSt').value=''; $('#fVal').value=''; $('#fCard').value=''; F={kpi:'',regra:''}; LIMITE=300; desenhar(); };
+$('#bChip').onclick=()=>{ F.graf=null; LIMITE=300; desenhar(); };
+$('#segVista').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; VISTA=b.dataset.v; $('#segVista').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); lsSet('validador-nf-vista',VISTA); desenhar(); };
+$('#segMed').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; MED=b.dataset.m; $('#segMed').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); desenhar(); };
+
+function detalhe(o,daLista){
+  if(!o)return;
+  $('#dlgT').textContent=`NF ${o.numero||'?'}${o.serie?'/'+o.serie:''} — linha ${o.linha}`;
+  const oc=o.oc.length?`<ul class="ocl">${o.oc.map(x=>`<li><span class="tag ${REGRAS[x.c][0]}">${{E:'Erro',A:'Alerta',I:'Info'}[REGRAS[x.c][0]]}</span><span>${esc(txtRegra(x.c,dias()))}${x.extra?` <span style="color:var(--mu)">— ${esc(x.extra)}</span>`:''}</span></li>`).join('')}</ul>`
+    :'<p><span class="tag OK">OK</span> Nenhuma ocorrência nesta nota.</p>';
+  const campos=[['Status',o.status],['Empresa',o.empresa||'(não cadastrada)'],['CNPJ destinatário',o.cnpjDest],['UF destinatário',o.ufDest],
+    ['Emitente',o.emitente],['CNPJ emitente',o.cnpjEmit],['UF emitente',o.ufEmit],['Natureza da operação',o.natureza],
+    ['Manifesto',o.manifesto],['Emissão',dataBR(o.emissao)],['Recebimento',dataBR(o.recebimento)],['Valor',o.valor==null?'':brl(o.valor)],
+    ['Escrituração',o.escrituracao],['Título/NF avulsa',o.titulo||'0'],['Chave de acesso',o.chave],['Linha no relatório',o.linha]];
+  $('#dlgB').innerHTML=(daLista?'<button class="btn" id="bVolta" style="margin:0 0 12px">← Voltar à lista</button>':'')+oc+cardBoxHtml(o)+`<dl class="dl">${campos.map(([a,b])=>`<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>`;
+  if(daLista)$('#bVolta').onclick=renderLista;
+  ligarCardBox(o,()=>detalhe(o,daLista));
+  if(!$('#dlg').open)$('#dlg').showModal();
+}
+
+function exportar(){
+  const lst=filtradas();
+  // Colunas na ordem da consulta do Power Query + o resultado da validação.
+  const notas=lst.map(o=>({
+    'Emitente':o.emitente,'CNPJ emitente':o.cnpjEmit,'UF emitente':o.ufEmit,'CNPJ destinatário':o.cnpjDest,'UF destinatário':o.ufDest,
+    'Manifesto':o.manifesto,'Natureza da operação':o.natureza,'Recebimento':o.recebimento,'Emissão':o.emissao,'Chave de acesso':o.chave,
+    'Número NF':o.numero,'Série':o.serie,'Valor':o.valor,'Escrituração':o.escrituracao,'Título/Nota fiscal avulsa':o.titulo,
+    'Empresas':o.empresa,'Status manifestação':o.status,'Validação':{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel],'Ocorrências':o.ocTexto,'Linha no relatório':o.linha,
+    ...(CARDS_OK?{'Card no Controle de Notas':o.card?(COL_LABEL[o.card.status]||o.card.status):'','Responsável do card':o.card?o.card.responsavel||'':''}:{})
+  }));
+  const ocs=[]; lst.forEach(o=>o.oc.forEach(x=>{ if(REGRAS[x.c][0]==='I')return;
+    ocs.push({'Linha no relatório':o.linha,'Nível':REGRAS[x.c][0]==='E'?'Erro':'Alerta','Ocorrência':txtRegra(x.c,dias()),'Detalhe':x.extra||'',
+      'Empresa':o.empresa,'Emitente':o.emitente,'Número NF':o.numero,'Série':o.serie,'Emissão':o.emissao,'Valor':o.valor,'Manifesto':o.manifesto,'Título':o.titulo,'Chave de acesso':o.chave}); }));
+  const wb=XLSX.utils.book_new();
+  const ws1=XLSX.utils.json_to_sheet(notas,{cellDates:true,dateNF:'dd/mm/yyyy'});
+  ws1['!cols']=[{wch:38},{wch:20},{wch:6},{wch:20},{wch:6},{wch:24},{wch:30},{wch:12},{wch:12},{wch:48},{wch:10},{wch:6},{wch:14},{wch:14},{wch:10},{wch:28},{wch:22},{wch:10},{wch:80},{wch:8}];
+  XLSX.utils.book_append_sheet(wb,ws1,'Notas validadas');
+  const ws2=XLSX.utils.json_to_sheet(ocs.length?ocs:[{'Ocorrência':'Nenhuma ocorrência'}],{cellDates:true,dateNF:'dd/mm/yyyy'});
+  ws2['!cols']=[{wch:8},{wch:8},{wch:60},{wch:30},{wch:28},{wch:38},{wch:10},{wch:6},{wch:12},{wch:14},{wch:24},{wch:10},{wch:48}];
+  XLSX.utils.book_append_sheet(wb,ws2,'Ocorrências');
+  const base=ARQ.replace(/\.[^.]+$/,'');
+  XLSX.writeFile(wb,`Validação - ${base}.xlsx`);
+}
+
+/* ---------- integração com o Controle de Notas ----------
+   O validador fica dentro do Controle de Notas (mesmo endereço), então usa o login de lá: a sessão do Supabase
+   é a mesma do quadro. Com login:
+   - procura o card de cada nota (pela chave de acesso; sem chave, pelo número + emitente) e acusa pendente que já
+     tem card, card finalizado com a nota ainda sem título e nota lançada com o card ainda aberto;
+   - no detalhe da nota mostra o card e o diálogo dele; observações e avisos vão para esse diálogo
+     (nota_comentarios) — o aviso direcionado aparece no 💬 de quem recebe, como qualquer mensagem do quadro;
+   - admin/supervisor podem criar os cards que faltam em "Importadas SIENGE" (mesma rotina da Importação SIENGE).
+   Tudo passa pelas permissões do banco (RLS): cada um vê e altera só o que já podia no quadro. */
+const SUPABASE_URL='https://kygainafarusnsstvvhc.supabase.co';
+const SUPABASE_ANON_KEY='sb_publishable_rpMqd16T_46CPrBrOeYldw_6DCwYx8v';
+const sbc=window.supabase?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY):null;
+const COLUNAS_CARD=[['importadas_sienge','Importadas SIENGE'],['entradas','Entradas'],['lancamento','Lançamento'],['financeiro_cx','Financeiro/CX'],['pendencias','Pendências'],['concluido','Finalização']];
+const COL_LABEL=Object.fromEntries(COLUNAS_CARD);
+const CARD_SEL='id,numero,fornecedor,status,assigned_to,created_by,chave_acesso,numero_titulo,obra_id,origem,created_at';
+const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD'];
+const EMBUTIDO=window.parent&&window.parent!==window;
+let EU=null, CARDS_OK=false, USUARIOS=null;
+if(EMBUTIDO)document.body.classList.add('emb');
+
+function conn(t,cl){ const e=$('#conn'); e.textContent=t; e.className='conn'+(cl?' '+cl:''); }
+async function conectar(){
+  if(!sbc){ conn('Controle de Notas indisponível (sem conexão)','off'); return; }
+  try{
+    const {data:{session}}=await sbc.auth.getSession();
+    if(!session){ conn(EMBUTIDO?'entre no Controle de Notas para ver os cards':'sem login no Controle de Notas','off'); $('#bEntrar').hidden=EMBUTIDO; return; }
+    $('#bEntrar').hidden=true;
+    const {data:p,error}=await sbc.from('profiles').select('id,name,role,coluna,active').eq('id',session.user.id).maybeSingle();
+    if(error||!p||!p.active||p.role==='pendente'){ conn('Seu usuário não está liberado no Controle de Notas','off'); return; }
+    EU=p; conn('● '+p.name,'ok');
+    $('#acoes').hidden=false; $('#bCriar').hidden=!(p.role==='admin'||p.role==='supervisor');
+    if(ROWS.length&&!CARDS_OK)buscarCards(ROWS);
+  }catch(e){ console.error(e); conn('Não consegui falar com o Controle de Notas','off'); }
+}
+sbc&&sbc.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT'){ EU=null; CARDS_OK=false; $('#acoes').hidden=true; conn('Saiu do Controle de Notas','off'); if(ROWS.length){ aplicarCards(); desenhar(); } } });
+
+// Fora do Controle de Notas (arquivo aberto direto), entra com o mesmo e-mail e senha de lá.
+$('#bEntrar').onclick=()=>{
+  $('#dlgT').textContent='Entrar no Controle de Notas';
+  $('#dlgB').innerHTML=`<form class="fchat" id="fLogin" style="max-width:380px">
+    <p class="info" style="margin:0">Mesmo e-mail e senha do Controle de Notas Fiscais.</p>
+    <input id="lgE" type="email" autocomplete="username" placeholder="E-mail" required style="background:var(--s1);border:1px solid var(--line);border-radius:9px;padding:9px 10px">
+    <input id="lgS" type="password" autocomplete="current-password" placeholder="Senha" required style="background:var(--s1);border:1px solid var(--line);border-radius:9px;padding:9px 10px">
+    <div class="r"><button class="btn pri" id="lgB">Entrar</button><span id="lgM"></span></div></form>`;
+  $('#dlg').showModal();
+  $('#fLogin').onsubmit=async e=>{ e.preventDefault(); $('#lgB').disabled=true; $('#lgM').textContent='Entrando…';
+    const {error}=await sbc.auth.signInWithPassword({email:$('#lgE').value.trim().toLowerCase(),password:$('#lgS').value});
+    $('#lgB').disabled=false;
+    if(error){ $('#lgM').innerHTML='<span class="errmsg">E-mail ou senha inválidos.</span>'; return; }
+    $('#dlg').close(); conectar(); };
+};
+
+const emLotes=(a,n)=>{ const r=[]; for(let i=0;i<a.length;i+=n)r.push(a.slice(i,i+n)); return r; };
+async function emParalelo(itens,n,fn){ const out=[]; let i=0; await Promise.all(Array.from({length:Math.min(n,itens.length)},async()=>{ while(i<itens.length){ const k=i++; out[k]=await fn(itens[k]); } })); return out; }
+const nomeCurto=s=>norm(s).replace(/[^a-z0-9]/g,'').replace(/^\d+/,'').slice(0,10); // "33.843.619 JAYANE…" → "jayanepinh"
+// Prefere o card ainda aberto; entre iguais, o mais recente.
+const melhorCard=(a,b)=>!a?b:!b?a:((a.status==='concluido')!==(b.status==='concluido')?(a.status==='concluido'?b:a):(a.id>b.id?a:b));
+
+async function buscarCards(rows){
+  if(!EU||!rows.length)return;
+  const alvo=rows===ROWS; conn('consultando os cards…','');
+  try{
+    const porChave=new Map(), achados=new Map();
+    const chaves=[...new Set(rows.filter(o=>o.chave.length===44).map(o=>o.chave))];
+    await emParalelo(emLotes(chaves,150),4,async lote=>{
+      const {data,error}=await sbc.from('notas').select(CARD_SEL).in('chave_acesso',lote); if(error)throw error;
+      (data||[]).forEach(c=>{ const k=soAlnum(c.chave_acesso); porChave.set(k,melhorCard(porChave.get(k),c)); });
+    });
+    rows.forEach(o=>{ const c=porChave.get(o.chave); if(c)achados.set(o,c); });
+    // Sem achar pela chave (card cadastrado à mão/pelo estoque sem chave): número + emitente, só para as pendentes.
+    const resto=rows.filter(o=>!achados.has(o)&&ehPendente(o)&&o.numero);
+    const nums=[...new Set(resto.map(o=>o.numero))];
+    const porNum=new Map();
+    await emParalelo(emLotes(nums,150),4,async lote=>{
+      const {data,error}=await sbc.from('notas').select(CARD_SEL).in('numero',lote); if(error)throw error;
+      (data||[]).forEach(c=>{ const k=String(c.numero).trim(); if(!porNum.has(k))porNum.set(k,[]); porNum.get(k).push(c); });
+    });
+    resto.forEach(o=>{ const cs=(porNum.get(o.numero)||[]).filter(c=>{ const ck=soAlnum(c.chave_acesso);
+      return (!ck||ck===o.chave)&&nomeCurto(c.fornecedor)&&nomeCurto(c.fornecedor)===nomeCurto(o.emitente); });
+      const c=cs.reduce(melhorCard,null); if(c)achados.set(o,c); });
+    // Nomes do responsável e da obra
+    const cards=[...new Set(achados.values())];
+    const ids=[...new Set(cards.flatMap(c=>[c.assigned_to,c.created_by]).filter(Boolean))], obras=[...new Set(cards.map(c=>c.obra_id).filter(Boolean))];
+    const nomes={}, nomesObra={};
+    if(ids.length){ const {data}=await sbc.rpc('profile_names',{p_ids:ids}); (data||[]).forEach(r=>nomes[r.id]=r.name); }
+    for(const lote of emLotes(obras,200)){ const {data}=await sbc.from('obras').select('id,nome').in('id',lote); (data||[]).forEach(r=>nomesObra[r.id]=r.nome); }
+    cards.forEach(c=>{ c.responsavel=c.assigned_to?nomes[c.assigned_to]||'':''; c.criadoPor=c.created_by?nomes[c.created_by]||'':''; c.obra=c.obra_id?nomesObra[c.obra_id]||'':''; });
+    rows.forEach(o=>{ o.card=achados.get(o)||null; });
+    if(alvo)CARDS_OK=true;
+    aplicarCards(); desenhar();
+    conn(`● ${EU.name} · Controle de Notas conectado`,'ok');
+  }catch(e){ console.error(e); conn('Falha ao consultar os cards: '+(e.message||e),'off'); }
+}
+function aplicarCards(){
+  ROWS.forEach(o=>{
+    o.oc=o.oc.filter(x=>!CARD_CODIGOS.includes(x.c));
+    o.cardCol=o.card?(COL_LABEL[o.card.status]||o.card.status):'';
+    if(!CARDS_OK)return;
+    const c=o.card, rot=c?`NF ${c.numero} em ${COL_LABEL[c.status]||c.status}${c.responsavel?' · '+c.responsavel:''}`:'';
+    if(o.titulo>0){ if(c&&c.status!=='concluido')o.oc.push({c:'CARD_ABERTO',extra:rot}); }
+    else if(ehPendente(o)){ if(!c)o.oc.push({c:'SEM_CARD'}); else o.oc.push({c:c.status==='concluido'?'CARD_CONCL':'CARD_PEND',extra:rot}); }
+  });
+  finalizar(ROWS,dias());
+  const sel=$('#fCard'), v=sel.value;
+  sel.hidden=!CARDS_OK;
+  sel.innerHTML=`<option value="">Card: todos</option><option value="com">Com card</option><option value="sem">Pendentes sem card</option>`+COLUNAS_CARD.map(([k,l])=>`<option value="col:${k}">Card em ${esc(l)}</option>`).join('');
+  sel.value=CARDS_OK?v:'';
+}
+function passaCard(o,fc){ if(fc==='com')return !!o.card; if(fc==='sem')return !o.card&&ehPendente(o); if(fc.startsWith('col:'))return !!o.card&&o.card.status===fc.slice(4); return true; }
+function cardTag(o){ if(!o.card)return CARDS_OK&&ehPendente(o)?'<span class="cardt sem">sem card</span>':''; return `<span class="cardt${o.card.status==='concluido'?' fim':''}">card em ${esc(o.cardCol)}</span>`; }
+function abrirCard(id){
+  if(EMBUTIDO){ window.parent.postMessage({tipo:'vnf-abrir-nota',id},location.origin); $('#dlg').open&&$('#dlg').close(); }
+  else window.open('../#nota='+id,'_blank');
+}
+
+/* Card + diálogo no detalhe da nota */
+function cardBoxHtml(o){
+  if(!EU)return `<div class="cardbox"><h4>Controle de Notas</h4><p class="info" style="margin:0">Entre no Controle de Notas para ver o card desta nota, registrar observações e avisar os usuários.</p></div>`;
+  if(!CARDS_OK)return `<div class="cardbox"><h4>Controle de Notas</h4><p class="info" style="margin:0">Consultando os cards…</p></div>`;
+  const c=o.card;
+  if(!c){ const pode=ehPendente(o)&&(EU.role==='admin'||EU.role==='supervisor');
+    return `<div class="cardbox"><h4>Controle de Notas</h4><p class="info" style="margin:0 0 8px">Esta nota ainda não tem card no Controle de Notas${ehPendente(o)?'':' (e já está lançada)'}. As observações e avisos ficam no diálogo do card.</p>
+      ${pode?'<button class="btn pri" id="bCriarUm">➕ Criar card em Importadas SIENGE</button> <span id="cbMsg"></span>':''}</div>`; }
+  return `<div class="cardbox"><h4>Card no Controle de Notas</h4>
+    <div class="lin"><span>NF <b>${esc(c.numero)}</b></span><span>Coluna <b>${esc(COL_LABEL[c.status]||c.status)}</b></span>${c.responsavel?`<span>Responsável <b>${esc(c.responsavel)}</b></span>`:''}${c.obra?`<span>Obra <b>${esc(c.obra)}</b></span>`:''}${c.numero_titulo?`<span>Título <b>${esc(c.numero_titulo)}</b></span>`:''}</div>
+    <button class="btn" id="bAbrirCard" style="margin:0 0 10px">↗ Abrir card no quadro</button>
+    <div class="modal-t" style="font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin:4px 0 6px">Diálogo / observações</div>
+    <div class="chat" id="chat"><span class="info">Carregando…</span></div>
+    <form class="fchat" id="fChat">
+      <select id="chDest"><option value="">Observação geral (todos os participantes do card)</option></select>
+      <textarea id="chTxt" maxlength="4000" placeholder="Registre uma observação ou mande um aviso sobre esta nota…"></textarea>
+      <div class="r"><button class="btn pri" id="chEnv">Enviar</button><span id="chMsg"></span></div>
+    </form></div>`;
+}
+async function ligarCardBox(o,recarregar){
+  const bc=$('#bCriarUm'); if(bc)bc.onclick=async()=>{ bc.disabled=true; $('#cbMsg').textContent='Criando…'; const r=await criarCards([o]); if(r)recarregar(); else bc.disabled=false; };
+  const c=o.card; if(!c||!$('#chat'))return;
+  $('#bAbrirCard').onclick=()=>abrirCard(c.id);
+  // diálogo do card
+  const {data:msgs,error}=await sbc.from('nota_comentarios').select('id,autor_id,destinatario_id,mensagem,created_at').eq('nota_id',c.id).order('created_at',{ascending:true});
+  if(!$('#chat'))return;
+  if(error){ $('#chat').innerHTML=`<span class="errmsg">Não consegui ler o diálogo: ${esc(error.message)}</span>`; return; }
+  const ids=[...new Set((msgs||[]).flatMap(m=>[m.autor_id,m.destinatario_id]).concat([c.assigned_to,c.created_by]).filter(Boolean))];
+  const nomes={}; if(ids.length){ const {data}=await sbc.rpc('profile_names',{p_ids:ids}); (data||[]).forEach(r=>nomes[r.id]=r.name); }
+  const quando=iso=>new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'});
+  $('#chat').innerHTML=(msgs||[]).length?msgs.map(m=>`<div class="m${m.destinatario_id?' dir':''}"><div class="q">${esc(nomes[m.autor_id]||'—')} · ${quando(m.created_at)}${m.destinatario_id?' → '+esc(nomes[m.destinatario_id]||'—'):''}</div>${esc(m.mensagem)}</div>`).join(''):'<span class="info">Nenhuma mensagem ainda no diálogo deste card.</span>';
+  $('#chat').scrollTop=1e9;
+  // destinatários: quem já participa do card primeiro, depois os demais usuários ativos
+  const part=new Map(); [[c.assigned_to,'responsável'],[c.created_by,'cadastrou']].forEach(([id,r])=>{ if(id&&id!==EU.id&&!part.has(id))part.set(id,r); });
+  (msgs||[]).forEach(m=>{ if(m.autor_id&&m.autor_id!==EU.id&&!part.has(m.autor_id))part.set(m.autor_id,'no diálogo'); });
+  const outros=(await usuariosAtivos()).filter(u=>u.id!==EU.id&&!part.has(u.id));
+  $('#chDest').innerHTML='<option value="">Observação geral (todos os participantes do card)</option>'
+    +(part.size?`<optgroup label="Avisar quem participa do card">${[...part].map(([id,r])=>`<option value="${id}">🔔 ${esc(nomes[id]||'—')} (${r})</option>`).join('')}</optgroup>`:'')
+    +(outros.length?`<optgroup label="Avisar outro usuário">${outros.map(u=>`<option value="${u.id}">🔔 ${esc(u.name)}</option>`).join('')}</optgroup>`:'');
+  $('#fChat').onsubmit=async e=>{ e.preventDefault(); const t=$('#chTxt').value.trim(); if(!t){ $('#chMsg').innerHTML='<span class="errmsg">Escreva a mensagem.</span>'; return; }
+    $('#chEnv').disabled=true;
+    const {error}=await sbc.from('nota_comentarios').insert({nota_id:c.id,autor_id:EU.id,mensagem:t,destinatario_id:$('#chDest').value||null});
+    $('#chEnv').disabled=false;
+    if(error){ $('#chMsg').innerHTML=`<span class="errmsg">Não foi possível enviar: ${esc(error.message)}</span>`; return; }
+    $('#chTxt').value=''; ligarCardBox(o,recarregar); };
+}
+async function usuariosAtivos(){
+  if(USUARIOS)return USUARIOS;
+  const {data}=await sbc.from('profiles').select('id,name,role,active').eq('active',true).neq('role','pendente').order('name');
+  return USUARIOS=(data||[]);
+}
+
+/* Criar os cards que faltam (mesmo formato da Importação SIENGE do quadro) */
+async function criarCards(lst){
+  const notas=lst.filter(o=>!o.card&&ehPendente(o)&&o.emitente).map(o=>({
+    numero:o.numero||o.chave, fornecedor:o.emitente, valor:o.valor||0,
+    dataEmissao:o.emissao?`${o.emissao.getFullYear()}-${String(o.emissao.getMonth()+1).padStart(2,'0')}-${String(o.emissao.getDate()).padStart(2,'0')}`:null,
+    chaveAcesso:o.chave||null, destinatario:o.destinatarioOrig||null, cnpjDestinatario:o.cnpjDest||null,
+    descricao:['Criada pelo Validador de NF a partir do relatório SIENGE (título/nota fiscal avulsa ainda não gerado).',
+      o.natureza?`Natureza da operação: ${o.natureza}.`:'', o.escrituracao?`Escrituração no relatório: ${o.escrituracao}.`:'', o.manifesto?`Manifesto: ${o.manifesto}.`:'',
+      'Complete obra, vencimento, forma de pagamento e pedido de compras usando "Editar".'].filter(Boolean).join(' ')
+  }));
+  if(!notas.length)return false;
+  try{
+    let n=0;
+    for(const lote of emLotes(notas,200)){ const {data,error}=await sbc.rpc('rpc_importar_lote',{p_notas:lote}); if(error)throw error; n+=((data&&data.importadas)||[]).length||0; }
+    await buscarCards(lst);
+    return n||true;
+  }catch(e){ alert('Não foi possível criar os cards: '+(e.message||e)); return false; }
+}
+
+/* Ações em lote sobre as notas filtradas */
+$('#bRecarregar').onclick=()=>{ CARDS_OK=false; buscarCards(ROWS); };
+$('#bCriar').onclick=async()=>{
+  const lst=filtradas().filter(o=>!o.card&&ehPendente(o));
+  if(!CARDS_OK)return alert('Aguarde a consulta dos cards terminar.');
+  if(!lst.length)return alert('Nenhuma nota pendente sem card nos filtros atuais.');
+  if(!confirm(`Criar ${lst.length} card(s) na coluna “Importadas SIENGE” do Controle de Notas?\n(Notas pendentes filtradas que ainda não têm card.)`))return;
+  $('#bCriar').disabled=true; const r=await criarCards(lst); $('#bCriar').disabled=false;
+  if(r)alert('Cards criados. Eles aparecem na coluna “Importadas SIENGE” do quadro.');
+};
+$('#bAvisar').onclick=async()=>{
+  if(!CARDS_OK)return alert('Aguarde a consulta dos cards terminar.');
+  const lst=filtradas().filter(o=>o.card);
+  $('#dlgT').textContent='Avisar sobre as notas filtradas';
+  if(!lst.length){ $('#dlgB').innerHTML='<p>Nenhuma das notas filtradas tem card no Controle de Notas — o aviso vai no diálogo do card. Use “➕ Criar cards que faltam” ou mude os filtros.</p>'; $('#dlg').showModal(); return; }
+  const us=await usuariosAtivos(), semResp=lst.filter(o=>!o.card.assigned_to).length;
+  $('#dlgB').innerHTML=`<p class="info" style="margin:0 0 10px">${intf(lst.length)} notas filtradas têm card (${brl(lst.reduce((s,o)=>s+(o.valor||0),0))}). A mensagem vai para o diálogo de cada card e aparece no 💬 de quem recebe.</p>
+    <form class="fchat" id="fLote">
+      <select id="loDest"><option value="__resp">🔔 O responsável de cada card${semResp?` (${semResp} sem responsável recebem como observação geral)`:''}</option><option value="">Observação geral em cada card (todos os participantes)</option>${us.filter(u=>u.id!==EU.id).map(u=>`<option value="${u.id}">🔔 ${esc(u.name)}</option>`).join('')}</select>
+      <textarea id="loTxt" maxlength="4000">Nota pendente no SIENGE (sem título/nota fiscal avulsa) há {dias} dias — favor verificar o lançamento. (Validador de NF)</textarea>
+      <p class="info" style="margin:0">Use {dias} para os dias desde o recebimento, {nf} para o número e {emitente} para o fornecedor de cada nota.</p>
+      <div class="r"><button class="btn pri" id="loEnv">Enviar para ${intf(lst.length)} card(s)</button><span id="loMsg"></span></div>
+    </form>`;
+  $('#dlg').showModal();
+  $('#fLote').onsubmit=async e=>{ e.preventDefault(); const t=$('#loTxt').value.trim(), dest=$('#loDest').value; if(!t)return;
+    if(!confirm(`Enviar a mensagem para ${lst.length} card(s)?`))return;
+    $('#loEnv').disabled=true; $('#loMsg').textContent='Enviando…';
+    const vistos=new Set(), linhas=[];
+    lst.forEach(o=>{ if(vistos.has(o.card.id))return; vistos.add(o.card.id);
+      linhas.push({nota_id:o.card.id,autor_id:EU.id,destinatario_id:dest==='__resp'?(o.card.assigned_to&&o.card.assigned_to!==EU.id?o.card.assigned_to:null):(dest||null),
+        mensagem:t.replace(/\{dias\}/g,o.idade??'?').replace(/\{nf\}/g,o.numero||'').replace(/\{emitente\}/g,o.emitente||'')}); });
+    try{ for(const lote of emLotes(linhas,200)){ const {error}=await sbc.from('nota_comentarios').insert(lote); if(error)throw error; }
+      $('#loMsg').innerHTML=`<span class="okmsg">✓ Enviado para ${intf(linhas.length)} card(s).</span>`;
+    }catch(err){ $('#loMsg').innerHTML=`<span class="errmsg">Falhou: ${esc(err.message||err)}</span>`; $('#loEnv').disabled=false; }
+  };
+};
+
+/* ---------- eventos ---------- */
+const drop=$('#vDrop'), arq=$('#arq');
+drop.onclick=()=>arq.click();
+drop.onkeydown=e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); arq.click(); } };
+arq.onchange=()=>{ abrirArquivo(arq.files[0]); arq.value=''; };
+['dragenter','dragover'].forEach(t=>document.addEventListener(t,e=>{ e.preventDefault(); drop.classList.add('on'); }));
+['dragleave','drop'].forEach(t=>document.addEventListener(t,e=>{ e.preventDefault(); drop.classList.remove('on'); }));
+document.addEventListener('drop',e=>abrirArquivo(e.dataTransfer.files[0]));
+$('#bOutro').onclick=()=>arq.click();
+$('#bExp').onclick=exportar;
+$('#bMais').onclick=()=>{ LIMITE+=300; desenhar(); };
+$('#fBusca').oninput=()=>{ LIMITE=300; desenhar(); };
+['#fEmp','#fSt','#fVal','#fCard'].forEach(s=>$(s).onchange=()=>{ LIMITE=300; desenhar(); });
+$('#dlgX').onclick=()=>$('#dlg').close();
+$('#dlg').onclick=e=>{ if(e.target===$('#dlg'))$('#dlg').close(); };
+$('#cfgDias').value=lsGet('validador-nf-dias','30');
+$('#bCfg').onclick=e=>{ e.stopPropagation(); $('#popCfg').hidden=!$('#popCfg').hidden; };
+document.addEventListener('click',e=>{ if(!$('#popCfg').hidden&&!e.target.closest('#popCfg'))$('#popCfg').hidden=true; });
+$('#cfgDias').onchange=()=>{ lsSet('validador-nf-dias',String(dias())); if(LIDAS.length)processar(); };
+VISTA=lsGet('validador-nf-vista','tab')==='graf'?'graf':'tab';
+$('#segVista').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v===VISTA));
+try{ aplicarTema(localStorage.getItem('painel-tema')||''); }catch(e){}
+ensureXLSX().catch(()=>{});
+conectar();
+</script>
+</body>
+</html>
