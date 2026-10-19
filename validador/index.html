@@ -168,6 +168,7 @@ body.emb .top .cap-selo{display:none}
   <span class="cap-selo"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></span>
   <h1>Validador de Notas Fiscais<small id="sub">Confere os lançamentos do relatório de NF-e do SIENGE (aba “Relatório”) e cruza com os cards do Controle de Notas — o arquivo é lido só neste navegador.</small></h1>
   <span class="conn" id="conn">Controle de Notas: verificando…</span>
+  <button class="btn" id="bEntrar" hidden>Entrar no Controle de Notas</button>
   <label class="cfg" title="Notas pendentes (sem manifestação, só ciência ou confirmadas sem lançamento) há mais dias que isto viram alerta">Alertar pendência após <input id="cfgDias" type="number" min="1" max="365" value="30"> dias</label>
   <button class="btn" id="bOutro" hidden>Abrir outro arquivo</button>
   <button class="btn pri" id="bExp" hidden>⬇ Exportar Excel</button>
@@ -815,7 +816,8 @@ async function conectar(){
   if(!sbc){ conn('Controle de Notas indisponível (sem conexão)','off'); return; }
   try{
     const {data:{session}}=await sbc.auth.getSession();
-    if(!session){ conn(EMBUTIDO?'Entre no Controle de Notas para cruzar com os cards':'Sem login — abra pelo Controle de Notas para cruzar com os cards','off'); return; }
+    if(!session){ conn(EMBUTIDO?'Entre no Controle de Notas para cruzar com os cards':'Sem login — entre para cruzar com os cards','off'); $('#bEntrar').hidden=EMBUTIDO; return; }
+    $('#bEntrar').hidden=true;
     const {data:p,error}=await sbc.from('profiles').select('id,name,role,coluna,active').eq('id',session.user.id).maybeSingle();
     if(error||!p||!p.active||p.role==='pendente'){ conn('Seu usuário não está liberado no Controle de Notas','off'); return; }
     EU=p; conn('✓ Controle de Notas · '+p.name,'ok');
@@ -824,6 +826,22 @@ async function conectar(){
   }catch(e){ console.error(e); conn('Não consegui falar com o Controle de Notas','off'); }
 }
 sbc&&sbc.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT'){ EU=null; CARDS_OK=false; $('#acoes').hidden=true; conn('Saiu do Controle de Notas','off'); if(ROWS.length){ aplicarCards(); desenhar(); } } });
+
+// Fora do Controle de Notas (arquivo aberto direto), entra com o mesmo e-mail e senha de lá.
+$('#bEntrar').onclick=()=>{
+  $('#dlgT').textContent='Entrar no Controle de Notas';
+  $('#dlgB').innerHTML=`<form class="fchat" id="fLogin" style="max-width:380px">
+    <p class="info" style="margin:0">Mesmo e-mail e senha do Controle de Notas Fiscais.</p>
+    <input id="lgE" type="email" autocomplete="username" placeholder="E-mail" required style="background:var(--s1);border:1px solid var(--line);border-radius:9px;padding:9px 10px">
+    <input id="lgS" type="password" autocomplete="current-password" placeholder="Senha" required style="background:var(--s1);border:1px solid var(--line);border-radius:9px;padding:9px 10px">
+    <div class="r"><button class="btn pri" id="lgB">Entrar</button><span id="lgM"></span></div></form>`;
+  $('#dlg').showModal();
+  $('#fLogin').onsubmit=async e=>{ e.preventDefault(); $('#lgB').disabled=true; $('#lgM').textContent='Entrando…';
+    const {error}=await sbc.auth.signInWithPassword({email:$('#lgE').value.trim().toLowerCase(),password:$('#lgS').value});
+    $('#lgB').disabled=false;
+    if(error){ $('#lgM').innerHTML='<span class="errmsg">E-mail ou senha inválidos.</span>'; return; }
+    $('#dlg').close(); conectar(); };
+};
 
 const emLotes=(a,n)=>{ const r=[]; for(let i=0;i<a.length;i+=n)r.push(a.slice(i,i+n)); return r; };
 async function emParalelo(itens,n,fn){ const out=[]; let i=0; await Promise.all(Array.from({length:Math.min(n,itens.length)},async()=>{ while(i<itens.length){ const k=i++; out[k]=await fn(itens[k]); } })); return out; }
