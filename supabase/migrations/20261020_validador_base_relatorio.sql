@@ -52,10 +52,10 @@ alter table public.validador_nf_cargas enable row level security;
 alter table public.validador_nf_notas enable row level security;
 drop policy if exists validador_nf_cargas_select on public.validador_nf_cargas;
 create policy validador_nf_cargas_select on public.validador_nf_cargas for select to authenticated
-  using (public.current_is_active());
+  using ((select public.current_is_active()));
 drop policy if exists validador_nf_notas_select on public.validador_nf_notas;
 create policy validador_nf_notas_select on public.validador_nf_notas for select to authenticated
-  using (public.current_is_active());
+  using ((select public.current_is_active()));
 -- sem políticas de insert/update/delete: só as funções abaixo gravam
 revoke insert, update, delete on public.validador_nf_cargas, public.validador_nf_notas from anon, authenticated;
 grant select on public.validador_nf_cargas, public.validador_nf_notas to authenticated;
@@ -193,7 +193,7 @@ on conflict (id) do nothing;
 
 drop policy if exists validador_relatorios_select on storage.objects;
 create policy validador_relatorios_select on storage.objects for select to authenticated
-using (bucket_id = 'validador-relatorios' and public.current_is_active());
+using (bucket_id = 'validador-relatorios' and (select public.current_is_active()));
 
 drop policy if exists validador_relatorios_insert on storage.objects;
 create policy validador_relatorios_insert on storage.objects for insert to authenticated
