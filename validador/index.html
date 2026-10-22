@@ -213,6 +213,16 @@ body.emb main{padding:14px 16px}
 .barra input{flex:1 1 220px}
 .barra select{flex:0 1 auto;max-width:220px;color:var(--mu)}
 .barra select.ativo{color:var(--tx);border-color:rgba(245,196,51,.45)}
+.msel{position:relative;flex:0 1 auto;max-width:220px}
+.msel>button{background:var(--s1);border:1px solid transparent;border-radius:9px;padding:8px 26px 8px 10px;height:36px;width:100%;max-width:100%;color:var(--mu);text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;position:relative}
+.msel>button::after{content:'▾';position:absolute;right:10px;top:50%;transform:translateY(-50%);font-size:11px}
+.msel>button:focus{outline:none;border-color:var(--line)}
+.msel>button.ativo{color:var(--tx);border-color:rgba(245,196,51,.45)}
+.msel-pop{position:absolute;top:calc(100% + 4px);left:0;z-index:20;min-width:260px;max-width:min(360px,calc(100vw - 32px));max-height:60vh;overflow:auto;background:var(--s1);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.25);padding:6px}
+.msel-pop label{display:flex;gap:8px;align-items:center;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:13px}
+.msel-pop label:hover{background:var(--s2)}
+.msel-pop .msel-top{display:flex;justify-content:space-between;gap:8px;padding:4px 8px 6px;border-bottom:1px solid var(--line);margin-bottom:4px;font-size:12px}
+.msel-pop .msel-top button{background:none;border:0;color:var(--ac);cursor:pointer;padding:0;font-size:12px}
 .seg{background:var(--s1);border:0;border-radius:9px;padding:3px}
 .seg button{padding:5px 12px;font-size:13px}
 .seg.sm button{padding:3px 10px;font-size:12px}
@@ -244,7 +254,7 @@ td.cel-oc .mais-oc{color:var(--mu2);margin-left:4px}
 td.cel-emit{max-width:260px}
 td.cel-oc{max-width:260px}
 .cols2{grid-template-columns:minmax(0,1fr) 270px}
-.barra select{max-width:160px}
+.barra select,.msel{max-width:160px}
 .barra input{flex:1 1 150px}
 #vTab table{table-layout:fixed;min-width:760px}
 #vTab th:nth-child(1){width:30px} #vTab th:nth-child(2){width:112px} #vTab th:nth-child(4){width:108px}
@@ -352,7 +362,7 @@ html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.1
     <div class="barra">
       <div class="seg" id="segVista"><button data-v="tab" class="on">Tabela</button><button data-v="graf">Gráficos</button></div>
       <input id="fBusca" type="search" placeholder="Buscar emitente, CNPJ, número, chave…">
-      <select id="fEmp"></select>
+      <div class="msel" id="fEmpW"><button type="button" id="fEmp" aria-haspopup="true">Empresa: todas</button><div class="msel-pop" id="fEmpPop" hidden></div></div>
       <select id="fSt"></select>
       <select id="fVal">
         <option value="">Validação: todas</option>
@@ -688,6 +698,17 @@ async function abrirArquivo(file){
   }catch(e){ console.error(e); mostrarMsg(e.message||String(e),true); }
 }
 let LIDAS=[];
+// Filtro de empresa com seleção múltipla: vazio = todas.
+let EMPS=[], EMP_SEL=new Set();
+function rotEmp(){ const b=$('#fEmp'), n=EMP_SEL.size;
+  b.textContent=!n?'Empresa: todas':n===1?[...EMP_SEL][0]:`Empresas: ${n}`;
+  b.title=n?[...EMP_SEL].join('\n'):''; b.classList.toggle('ativo',!!n); }
+function opcoesEmp(){
+  EMP_SEL=new Set([...EMP_SEL].filter(e=>EMPS.includes(e)));
+  $('#fEmpPop').innerHTML=`<div class="msel-top"><button type="button" data-a="todas">Marcar todas</button><button type="button" data-a="limpar">Limpar</button></div>`
+    +EMPS.map((e,i)=>`<label><input type="checkbox" data-i="${i}"${EMP_SEL.has(e)?' checked':''}>${esc(e)}</label>`).join('');
+  rotEmp(); }
+function setEmp(lst){ EMP_SEL=new Set(lst); opcoesEmp(); }
 function processar(){
   ROWS=tratar(LIDAS,dias());
   if(MODO==='base'){
@@ -697,16 +718,16 @@ function processar(){
   cabecalhoArquivo();
   $('#vDrop').hidden=true; $('#vRes').hidden=false; $('#arqChip').hidden=false; $('#bExp').hidden=false;
   const emps=[...new Set(ROWS.map(o=>o.empresa||'(não cadastrada)'))].sort();
-  $('#fEmp').innerHTML='<option value="">Empresa: todas</option>'+emps.map(e=>`<option>${esc(e)}</option>`).join('');
+  EMPS=emps; opcoesEmp();
   if(CARDS_OK)aplicarCards(); else opcoesStatus();
   desenhar();
   if(EU&&!CARDS_OK)buscarCards(ROWS);
 }
 
 function filtradas(semRegra){
-  const b=norm($('#fBusca').value), emp=$('#fEmp').value, st=$('#fSt').value, val=$('#fVal').value, fc=$('#fCard').value, fp=$('#fPessoa').value, fa=MODO==='base'?$('#fAtu').value:'';
+  const b=norm($('#fBusca').value), emp=EMP_SEL.size?EMP_SEL:null, st=$('#fSt').value, val=$('#fVal').value, fc=$('#fCard').value, fp=$('#fPessoa').value, fa=MODO==='base'?$('#fAtu').value:'';
   return ROWS.filter(o=>{
-    if(emp&&(o.empresa||'(não cadastrada)')!==emp)return false;
+    if(emp&&!emp.has(o.empresa||'(não cadastrada)'))return false;
     if(st&&o.status!==st)return false;
     if(val&&!(val==='EA'?o.nivel!=='OK':o.nivel===val))return false;
     if(!semRegra&&F.regra&&!o.oc.some(x=>x.c===F.regra))return false;
@@ -778,7 +799,7 @@ function desenhar(){
     <td class="cel-oc" title="${esc(o.ocTexto)}"><div class="oc2">${ocCurta(o)}</div></td></tr>`).join('')||`<tr><td colspan="${COLS_TAB.length}" style="text-align:center;color:var(--mu);padding:40px">Nenhuma nota com esses filtros.</td></tr>`;
   $('#tb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l)));
   $('#info').textContent=(lst.length<ROWS.length?`${intf(lst.length)} de ${intf(ROWS.length)} notas`:`${intf(lst.length)} notas`)+` · ${brl(soma(lst))}`+(vis.length<lst.length?` · mostrando ${intf(vis.length)}`:'');
-  ['#fEmp','#fSt','#fVal','#fCard','#fPessoa','#fAtu'].forEach(id=>$(id).classList.toggle('ativo',!!$(id).value));
+  ['#fSt','#fVal','#fCard','#fPessoa','#fAtu'].forEach(id=>$(id).classList.toggle('ativo',!!$(id).value)); rotEmp();
   $('#bMais').hidden=lst.length<=LIMITE||VISTA!=='tab';
   $('#bLimpa').hidden=!temFiltro();
   $('#bChip').hidden=!F.graf; if(F.graf)$('#bChip').textContent=F.graf.d+'  ✕';
@@ -932,7 +953,7 @@ function renderLista(){
   $('#lBusca').oninput=upd; ['#lEmp','#lSt','#lVal'].forEach(s=>$(s).onchange=upd);
   $('#lLimpa').onclick=()=>{ LISTA.q={b:'',emp:'',st:'',val:''}; renderLista(); };
   $('#bVerTab').onclick=()=>{ // leva o recorte do gráfico + os filtros da lista para a tabela principal
-    F.graf=LISTA.f; if(q.b)$('#fBusca').value=q.b; if(q.emp)$('#fEmp').value=q.emp; if(q.st)$('#fSt').value=q.st; if(q.val)$('#fVal').value=q.val;
+    F.graf=LISTA.f; if(q.b)$('#fBusca').value=q.b; if(q.emp)setEmp([q.emp]); if(q.st)$('#fSt').value=q.st; if(q.val)$('#fVal').value=q.val;
     VISTA='tab'; $('#segVista').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.v==='tab')); $('#dlg').close(); LIMITE=300; desenhar(); };
   desenharLista();
 }
@@ -953,8 +974,8 @@ function desenharLista(){
     ||`<tr><td colspan="${COLS_LISTA.length}" style="text-align:center;color:var(--mu);padding:24px">Nenhuma nota com esses filtros.</td></tr>`;
   $('#lTb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l),true));
 }
-function temFiltro(){ return !!($('#fBusca').value||$('#fEmp').value||$('#fSt').value||$('#fVal').value||$('#fCard').value||$('#fPessoa').value||$('#fAtu').value||F.regra||F.kpi||F.graf); }
-$('#bLimpa').onclick=()=>{ $('#fBusca').value=''; $('#fEmp').value=''; $('#fSt').value=''; $('#fVal').value=''; $('#fCard').value=''; $('#fPessoa').value=''; $('#fAtu').value=''; F={kpi:'',regra:''}; LIMITE=300; desenhar(); };
+function temFiltro(){ return !!($('#fBusca').value||EMP_SEL.size||$('#fSt').value||$('#fVal').value||$('#fCard').value||$('#fPessoa').value||$('#fAtu').value||F.regra||F.kpi||F.graf); }
+$('#bLimpa').onclick=()=>{ $('#fBusca').value=''; setEmp([]); $('#fSt').value=''; $('#fVal').value=''; $('#fCard').value=''; $('#fPessoa').value=''; $('#fAtu').value=''; F={kpi:'',regra:''}; LIMITE=300; desenhar(); };
 $('#bChip').onclick=()=>{ F.graf=null; LIMITE=300; desenhar(); };
 $('#segVista').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; VISTA=b.dataset.v; $('#segVista').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); lsSet('validador-nf-vista',VISTA); desenhar(); };
 $('#segMed').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; MED=b.dataset.m; $('#segMed').querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b)); desenhar(); };
@@ -1556,7 +1577,12 @@ $('#bOutro').onclick=()=>arq.click();
 $('#bExp').onclick=exportar;
 $('#bMais').onclick=()=>{ LIMITE+=300; desenhar(); };
 $('#fBusca').oninput=()=>{ LIMITE=300; desenhar(); };
-['#fEmp','#fSt','#fVal','#fCard','#fPessoa','#fAtu'].forEach(s=>$(s).onchange=()=>{ LIMITE=300; desenhar(); });
+['#fSt','#fVal','#fCard','#fPessoa','#fAtu'].forEach(s=>$(s).onchange=()=>{ LIMITE=300; desenhar(); });
+$('#fEmp').onclick=e=>{ e.stopPropagation(); $('#fEmpPop').hidden=!$('#fEmpPop').hidden; };
+$('#fEmpPop').onchange=e=>{ const e2=EMPS[+e.target.dataset.i]; if(e2==null)return; e.target.checked?EMP_SEL.add(e2):EMP_SEL.delete(e2); rotEmp(); LIMITE=300; desenhar(); };
+$('#fEmpPop').onclick=e=>{ const a=e.target.dataset.a; if(!a)return; setEmp(a==='todas'?EMPS:[]); LIMITE=300; desenhar(); };
+document.addEventListener('click',e=>{ if(!$('#fEmpPop').hidden&&!e.target.closest('#fEmpW'))$('#fEmpPop').hidden=true; });
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&!$('#fEmpPop').hidden){ $('#fEmpPop').hidden=true; $('#fEmp').focus(); } });
 $('#dlgX').onclick=()=>$('#dlg').close();
 $('#dlg').onclick=e=>{ if(e.target===$('#dlg'))$('#dlg').close(); };
 $('#cfgDias').value=lsGet('validador-nf-dias','30');
