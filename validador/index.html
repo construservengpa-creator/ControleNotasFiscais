@@ -463,6 +463,7 @@ const REGRAS={
   CARD_CONCL:    ['A','Card finalizado no Controle de Notas, mas a nota continua sem título no relatório'],
   CARD_ABERTO:   ['A','Já lançada no relatório (tem título), mas o card continua aberto no Controle de Notas'],
   SEM_CARD:      ['I','Pendente e ainda sem card no Controle de Notas'],
+  CONF_CARD:     ['I','Só com ciência no relatório, mas já tem card no Controle de Notas — classificada como Apenas Confirmação'],
   FORA_ULTIMO:   ['I','Não veio no último relatório carregado'],
   UF_CHAVE:      ['I','UF do emitente vazia — preenchida pela chave de acesso'],
   NS_CHAVE:      ['I','Número/Série vazio — preenchido pela chave de acesso'],
@@ -627,7 +628,7 @@ function tratar(lidas,dias){
 
     o.manifCod=manifCod(o.manifesto);
     if(o.manifCod==='?')add('MANIF_DESC',o.manifesto);
-    o.status=statusDe(o.manifCod,o.titulo);
+    o.status=o.statusRel=statusDe(o.manifCod,o.titulo);
     const base=o.recebimento||o.emissao, idade=base?Math.floor((hoje-base)/864e5):null;
     o.idade=idade;
     if(o.titulo>0){
@@ -697,9 +698,7 @@ function processar(){
   $('#vDrop').hidden=true; $('#vRes').hidden=false; $('#arqChip').hidden=false; $('#bExp').hidden=false;
   const emps=[...new Set(ROWS.map(o=>o.empresa||'(não cadastrada)'))].sort();
   $('#fEmp').innerHTML='<option value="">Empresa: todas</option>'+emps.map(e=>`<option>${esc(e)}</option>`).join('');
-  const sts=STATUS_ORDEM.filter(s=>ROWS.some(o=>o.status===s));
-  $('#fSt').innerHTML='<option value="">Status: todos</option>'+sts.map(s=>`<option>${esc(s)}</option>`).join('');
-  if(CARDS_OK){ aplicarCards(); }
+  if(CARDS_OK)aplicarCards(); else opcoesStatus();
   desenhar();
   if(EU&&!CARDS_OK)buscarCards(ROWS);
 }
@@ -965,7 +964,7 @@ function detalhe(o,daLista){
   $('#dlgT').textContent=`NF ${o.numero||'?'}${o.serie?'/'+o.serie:''} — linha ${o.linha}`;
   const oc=o.oc.length?`<ul class="ocl">${o.oc.map(x=>`<li><span class="tag ${REGRAS[x.c][0]}">${{E:'Erro',A:'Alerta',I:'Info'}[REGRAS[x.c][0]]}</span><span>${esc(txtRegra(x.c,dias()))}${x.extra?` <span style="color:var(--mu)">— ${esc(x.extra)}</span>`:''}</span></li>`).join('')}</ul>`
     :'<p><span class="tag OK">OK</span> Nenhuma ocorrência nesta nota.</p>';
-  const campos=[['Status',o.status],['Empresa',o.empresa||'(não cadastrada)'],['CNPJ destinatário',o.cnpjDest],['UF destinatário',o.ufDest],
+  const campos=[['Status',o.status+(o.statusRel&&o.statusRel!==o.status?` (no relatório: ${o.statusRel})`:'')],['Empresa',o.empresa||'(não cadastrada)'],['CNPJ destinatário',o.cnpjDest],['UF destinatário',o.ufDest],
     ['Emitente',o.emitente],['CNPJ emitente',o.cnpjEmit],['UF emitente',o.ufEmit],['Natureza da operação',o.natureza],
     ['Manifesto',o.manifesto],['Emissão',dataBR(o.emissao)],['Recebimento',dataBR(o.recebimento)],['Valor',o.valor==null?'':brl(o.valor)],
     ['Escrituração',o.escrituracao],['Título/NF avulsa',o.titulo||'0'],['Chave de acesso',o.chave],
@@ -986,7 +985,7 @@ function exportar(){
     'Emitente':o.emitente,'CNPJ emitente':o.cnpjEmit,'UF emitente':o.ufEmit,'CNPJ destinatário':o.cnpjDest,'UF destinatário':o.ufDest,
     'Manifesto':o.manifesto,'Natureza da operação':o.natureza,'Recebimento':o.recebimento,'Emissão':o.emissao,'Chave de acesso':o.chave,
     'Número NF':o.numero,'Série':o.serie,'Valor':o.valor,'Escrituração':o.escrituracao,'Título/Nota fiscal avulsa':o.titulo,
-    'Empresas':o.empresa,'Status manifestação':o.status,'Validação':{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel],'Ocorrências':o.ocTexto,'Linha no relatório':o.base?o.base.linha:o.linha,
+    'Empresas':o.empresa,'Status manifestação':o.status,'Status no relatório':o.statusRel,'Validação':{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel],'Ocorrências':o.ocTexto,'Linha no relatório':o.base?o.base.linha:o.linha,
     ...(o.base?{'Na base desde':dataCarga(o.base.primeira_carga),'Último relatório em que veio':dataCarga(o.base.ultima_carga),'Título desde':o.base.titulo_desde?new Date(o.base.titulo_desde):''}:{}),
     ...(DADOS_OK?{'Pedido':o.pedido||'','Responsável':nomeUsr(o.respId),'Comprador':nomeUsr(o.compId)}:{}),
     ...(CARDS_OK?{'Card no Controle de Notas':o.card?(COL_LABEL[o.card.status]||o.card.status):'','Atribuído no card':o.card?o.card.responsavel||'':''}:{})
@@ -1022,7 +1021,7 @@ const sbc=window.supabase&&!(window.parent&&window.parent!==window&&(()=>{ try{ 
 const COLUNAS_CARD=[['importadas_sienge','Importadas SIENGE'],['entradas','Entradas'],['lancamento','Lançamento'],['financeiro_cx','Financeiro/CX'],['pendencias','Pendências'],['concluido','Finalização']];
 const COL_LABEL=Object.fromEntries(COLUNAS_CARD);
 const CARD_SEL='id,numero,fornecedor,status,assigned_to,created_by,chave_acesso,numero_titulo,obra_id,origem,created_at';
-const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD'];
+const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD','CONF_CARD'];
 const EMBUTIDO=window.parent&&window.parent!==window;
 const EMBUTIDO_ESTRANHO=EMBUTIDO&&(()=>{ try{ return window.parent.location.origin!==location.origin; }catch(e){ return true; } })();
 let EU=null, CARDS_OK=false, USUARIOS=null;
@@ -1107,18 +1106,36 @@ async function buscarCards(rows){
 }
 function aplicarCards(){
   ROWS.forEach(o=>{
-    o.oc=o.oc.filter(x=>!CARD_CODIGOS.includes(x.c));
+    // Volta ao que o relatório diz antes de reaplicar (os cards podem ter mudado ou o usuário saído).
+    o.oc=o.oc.filter(x=>!CARD_CODIGOS.includes(x.c)&&!x.peloCard);
+    if(o.ocRel){ o.oc.push(...o.ocRel); o.ocRel=null; }
+    o.status=o.statusRel;
     o.cardCol=o.card?(COL_LABEL[o.card.status]||o.card.status):'';
     if(!CARDS_OK)return;
     const c=o.card, rot=c?`NF ${c.numero} em ${COL_LABEL[c.status]||c.status}${c.responsavel?' · '+c.responsavel:''}`:'';
     if(o.titulo>0){ if(c&&c.status!=='concluido')o.oc.push({c:'CARD_ABERTO',extra:rot}); }
     else if(ehPendente(o)){ if(!c)o.oc.push({c:'SEM_CARD'}); else o.oc.push({c:c.status==='concluido'?'CARD_CONCL':'CARD_PEND',extra:rot}); }
+    // Pendente no relatório (só ciência) mas já tem card: vale o que está no card — operação confirmada, falta lançar.
+    // Sai do prazo de manifestação e passa à regra de confirmada sem lançamento.
+    if(c&&!(o.titulo>0)&&o.status==='Pendente'){
+      o.status='Apenas Confirmação';
+      const prazo=x=>x.c==='PEND_DIAS'||x.c==='PRAZO_180';
+      o.ocRel=o.oc.filter(prazo); o.oc=o.oc.filter(x=>!prazo(x));
+      o.oc.push({c:'CONF_CARD',extra:rot});
+      if(o.idade>dias()&&!o.oc.some(x=>x.c==='CONF_SEM_LANC'))o.oc.push({c:'CONF_SEM_LANC',extra:o.idade+' dias',peloCard:true});
+    }
   });
   finalizar(ROWS,dias());
+  opcoesStatus();
   const sel=$('#fCard'), v=sel.value;
   sel.hidden=!CARDS_OK;
   sel.innerHTML=`<option value="">Card: todos</option><option value="com">Com card</option><option value="sem">Pendentes sem card</option>`+COLUNAS_CARD.map(([k,l])=>`<option value="col:${k}">Card em ${esc(l)}</option>`).join('');
   sel.value=CARDS_OK?v:'';
+}
+function opcoesStatus(){
+  const sel=$('#fSt'), v=sel.value, sts=STATUS_ORDEM.filter(s=>ROWS.some(o=>o.status===s));
+  sel.innerHTML='<option value="">Status: todos</option>'+sts.map(s=>`<option>${esc(s)}</option>`).join('');
+  sel.value=sts.includes(v)?v:'';
 }
 function passaCard(o,fc){ if(fc==='com')return !!o.card; if(fc==='sem')return !o.card&&ehPendente(o); if(fc.startsWith('col:'))return !!o.card&&o.card.status===fc.slice(4); return true; }
 function cardTag(o){ if(!o.card)return CARDS_OK&&ehPendente(o)?'<span class="cardt sem">sem card</span>':''; return `<span class="cardt${o.card.status==='concluido'?' fim':''}">card em ${esc(o.cardCol)}</span>`; }
