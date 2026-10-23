@@ -18,6 +18,11 @@
 -- gravar o frete na nota fiscal. As duas rotinas passam a ligar app.integracao só durante
 -- as próprias gravações, depois de conferir a permissão, e restauram o valor anterior.
 --
+-- A restrição notas_concluido_exige_titulo (nota concluída precisa do nº do título)
+-- também barrava o encerramento: o card do CT-e encerrado pelo vínculo não tem título,
+-- o lançamento do frete segue na nota fiscal. A restrição é recriada com essa exceção,
+-- mantendo a regra existente (lida do próprio banco) para todo o resto.
+--
 -- Não usa aplicar_mudanca_status porque ela exige o nº do título para concluir e
 -- registra a conclusão como tratamento da nota — aqui o card só é encerrado.
 
@@ -218,6 +223,23 @@ $function$;
 
 revoke all on function public.rpc_analisar_cte_xml(bigint, jsonb) from public, anon;
 grant execute on function public.rpc_analisar_cte_xml(bigint, jsonb) to authenticated;
+
+-- Exceção na notas_concluido_exige_titulo para o card do CT-e encerrado pelo vínculo.
+do $migracao$
+declare
+  v_def text;
+begin
+  select pg_get_constraintdef(c.oid) into v_def
+    from pg_constraint c
+   where c.conrelid = 'public.notas'::regclass and c.conname = 'notas_concluido_exige_titulo';
+  if v_def is null or v_def like '%CT-e vinculado%' then
+    return;
+  end if;
+  v_def := regexp_replace(regexp_replace(v_def, '^CHECK\s*', ''), '\s*NOT VALID\s*$', '');
+  alter table public.notas drop constraint notas_concluido_exige_titulo;
+  execute format('alter table public.notas add constraint notas_concluido_exige_titulo check (%s or (public.chave_e_cte(chave_acesso) and coalesce(lancamento_validado_obs, '''') like ''CT-e vinculado à(s) NF %%''))', v_def);
+end
+$migracao$;
 
 -- Cards de CT-e que ficaram abertos porque o encerramento era barrado, embora o frete
 -- já esteja gravado em nota(s) fiscal(is): encerra agora.
