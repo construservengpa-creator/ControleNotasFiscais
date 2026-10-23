@@ -917,7 +917,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
           <div class="filters-row" style="margin-bottom:0;">
             <div class="field" style="flex:1;min-width:220px;">
               <label for="buscaNotaInput">Localizar nota (em qualquer coluna)</label>
-              <input type="text" id="buscaNotaInput" placeholder="Número, fornecedor, obra, destinatário, chave de acesso, nº do título ou responsável…" />
+              <input type="text" id="buscaNotaInput" placeholder="Número, fornecedor, obra, destinatário, chave, nº do título, responsável, CT-e do frete ou observações…" />
             </div>
             <button class="btn secondary" id="buscaNotaLimparBtn" type="button">Limpar</button>
             <span class="legend-note" id="buscaNotaResultado"></span>
@@ -2531,7 +2531,10 @@ let FINALIZACAO_MOSTRAR_TODAS = false;
 let BOARD_BUSCA_TEXTO = '';
 
 function notaCasaComBusca(n, termo) {
-  const campos = [n.numero, n.fornecedor, n.obra, n.destinatario, n.chaveAcesso, n.numeroTitulo, n.cnpjDestinatario, n.assignedToName];
+  const campos = [n.numero, n.fornecedor, n.obra, n.destinatario, n.chaveAcesso, n.numeroTitulo, n.cnpjDestinatario, n.assignedToName,
+    // observações e frete que aparecem no card (ex.: o nº do CT-e acha a NF que recebeu o frete)
+    n.descricao, n.pedidoCompras, n.freteCte, n.freteTransportador, n.freteCteChave, n.freteCteCompartilhado,
+    n.homologacaoObs, n.lancamentoValidadoObs, n.cteXmlDispensaObs];
   return campos.some((c) => c && String(c).toLowerCase().includes(termo));
 }
 const selectedEntradas = new Set();
