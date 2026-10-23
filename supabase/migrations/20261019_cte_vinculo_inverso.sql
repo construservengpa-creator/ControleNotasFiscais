@@ -424,9 +424,13 @@ grant execute on function public.rpc_analisar_cte_xml(bigint, jsonb) to authenti
 
 -- Notas já cadastradas cujo CT-e chegou antes e ficou como card próprio: aplica o vínculo
 -- agora (só nas notas não concluídas — as concluídas não são reabertas por esta carga).
+-- Rodada no SQL Editor não há usuário: app.integracao libera a gravação do frete pela
+-- trava notas_guard_edicao_geral só nesta carga.
+select set_config('app.integracao', 'true', true);
 update public.notas n set numero = n.numero
  where n.frete_cte_chave is null
    and n.status is distinct from 'concluido'
    and not public.chave_e_cte(n.chave_acesso)
    and (nullif(trim(coalesce(n.frete_cte, '')), '') is not null
         or exists (select 1 from public.notas c where c.cte_nfe_chaves is not null and public.chave_e_cte(c.chave_acesso)));
+select set_config('app.integracao', '', true);
