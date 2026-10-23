@@ -38,19 +38,11 @@ revoke all on function public.cte_encerrar_card(bigint, text, text) from public,
 
 -- Cards de CT-e que ficaram abertos porque o encerramento era barrado, embora o frete
 -- já esteja gravado em nota(s) fiscal(is): encerra agora.
-do $$
-declare
-  c record;
-begin
-  for c in
-    select card.id, string_agg(nf.numero, ', ' order by nf.id) as lista
-      from public.notas card
-      join public.notas nf on nf.frete_cte_chave = regexp_replace(card.chave_acesso, '\D', '', 'g')
-                          and not public.chave_e_cte(nf.chave_acesso)
-     where public.chave_e_cte(card.chave_acesso)
-       and card.status is distinct from 'concluido'
-     group by card.id
-  loop
-    perform public.cte_encerrar_card(c.id, c.lista, 'na correção do encerramento automático');
-  end loop;
-end $$;
+select public.cte_encerrar_card(c.id, c.lista, 'na correção do encerramento automático')
+  from (select card.id, string_agg(nf.numero, ', ' order by nf.id) as lista
+          from public.notas card
+          join public.notas nf on nf.frete_cte_chave = regexp_replace(card.chave_acesso, '\D', '', 'g')
+                              and not public.chave_e_cte(nf.chave_acesso)
+         where public.chave_e_cte(card.chave_acesso)
+           and card.status is distinct from 'concluido'
+         group by card.id) c;
