@@ -4114,28 +4114,38 @@ function wireCteXmlSection(id, onRefresh) {
       }
     });
   }
+  const input = document.getElementById('cteXmlInput');
+  const msg = document.getElementById('cteXmlMsg');
+  const enviarBtn = form.querySelector('button[type="submit"]');
+  // erro também em toast: só no texto ao lado dos botões ele passava despercebido
+  const falhar = (texto) => { msg.textContent = texto; toast(texto, 'error'); };
+  // escolher o arquivo já anexa e analisa — antes era preciso clicar no botão,
+  // e quem só escolhia o arquivo e salvava continuava com o card bloqueado
+  input.addEventListener('change', () => {
+    if (input.files && input.files.length) form.requestSubmit();
+  });
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    const input = document.getElementById('cteXmlInput');
-    const msg = document.getElementById('cteXmlMsg');
+    if (enviarBtn.disabled) return;
     msg.textContent = '';
-    if (!input.files || input.files.length === 0) { msg.textContent = 'Selecione o arquivo XML do CT-e.'; return; }
+    if (!input.files || input.files.length === 0) { falhar('Selecione o arquivo XML do CT-e.'); return; }
     const file = input.files[0];
     let cte;
     try {
       cte = lerXmlCte(await file.text());
     } catch (e) {
-      msg.textContent = e.message;
+      falhar(e.message);
       return;
     }
     // confere antes de enviar, para não deixar o XML errado anexado no card
     const chaveCard = form.dataset.chaveCard;
     const chaveFrete = form.dataset.chaveFrete;
     if ((chaveCard && chaveCard !== cte.chave) || (chaveFrete && chaveFrete !== cte.chave)) {
-      msg.textContent = `Este XML é do CT-e ${cte.numero || cte.chave}, não do CT-e deste card. Confira o arquivo.`;
+      falhar(`Este XML é do CT-e ${cte.numero || cte.chave}, não do CT-e deste card. Confira o arquivo.`);
       return;
     }
     const categoria = chaveCard ? 'nota' : 'frete';
+    enviarBtn.disabled = true;
     try {
       msg.textContent = 'Anexando o XML…';
       await uploadAnexoLocal(id, file, categoria);
@@ -4165,7 +4175,9 @@ function wireCteXmlSection(id, onRefresh) {
       if (r.cardEncerrado) closeModal(); else onRefresh();
       loadBoard();
     } catch (e) {
-      msg.textContent = e.message;
+      falhar(e.message);
+    } finally {
+      enviarBtn.disabled = false;
     }
   });
 }
