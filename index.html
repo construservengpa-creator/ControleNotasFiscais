@@ -649,6 +649,9 @@ body.pend-redimensionando, body.pend-redimensionando * { cursor: col-resize !imp
 .msg-panel-vazio { padding: 16px 10px; text-align: center; color: var(--text-muted); font-size: 12px; }
 .msg-panel-rodape { display: block; width: 100%; margin-top: 4px; padding: 8px 10px; background: none; border: none; border-top: 1px solid var(--grid); color: var(--accent); font-size: 12px; cursor: pointer; text-align: center; font-family: inherit; }
 .msg-panel-rodape:hover { background: var(--surface-1); }
+.msg-panel-marcar-todas { display: block; width: 100%; padding: 8px 10px; background: none; border: none; border-bottom: 1px solid var(--grid); color: var(--text-secondary); font-size: 12px; cursor: pointer; text-align: center; font-family: inherit; }
+.msg-panel-marcar-todas:hover { background: var(--surface-1); color: var(--text-primary); }
+.msg-panel-marcar-todas:disabled { opacity: 0.6; cursor: wait; }
 
 /* ---------- Histórico de notificações (📜) ---------- */
 .hist-lista { max-height: 60vh; overflow-y: auto; margin-top: 10px; border: 1px solid var(--grid); border-radius: 8px; }
@@ -1863,7 +1866,7 @@ async function apiGet(path) {
   if (pathname === '/api/comentarios/pendentes') {
     await uidSessaoAtual();
     // Diretas (destinatario_id = eu, não lidas) + gerais (destinatario_id
-    // null) das notas cuja obra eu valido, com leitura individual controlada
+    // null) das notas em que eu participo, com leitura individual controlada
     // por nota_comentario_leituras — ver função no banco.
     const { data, error } = await supabaseClient.rpc('comentarios_pendentes');
     throwSupabaseError(error);
@@ -2366,6 +2369,14 @@ async function apiPost(path, body) {
     const { error } = await supabaseClient.rpc('marcar_comentarios_lidos', { p_nota_id: Number(seg[2]) });
     throwSupabaseError(error);
     return { ok: true };
+  }
+
+  // "Marcar todas como lidas" do 💬: tudo o que está pendente para mim (só
+  // para mim — ver marcar_todos_comentarios_lidos no banco).
+  if (path === '/api/comentarios/marcar-todas-lidas') {
+    const { data, error } = await supabaseClient.rpc('marcar_todos_comentarios_lidos');
+    throwSupabaseError(error, 'Não foi possível marcar as mensagens como lidas.');
+    return { total: data || 0 };
   }
 
   if (path === '/api/obras') {
@@ -4627,13 +4638,14 @@ function renderMsgPanel() {
     ligarRodapeHistorico(panel);
     return;
   }
-  panel.innerHTML = PENDENTES_CACHE.map((p) => `
+  panel.innerHTML = '<button type="button" class="msg-panel-marcar-todas" id="msgMarcarTodas">✓ Marcar todas como lidas</button>' + PENDENTES_CACHE.map((p) => `
     <div class="msg-panel-item" data-nota-id="${p.notaId}">
       <div class="msg-panel-nota">NF ${escapeHtml(p.notaNumero || '—')} · ${escapeHtml(p.notaFornecedor || '')}</div>
       <div><span class="msg-panel-autor">${escapeHtml(p.autorNome || '—')}</span> · ${fmtDateTime(p.createdAt)}</div>
       <div class="msg-panel-texto">${escapeHtml(p.mensagem)}</div>
     </div>`).join('') + rodapeHistoricoHtml('mensagem');
   ligarRodapeHistorico(panel);
+  document.getElementById('msgMarcarTodas').addEventListener('click', (ev) => marcarTodasMensagensComoLidas(ev.currentTarget));
   panel.querySelectorAll('.msg-panel-item').forEach((el) => {
     el.addEventListener('click', () => {
       panel.classList.add('hidden');
@@ -4767,10 +4779,11 @@ function openHistoricoNotificacoesModal(tipoInicial) {
       </div>
       <div class="hist-detalhe" id="histDetalhe"><div class="msg-panel-vazio">Selecione uma notificação para ler aqui.</div></div>
     </div>
-    <div class="form-actions"><button type="button" class="btn secondary" id="histFechar">Fechar</button></div>
+    <div class="form-actions"><button type="button" class="btn secondary" id="histMarcarTodas">✓ Marcar todas as mensagens como lidas</button><button type="button" class="btn secondary" id="histFechar">Fechar</button></div>
   `, { huge: true });
   document.getElementById('histTipo').value = HIST_ESTADO.tipo;
   document.getElementById('histFechar').addEventListener('click', closeModal);
+  document.getElementById('histMarcarTodas').addEventListener('click', (ev) => marcarTodasMensagensComoLidas(ev.currentTarget));
   document.getElementById('histTipo').addEventListener('change', (ev) => {
     HIST_ESTADO = { itens: [], tipo: ev.target.value, fim: false, carregando: false };
     carregarHistoricoNotificacoes();
@@ -4934,7 +4947,10 @@ async function selecionarHistorico(item) {
   }
 
   if (item.lida || (!ehMsg && !dados) || HIST_SEL !== chave) return; // passou adiante (setas) antes de carregar: não conta como lida
-  if (ehMsg) await marcarComentariosComoLidos(item.notaId);
+  if (ehMsg && !(await marcarComentariosComoLidos(item.notaId))) {
+    toast('Não foi possível marcar a mensagem como lida agora. Tente de novo.', 'error');
+    return;
+  }
   // reflete na lista: a leitura vale para todas as mensagens (ou a atribuição) dessa nota
   const agora = new Date().toISOString();
   HIST_ESTADO.itens.forEach((i) => {
@@ -5161,7 +5177,25 @@ async function marcarComentariosComoLidos(notaId) {
   try {
     await api.post(`/api/notas/${notaId}/comentarios/marcar-lidas`, {});
     atualizarBadgeMensagens();
-  } catch (e) { /* melhor esforço */ }
+    return true;
+  } catch (e) { return false; /* melhor esforço */ }
+}
+
+async function marcarTodasMensagensComoLidas(btn) {
+  if (btn) btn.disabled = true;
+  try {
+    await api.post('/api/comentarios/marcar-todas-lidas', {});
+    toast('Mensagens marcadas como lidas.', 'success');
+    if (document.getElementById('histLista')) {
+      HIST_ESTADO.itens.forEach((i) => { if (i.tipo === 'mensagem' && !i.lida) { i.lida = true; i.lidaEm = new Date().toISOString(); } });
+      renderHistoricoNotificacoes();
+    }
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+    atualizarBadgeMensagens();
+  }
 }
 
 // Recarrega só a lista de mensagens (sem redesenhar o modal inteiro, o que
