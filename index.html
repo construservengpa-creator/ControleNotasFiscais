@@ -667,6 +667,21 @@ body.pend-redimensionando, body.pend-redimensionando * { cursor: col-resize !imp
 .hist-item.nao-lida.hist-mensagem .hist-status { color: var(--accent); }
 .hist-item.nao-lida.hist-atribuicao .hist-status { color: #7CB3E8; }
 .hist-mais { margin-top: 10px; text-align: center; }
+.hist-item.selecionada { background: var(--surface-1); box-shadow: inset 0 0 0 1px var(--accent-dim); }
+/* Lista à esquerda, mensagem selecionada (com o diálogo da nota) à direita */
+.hist-layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 0 18px; align-items: start; margin-top: 10px; }
+.hist-layout .hist-lista { margin-top: 0; }
+.hist-detalhe { min-width: 0; max-height: 60vh; overflow-y: auto; border-left: 1px solid var(--grid); padding-left: 18px; font-size: 12.5px; }
+.hist-detalhe .modal-section-title { margin-top: 0; }
+.hist-detalhe-msg { margin: 8px 0 4px; padding: 10px 12px; border: 1px solid var(--accent-dim); border-radius: 8px; background: rgba(245, 196, 51, 0.06); }
+.hist-detalhe-msg .msg-panel-texto { font-size: 13px; line-height: 1.45; }
+.hist-detalhe .comentarios-lista { max-height: none; }
+.hist-detalhe .comentario-item.destaque { border-color: var(--accent); }
+.hist-detalhe-acoes { display: flex; gap: 8px; margin-top: 10px; }
+@media (max-width: 820px) {
+  .hist-layout { grid-template-columns: 1fr; }
+  .hist-detalhe { border-left: none; padding-left: 0; margin-top: 12px; border-top: 1px solid var(--grid); padding-top: 12px; max-height: none; }
+}
 
 .filters-row { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 14px; flex-wrap: wrap; }
 .filters-row .field { margin-bottom: 0; min-width: 140px; }
@@ -4704,6 +4719,7 @@ async function marcarAtribuicaoComoVista(nota) {
 // "Carregar mais" traz páginas mais antigas.
 const HIST_PAGINA = 50;
 let HIST_ESTADO = { itens: [], tipo: '', fim: false, carregando: false };
+let HIST_SEL = null; // chave (tipo:refId) da notificação aberta ao lado da lista
 
 function rodapeHistoricoHtml(tipo) {
   return `<button type="button" class="msg-panel-rodape" data-hist-tipo="${tipo}">📜 Ver histórico completo</button>`;
@@ -4721,9 +4737,10 @@ function openHistoricoNotificacoesModal(tipoInicial) {
   document.getElementById('msgPanel').classList.add('hidden');
   document.getElementById('atrPanel').classList.add('hidden');
   HIST_ESTADO = { itens: [], tipo: tipoInicial || '', fim: false, carregando: false };
+  HIST_SEL = null;
   showModal(`
     <h3>Histórico de notificações</h3>
-    <p class="legend-note" style="margin-top:0">Mensagens do diálogo das notas e notas atribuídas a você — lidas e não lidas. Clique em um item para abrir a nota.</p>
+    <p class="legend-note" style="margin-top:0">Mensagens do diálogo das notas e notas atribuídas a você — lidas e não lidas. Clique em um item para ler ao lado (ela fica marcada como lida).</p>
     <div class="filters-row" style="margin-bottom:0">
       <div class="field"><label>Tipo</label>
         <select id="histTipo">
@@ -4743,10 +4760,15 @@ function openHistoricoNotificacoesModal(tipoInicial) {
         <input type="search" id="histBusca" placeholder="NF, fornecedor, autor ou texto" />
       </div>
     </div>
-    <div class="hist-lista" id="histLista"><div class="msg-panel-vazio">Carregando…</div></div>
-    <div class="hist-mais"><button type="button" class="btn secondary small hidden" id="histMaisBtn">Carregar mais antigas</button></div>
+    <div class="hist-layout">
+      <div>
+        <div class="hist-lista" id="histLista"><div class="msg-panel-vazio">Carregando…</div></div>
+        <div class="hist-mais"><button type="button" class="btn secondary small hidden" id="histMaisBtn">Carregar mais antigas</button></div>
+      </div>
+      <div class="hist-detalhe" id="histDetalhe"><div class="msg-panel-vazio">Selecione uma notificação para ler aqui.</div></div>
+    </div>
     <div class="form-actions"><button type="button" class="btn secondary" id="histFechar">Fechar</button></div>
-  `, { xl: true });
+  `, { huge: true });
   document.getElementById('histTipo').value = HIST_ESTADO.tipo;
   document.getElementById('histFechar').addEventListener('click', closeModal);
   document.getElementById('histTipo').addEventListener('change', (ev) => {
@@ -4809,7 +4831,7 @@ function renderHistoricoNotificacoes() {
       ? (ehMsg && i.lidaEm ? `Lida em ${fmtDateTime(i.lidaEm)}` : (ehMsg ? 'Lida' : 'Vista'))
       : (ehMsg ? '● Não lida' : '● Não aberta');
     return `
-    <div class="hist-item hist-${ehMsg ? 'mensagem' : 'atribuicao'}${i.lida ? '' : ' nao-lida'}" data-nota-id="${i.notaId}">
+    <div class="hist-item hist-${ehMsg ? 'mensagem' : 'atribuicao'}${i.lida ? '' : ' nao-lida'}${histChave(i) === HIST_SEL ? ' selecionada' : ''}" data-chave="${escapeHtml(histChave(i))}">
       <div class="hist-icone">${ehMsg ? '💬' : '🗂️'}</div>
       <div class="hist-corpo">
         <div class="hist-topo">
@@ -4822,8 +4844,82 @@ function renderHistoricoNotificacoes() {
     </div>`;
   }).join('');
   lista.querySelectorAll('.hist-item').forEach((el) => {
-    el.addEventListener('click', () => openDetalheModal(Number(el.dataset.notaId)));
+    el.addEventListener('click', () => {
+      const item = HIST_ESTADO.itens.find((i) => histChave(i) === el.dataset.chave);
+      if (item) selecionarHistorico(item);
+    });
   });
+}
+
+function histChave(i) { return i.tipo + ':' + i.refId; }
+
+// Abre a notificação ao lado da lista (com o diálogo da nota, para dar
+// contexto) e marca como lida — mesmas regras de quando se abre a nota:
+// mensagens contam como lidas por nota (marcar_comentarios_lidos) e a
+// atribuição, por assigned_seen_at.
+async function selecionarHistorico(item) {
+  const chave = histChave(item);
+  HIST_SEL = chave;
+  const lista = document.getElementById('histLista');
+  if (lista) lista.querySelectorAll('.hist-item').forEach((el) => el.classList.toggle('selecionada', el.dataset.chave === chave));
+  const painel = document.getElementById('histDetalhe');
+  if (!painel) return;
+  const ehMsg = item.tipo === 'mensagem';
+  const cabecalho = `
+    <div class="modal-section-title">${ehMsg ? '💬 Mensagem' : '🗂️ Atribuição'}</div>
+    <div class="msg-panel-nota">NF ${escapeHtml(item.notaNumero || '—')} · ${escapeHtml(item.notaFornecedor || '')}</div>
+    <div class="hist-detalhe-msg">
+      <div>${ehMsg
+        ? `<span class="msg-panel-autor">${escapeHtml(item.autorNome || '—')}</span> ${item.direta ? 'escreveu para você' : 'escreveu para todos'}`
+        : `Nota atribuída a você${item.paraStatus ? ' em ' + escapeHtml(COLUNA_LABELS[item.paraStatus] || item.paraStatus) : ''}${item.autorNome ? ' por <span class="msg-panel-autor">' + escapeHtml(item.autorNome) + '</span>' : ''}`}</div>
+      ${item.mensagem ? `<div class="msg-panel-texto">${escapeHtml(item.mensagem)}</div>` : ''}
+      <div class="comentario-hora">${fmtDateTime(item.createdAt)}</div>
+    </div>`;
+  const acoes = `<div class="hist-detalhe-acoes"><button type="button" class="btn small" id="histAbrirNota">Abrir nota</button></div>`;
+  painel.innerHTML = cabecalho + acoes + '<div class="msg-panel-vazio">Carregando o diálogo da nota…</div>';
+  ligarAbrirNotaHistorico(item.notaId);
+  painel.scrollTop = 0;
+
+  let dados = null;
+  try {
+    dados = await api.get(`/api/notas/${item.notaId}`);
+  } catch (e) {
+    if (HIST_SEL === chave) painel.innerHTML = cabecalho + acoes + `<div class="msg-panel-vazio">${escapeHtml(e.message)}</div>`;
+    ligarAbrirNotaHistorico(item.notaId);
+  }
+  if (dados && HIST_SEL === chave && document.getElementById('histDetalhe')) {
+    const { nota, comentarios } = dados;
+    const situacao = nota.status ? `<div class="legend-note" style="margin-top:0">Situação da nota: ${escapeHtml(COLUNA_LABELS[nota.status] || nota.status)}${nota.assignedToName ? ' · com ' + escapeHtml(nota.assignedToName) : ''}</div>` : '';
+    const dialogo = (comentarios || []).length
+      ? `<div class="comentarios-lista">${comentarios.map((c) => `
+          <div class="comentario-item${CURRENT_USER && c.autor_id === CURRENT_USER.id ? ' own' : ''}${ehMsg && String(c.id) === String(item.refId) ? ' destaque' : ''}">
+            <div class="comentario-autor">${escapeHtml(c.autor_nome || '—')}</div>
+            <div class="comentario-para">Para: ${c.destinatario_nome ? escapeHtml(c.destinatario_nome) : 'Todos'}</div>
+            <div class="comentario-texto">${escapeHtml(c.mensagem)}</div>
+            <div class="comentario-hora">${fmtDateTime(c.created_at)}</div>
+          </div>`).join('')}</div>`
+      : '<p class="legend-note">Nenhuma mensagem no diálogo desta nota.</p>';
+    painel.innerHTML = cabecalho + situacao + acoes + '<div class="modal-section-title" style="margin-top:14px">Diálogo da nota</div>' + dialogo;
+    ligarAbrirNotaHistorico(item.notaId);
+    if (!ehMsg && !item.lida) await marcarAtribuicaoComoVista(nota);
+  }
+
+  if (item.lida || (!ehMsg && !dados)) return;
+  if (ehMsg) await marcarComentariosComoLidos(item.notaId);
+  // reflete na lista: a leitura vale para todas as mensagens (ou a atribuição) dessa nota
+  const agora = new Date().toISOString();
+  HIST_ESTADO.itens.forEach((i) => {
+    if (i.notaId === item.notaId && i.tipo === item.tipo && !i.lida) { i.lida = true; if (ehMsg) i.lidaEm = agora; }
+  });
+  const scroll = lista ? lista.scrollTop : 0;
+  renderHistoricoNotificacoes();
+  const listaNova = document.getElementById('histLista');
+  if (listaNova) listaNova.scrollTop = scroll;
+}
+
+function ligarAbrirNotaHistorico(notaId) {
+  const btn = document.getElementById('histAbrirNota');
+  if (btn) btn.addEventListener('click', () => openDetalheModal(Number(notaId)));
 }
 
 function renderComentariosList(comentarios) {
