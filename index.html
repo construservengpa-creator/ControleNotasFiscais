@@ -4740,7 +4740,7 @@ function openHistoricoNotificacoesModal(tipoInicial) {
   HIST_SEL = null;
   showModal(`
     <h3>Histórico de notificações</h3>
-    <p class="legend-note" style="margin-top:0">Mensagens do diálogo das notas e notas atribuídas a você — lidas e não lidas. Clique em um item para ler ao lado (ela fica marcada como lida).</p>
+    <p class="legend-note" style="margin-top:0">Mensagens do diálogo das notas e notas atribuídas a você — lidas e não lidas. Clique em um item para ler ao lado (ela fica marcada como lida) — use as setas ↑ ↓ do teclado para passar de uma para outra.</p>
     <div class="filters-row" style="margin-bottom:0">
       <div class="field"><label>Tipo</label>
         <select id="histTipo">
@@ -4778,7 +4778,36 @@ function openHistoricoNotificacoesModal(tipoInicial) {
   document.getElementById('histSituacao').addEventListener('change', renderHistoricoNotificacoes);
   document.getElementById('histBusca').addEventListener('input', renderHistoricoNotificacoes);
   document.getElementById('histMaisBtn').addEventListener('click', carregarHistoricoNotificacoes);
+  document.removeEventListener('keydown', navegarHistoricoTeclado);
+  document.addEventListener('keydown', navegarHistoricoTeclado);
   carregarHistoricoNotificacoes();
+}
+
+// Setas ↑ ↓ (e Home/End) passam de uma notificação para outra na lista
+// filtrada, abrindo cada uma ao lado. Fora da busca/filtros; o ouvinte se
+// desliga sozinho quando o histórico é fechado.
+function navegarHistoricoTeclado(ev) {
+  const lista = document.getElementById('histLista');
+  if (!lista) { document.removeEventListener('keydown', navegarHistoricoTeclado); return; }
+  if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(ev.key) || ev.altKey || ev.ctrlKey || ev.metaKey) return;
+  const alvo = ev.target;
+  if (alvo && (alvo.tagName === 'INPUT' || alvo.tagName === 'SELECT' || alvo.tagName === 'TEXTAREA' || alvo.isContentEditable)) return;
+  const els = [...lista.querySelectorAll('.hist-item')];
+  if (!els.length) return;
+  ev.preventDefault();
+  const atual = els.findIndex((el) => el.dataset.chave === HIST_SEL);
+  let i;
+  if (ev.key === 'Home') i = 0;
+  else if (ev.key === 'End') i = els.length - 1;
+  else if (atual < 0) i = ev.key === 'ArrowDown' ? 0 : els.length - 1;
+  else i = Math.max(0, Math.min(els.length - 1, atual + (ev.key === 'ArrowDown' ? 1 : -1)));
+  // na última da lista, a seta ↓ traz as mais antigas, se houver
+  if (ev.key === 'ArrowDown' && atual === els.length - 1 && !HIST_ESTADO.fim) carregarHistoricoNotificacoes();
+  if (i === atual) return;
+  const item = HIST_ESTADO.itens.find((x) => histChave(x) === els[i].dataset.chave);
+  if (!item) return;
+  els[i].scrollIntoView({ block: 'nearest' });
+  selecionarHistorico(item);
 }
 
 async function carregarHistoricoNotificacoes() {
@@ -4904,7 +4933,7 @@ async function selecionarHistorico(item) {
     if (!ehMsg && !item.lida) await marcarAtribuicaoComoVista(nota);
   }
 
-  if (item.lida || (!ehMsg && !dados)) return;
+  if (item.lida || (!ehMsg && !dados) || HIST_SEL !== chave) return; // passou adiante (setas) antes de carregar: não conta como lida
   if (ehMsg) await marcarComentariosComoLidos(item.notaId);
   // reflete na lista: a leitura vale para todas as mensagens (ou a atribuição) dessa nota
   const agora = new Date().toISOString();
