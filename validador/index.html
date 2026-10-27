@@ -696,11 +696,14 @@ function processar(){
   }
   cabecalhoArquivo();
   $('#vDrop').hidden=true; $('#vRes').hidden=false; $('#arqChip').hidden=false; $('#bExp').hidden=false;
-  const emps=[...new Set(ROWS.map(o=>o.empresa||'(não cadastrada)'))].sort();
+  const emps=[...new Set(ROWS.map(o=>o.empresa||'(não cadastrada)'))].sort(), empAntes=$('#fEmp').value;
   $('#fEmp').innerHTML='<option value="">Empresa: todas</option>'+emps.map(e=>`<option>${esc(e)}</option>`).join('');
+  if(emps.includes(empAntes))$('#fEmp').value=empAntes;
+  // Base salva: mostra na hora os cards guardados no cache (buscarCards atualiza logo depois).
+  if(MODO==='base'&&CARDS_CACHE){ ROWS.forEach(o=>{ o.card=CARDS_CACHE.get(o.chave)||null; }); CARDS_OK=true; }
   if(CARDS_OK)aplicarCards(); else opcoesStatus();
   desenhar();
-  if(EU&&!CARDS_OK)buscarCards(ROWS);
+  if(EU&&!CARDS_OK&&!CARREGANDO_BASE)buscarCards(ROWS);
 }
 
 function filtradas(semRegra){
@@ -1112,6 +1115,7 @@ async function buscarCards(rows){
     cards.forEach(c=>{ c.responsavel=c.assigned_to?nomes[c.assigned_to]||'':''; c.obra=c.obra_id?nomesObra[c.obra_id]||'':''; });
     rows.forEach(o=>{ o.card=achados.get(o)||null; });
     if(alvo)CARDS_OK=true;
+    if(alvo&&MODO==='base'&&CACHE){ CARDS_CACHE=new Map(rows.filter(o=>o.card).map(o=>[o.chave,o.card])); CACHE.cards=[...CARDS_CACHE]; cacheGravar(); }
     await buscarDados(rows);
     aplicarCards(); desenhar();
     conn(`● ${EU.name} · Controle de Notas conectado`,'ok');
@@ -1411,56 +1415,94 @@ function cabecalhoArquivo(){
   }
 }
 
-/* Cache da base salva no navegador (IndexedDB): ao abrir de novo, só vêm do banco as notas com
-   atualizado_em mais novo que o do cache (com 10 min de folga para cargas que estavam gravando).
-   O cache é por usuário e é apagado ao sair do Controle de Notas. */
-const CACHE_DB='validador-nf-cache', CACHE_VER=1;
+/* Cache da base salva no navegador (IndexedDB), por usuário, apagado ao sair do Controle de Notas.
+   Guarda as notas, as cargas e os cards já achados: ao abrir, o painel aparece na hora com o cache e, em
+   segundo plano, vêm do banco só as notas com atualizado_em mais novo (10 min de folga para cargas que
+   estavam gravando), a lista compacta das que vieram no último relatório (quando chegou relatório novo)
+   e os cards atualizados. */
+const CACHE_DB='validador-nf-cache', CACHE_VER=2;
+let CACHE=null, CARDS_CACHE=null, CARREGANDO_BASE=false;
 function cacheAbrir(){ return new Promise((ok,erro)=>{ try{ const r=indexedDB.open(CACHE_DB,1); r.onupgradeneeded=()=>r.result.createObjectStore('base');
   r.onsuccess=()=>ok(r.result); r.onerror=()=>erro(r.error); }catch(e){ erro(e); } }); }
 async function cacheLer(){ try{ const db=await cacheAbrir(); return await new Promise(ok=>{ const r=db.transaction('base').objectStore('base').get('base');
   r.onsuccess=()=>{ const v=r.result; ok(v&&v.ver===CACHE_VER&&EU&&v.usuario===EU.id?v:null); }; r.onerror=()=>ok(null); }); }catch(e){ return null; } }
-async function cacheGravar(linhas,maxAtu){ try{ const db=await cacheAbrir(); db.transaction('base','readwrite').objectStore('base').put({ver:CACHE_VER,usuario:EU.id,maxAtu,linhas},'base'); }catch(e){} }
-function cacheApagar(){ try{ indexedDB.deleteDatabase(CACHE_DB); }catch(e){} }
+async function cacheGravar(){ if(!CACHE||!EU)return; try{ const db=await cacheAbrir(); db.transaction('base','readwrite').objectStore('base').put({...CACHE,ver:CACHE_VER,usuario:EU.id},'base'); }catch(e){} }
+function cacheApagar(){ CACHE=null; CARDS_CACHE=null; try{ indexedDB.deleteDatabase(CACHE_DB); }catch(e){} }
+
+const COLS_NOTAS='chave,emitente,cnpj_emitente,uf_emitente,destinatario,cnpj_destinatario,uf_destinatario,manifesto,natureza,recebimento,emissao,numero_serie,valor,escrituracao,titulo,linha,primeira_carga,ultima_carga,alterada_na_carga,titulo_desde,atualizado_em';
+function montarBase(linhasBase,primeiraVez){
+  const linhas=[...linhasBase].sort((a,b)=>(a.emissao||'').localeCompare(b.emissao||'')||a.chave.localeCompare(b.chave));
+  LIDAS=linhas.map((r,i)=>({linha:i+1,raw:k=>r[COL_BASE[k]],chaveNumero:false,base:r}));
+  if(primeiraVez||MODO!=='base'){ F={kpi:'',regra:''}; LIMITE=300; }
+  MODO='base'; ARQ='Base salva'; ABA='Relatório';
+  processar();
+}
+// Lê do banco as notas com atualizado_em depois de "desde" (todas, sem "desde"), 1.000 por vez, continuando da
+// última chave (usa o índice da chave; sem contagem nem salto de páginas, que estouravam o tempo limite do banco).
+async function baixarNotas(desde,aoAvancar){
+  const out=[]; let ultimaChave='';
+  for(;;){
+    let q=sbc.from('validador_nf_notas').select(COLS_NOTAS).order('chave').limit(1000);
+    if(desde)q=q.gt('atualizado_em',desde);
+    if(ultimaChave)q=q.gt('chave',ultimaChave);
+    const {data,error}=await q; if(error)throw error;
+    out.push(...(data||[])); aoAvancar&&aoAvancar(out.length);
+    if(!data||data.length<1000)break;
+    ultimaChave=data[data.length-1].chave;
+  }
+  return out;
+}
+const maiorData=(a,b)=>!a?b:!b?a:(Date.parse(b)>Date.parse(a)?b:a);
 
 async function carregarBase(){
   if(!EU)return;
-  mostrarMsg('Abrindo a base salva…');
+  CARREGANDO_BASE=true;
   try{
+    // 1) Painel na hora com o cache (se houver)
+    if(!CACHE){ CACHE=await cacheLer(); CARDS_CACHE=CACHE&&CACHE.cards?new Map(CACHE.cards):null; }
+    const mostrouCache=!!(CACHE&&CACHE.linhas&&CACHE.linhas.length&&CACHE.cargas);
+    if(mostrouCache&&MODO!=='base'){
+      BASE.cargas=new Map(CACHE.cargas.map(c=>[c.id,c])); BASE.ultima=CACHE.cargas[0]||null; BASE_ERRO='';
+      montarBase(CACHE.linhas,true);
+    }
+    if(!mostrouCache)mostrarMsg('Abrindo a base salva…'); else conn('atualizando a base…','');
+
+    // 2) Em segundo plano: cargas, notas que mudaram e, se chegou relatório novo, quais vieram nele
     const {data:cargas,error}=await sbc.from('validador_nf_cargas').select('id,arquivo,arquivo_path,enviado_por,enviado_em,linhas,novas,alteradas,ignoradas').eq('concluida',true).order('id',{ascending:false}).limit(500);
     if(error)throw error;
-    BASE.cargas=new Map((cargas||[]).map(c=>[c.id,c])); BASE.ultima=(cargas||[])[0]||null;
-    if(BASE.ultima){ const {data}=await sbc.rpc('profile_names',{p_ids:[BASE.ultima.enviado_por]}); BASE.ultima.por=(data&&data[0]&&data[0].name)||''; }
-    BASE_ERRO='';
-    if(!BASE.ultima){ mostrarMsg(''); textoInicial(); return; }
-    // Lê em sequência, 1.000 por vez, continuando da última chave (usa o índice da chave; sem contagem nem salto
-    // de páginas, que ficam pesados e estouravam o tempo limite do banco).
-    const COLS='chave,emitente,cnpj_emitente,uf_emitente,destinatario,cnpj_destinatario,uf_destinatario,manifesto,natureza,recebimento,emissao,numero_serie,valor,escrituracao,titulo,linha,primeira_carga,ultima_carga,alterada_na_carga,titulo_desde,atualizado_em';
-    const cache=await cacheLer();
-    const porChave=new Map(cache?cache.linhas.map(r=>[r.chave,r]):[]);
-    const desde=cache&&cache.maxAtu?new Date(Date.parse(cache.maxAtu)-10*60000).toISOString():'';
-    let ultimaChave='', baixadas=0, maxAtu=cache?cache.maxAtu:'';
-    for(;;){
-      let q=sbc.from('validador_nf_notas').select(COLS).order('chave').limit(1000);
-      if(desde)q=q.gt('atualizado_em',desde);
-      if(ultimaChave)q=q.gt('chave',ultimaChave);
-      const {data,error}=await q; if(error)throw error;
-      (data||[]).forEach(r=>{ porChave.set(r.chave,r); if(!maxAtu||Date.parse(r.atualizado_em)>Date.parse(maxAtu))maxAtu=r.atualizado_em; });
-      baixadas+=(data||[]).length;
-      mostrarMsg(cache?`Atualizando a base salva… ${intf(baixadas)} nota(s) mudaram`:`Abrindo a base salva… ${intf(baixadas)} notas`);
-      if(!data||data.length<1000)break;
-      ultimaChave=data[data.length-1].chave;
+    const ultima=(cargas||[])[0]||null;
+    if(ultima){ const {data}=await sbc.rpc('profile_names',{p_ids:[ultima.enviado_por]}); ultima.por=(data&&data[0]&&data[0].name)||''; }
+    BASE.cargas=new Map((cargas||[]).map(c=>[c.id,c])); BASE.ultima=ultima; BASE_ERRO='';
+    if(!ultima){ mostrarMsg(''); textoInicial(); return; }
+
+    const porChave=new Map(mostrouCache?CACHE.linhas.map(r=>[r.chave,r]):[]);
+    const desde=mostrouCache&&CACHE.maxAtu?new Date(Date.parse(CACHE.maxAtu)-10*60000).toISOString():'';
+    const novas=await baixarNotas(desde,n=>{ if(!mostrouCache)mostrarMsg(`Abrindo a base salva… ${intf(n)} notas`); });
+    let maxAtu=mostrouCache?CACHE.maxAtu:'';
+    novas.forEach(r=>{ porChave.set(r.chave,r); maxAtu=maiorData(maxAtu,r.atualizado_em); });
+    let mudou=!mostrouCache||novas.length>0||!CACHE.cargas.length||CACHE.cargas[0].id!==ultima.id||CACHE.cargas.length!==(cargas||[]).length;
+
+    // Relatório novo desde o cache: as notas que vieram nele sem mudar dado não têm atualizado_em novo —
+    // a lista compacta [chave, linha] diz quais vieram (e em que linha).
+    if(mostrouCache&&CACHE.cargaId!==ultima.id){
+      const {data:pres,error:eP}=await sbc.rpc('validador_nf_presenca',{p_carga:ultima.id});
+      if(eP){ if(!/validador_nf_presenca|PGRST202|schema cache/i.test((eP.code||'')+' '+(eP.message||'')))throw eP;
+        // SQL novo ainda não rodado: sem a lista, lê a base inteira de novo
+        porChave.clear(); (await baixarNotas('')).forEach(r=>{ porChave.set(r.chave,r); maxAtu=maiorData(maxAtu,r.atualizado_em); }); }
+      else (pres||[]).forEach(([chave,linha])=>{ const r=porChave.get(chave); if(r&&r.ultima_carga!==ultima.id){ porChave.set(chave,{...r,ultima_carga:ultima.id,linha}); } });
+      mudou=true;
     }
-    const todas=[...porChave.values()];
-    if(!cache||baixadas)cacheGravar(todas,maxAtu);
-    const linhas=todas.sort((a,b)=>(a.emissao||'').localeCompare(b.emissao||'')||a.chave.localeCompare(b.chave));
-    LIDAS=linhas.map((r,i)=>({linha:i+1,raw:k=>r[COL_BASE[k]],chaveNumero:false,base:r}));
-    MODO='base'; ARQ='Base salva'; ABA='Relatório'; F={kpi:'',regra:''}; LIMITE=300; CARDS_OK=false;
-    mostrarMsg(''); processar();
+
+    CACHE={...(CACHE||{}),linhas:[...porChave.values()],maxAtu,cargaId:ultima.id,cargas:cargas||[]};
+    if(mudou){ cacheGravar(); montarBase(CACHE.linhas,!mostrouCache); }
+    else cabecalhoArquivo();
+    mostrarMsg('');
+    if(EU)buscarCards(ROWS);
   }catch(e){ console.error(e);
     BASE_ERRO=/statement timeout/i.test(e.message||'')?'A base salva demorou demais para abrir (tempo limite do banco). Rode o SQL de desempenho do validador (20261021_validador_desempenho.sql) e recarregue a página.'
       :/validador_nf_|does not exist|schema cache/i.test(e.message||'')?'A base salva ainda não foi criada no banco (falta rodar o SQL da atualização) — por enquanto o arquivo é só conferido, sem salvar.':'Não consegui abrir a base salva: '+(e.message||e);
     mostrarMsg(BASE_ERRO,!/falta rodar/.test(BASE_ERRO));
-  }
+  }finally{ CARREGANDO_BASE=false; }
 }
 
 // Admin/supervisor escolhe: atualizar a base com o arquivo, ou só conferir sem salvar.
@@ -1482,6 +1524,15 @@ async function analisarLocal(file){
 }
 const txtOuNull=v=>{ if(v==null)return null; const t=(v instanceof Date?v.toISOString():String(v)).trim(); return t||null; };
 const isoData=d=>d?`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`:null;
+// Mesmos campos e cortes de tamanho que validador_nf_gravar_lote usa para decidir se a nota mudou.
+const CAMPOS_BASE=[['emitente',300],['cnpj_emitente',30],['uf_emitente',4],['destinatario',300],['cnpj_destinatario',30],['uf_destinatario',4],
+  ['manifesto',100],['natureza',300],['recebimento'],['emissao'],['numero_serie',60],['valor'],['escrituracao',100],['titulo',60]];
+function mesmaNotaBase(r,b){
+  return CAMPOS_BASE.every(([k,max])=>{ const a=r[k], c=b[k];
+    if(k==='valor')return (a==null&&c==null)||(a!=null&&c!=null&&Number(a)===Number(c));
+    const x=a==null?null:(max?String(a).slice(0,max):String(a)), y=c==null?null:String(c);
+    return x===y; });
+}
 async function atualizarBase(file){
   mostrarMsg('Lendo '+file.name+'…');
   let carga=null;
@@ -1497,22 +1548,42 @@ async function atualizarBase(file){
         destinatario:txtOuNull(g('destinatario')),cnpj_destinatario:txtOuNull(g('cnpjDest')),uf_destinatario:txtOuNull(g('ufDest')),
         manifesto:txtOuNull(g('manifesto')),natureza:txtOuNull(g('natureza')),recebimento:isoData(paraData(g('recebimento'))),emissao:isoData(paraData(g('emissao'))),
         numero_serie:txtOuNull(g('numSerie')),valor:paraNum(g('valor')),escrituracao:txtOuNull(g('escrituracao')),titulo:txtOuNull(g('titulo')),linha:l.linha}); });
-    const regs=[...porChave.values()], repetidas=linhas.length-semChave-regs.length;
-    if(!regs.length)throw new Error('Nenhuma linha com chave de acesso válida — nada para salvar.');
+    const todasRegs=[...porChave.values()], repetidas=linhas.length-semChave-todasRegs.length;
+    if(!todasRegs.length)throw new Error('Nenhuma linha com chave de acesso válida — nada para salvar.');
+    // Compara com a base que já está aberta: as notas iguais vão só como [chave, linha, atualizado_em]
+    // (validador_nf_marcar_presentes); só as novas e as alteradas vão completas.
+    const naBase=MODO==='base'&&CACHE&&CACHE.linhas?new Map(CACHE.linhas.map(r=>[r.chave,r])):new Map();
+    const iguais=[], regs=[];
+    todasRegs.forEach(r=>{ const b=naBase.get(r.chave); if(b&&mesmaNotaBase(r,b))iguais.push([r.chave,r.linha,b.atualizado_em]); else regs.push(r); });
     // 1) abre a carga e guarda o arquivo original
     mostrarMsg('Abrindo a atualização…');
     const {data:id,error:e1}=await sbc.rpc('validador_nf_iniciar_carga',{p_arquivo:file.name}); if(e1)throw e1; carga=id;
     let path=`carga_${carga}/${file.name.replace(/[^\w.\- ]+/g,'_').slice(0,150)}`;
     const {error:eUp}=await sbc.storage.from(BUCKET_REL).upload(path,new Blob([buf],{type:file.type||'application/octet-stream'}),{upsert:false});
     if(eUp){ console.warn('Arquivo original não guardado:',eUp.message); path=null; }
-    // 2) grava as linhas em lotes
+    // 2) marca as que vieram sem mudança; as recusadas (mudaram no banco nesse meio tempo) vão completas
+    if(iguais.length){
+      mostrarMsg(`Conferindo ${intf(iguais.length)} notas sem mudança…`);
+      const porChaveReg=new Map(todasRegs.map(r=>[r.chave,r]));
+      try{
+        for(const lote of emLotes(iguais,5000)){
+          const {data:recusadas,error}=await sbc.rpc('validador_nf_marcar_presentes',{p_carga:carga,p_linhas:lote}); if(error)throw error;
+          (recusadas||[]).forEach(ch=>{ const r=porChaveReg.get(ch); if(r)regs.push(r); });
+        }
+      }catch(e){
+        if(!/validador_nf_marcar_presentes|PGRST202|schema cache/i.test((e.code||'')+' '+(e.message||'')))throw e;
+        console.warn('validador_nf_marcar_presentes ainda não existe no banco — enviando todas as notas.');
+        regs.length=0; regs.push(...todasRegs);
+      }
+    }
+    // 3) grava as novas/alteradas em lotes
     let novas=0, alteradas=0, ignoradas=0, feitas=0;
     for(const lote of emLotes(regs,1000)){
       const {data:r,error}=await sbc.rpc('validador_nf_gravar_lote',{p_carga:carga,p_linhas:lote}); if(error)throw error;
       novas+=r.novas||0; alteradas+=r.alteradas||0; ignoradas+=r.ignoradas||0; feitas+=lote.length;
       mostrarMsg(`Salvando na base… ${intf(feitas)} de ${intf(regs.length)}`);
     }
-    // 3) fecha a carga
+    // 4) fecha a carga
     const {error:e3}=await sbc.rpc('validador_nf_concluir_carga',{p_carga:carga,p_linhas:linhas.length,p_novas:novas,p_alteradas:alteradas,p_ignoradas:semChave+repetidas+ignoradas,p_arquivo_path:path}); if(e3)throw e3;
     await carregarBase();
     const fora=ROWS.filter(o=>o.base&&o.base.ultima_carga!==carga).length;
