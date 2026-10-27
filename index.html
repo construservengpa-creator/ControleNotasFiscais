@@ -255,6 +255,10 @@ main.content {
   .app-body.nav-collapsed nav.tabs { width: 0; padding-left: 0; padding-right: 0; border-right: none; }
 }
 
+/* Validador de NF: a aba usa a tela toda — menos espaço em volta e o quadro vai até o pé da janela
+   (a altura é calculada em ajustarAlturaValidador). */
+main.content.validador-ativo { padding: 8px 10px 0; }
+
 .view { display: none; }
 .view.active { display: block; }
 
@@ -1333,7 +1337,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
            Página própria (validador/index.html) mostrada aqui dentro. Usa o mesmo login: confere o relatório
            de NF-e do SIENGE, cruza com os cards e grava observações/avisos no diálogo de cada card. -->
       <section class="view" id="view-validador">
-        <iframe id="validadorFrame" title="Validador de Notas Fiscais" style="display:block;width:100%;height:calc(100vh - 150px);min-height:560px;border:0;border-radius:12px;background:transparent"></iframe>
+        <iframe id="validadorFrame" title="Validador de Notas Fiscais" style="display:block;width:100%;height:calc(100vh - 90px);min-height:480px;border:0;border-radius:12px;background:transparent"></iframe>
       </section>
 
       <section class="view" id="view-relatorios">
@@ -2916,8 +2920,18 @@ function switchView(view) {
   if (view === 'usuarios') loadUsuarios();
   if (view === 'auditoria') loadAuditoria();
   if (view === 'relatorios') loadRelatorios();
-  if (view === 'validador') { const fr = document.getElementById('validadorFrame'); if (!fr.getAttribute('src')) fr.src = 'validador/'; }
+  document.querySelector('main.content').classList.toggle('validador-ativo', view === 'validador');
+  if (view === 'validador') { const fr = document.getElementById('validadorFrame'); if (!fr.getAttribute('src')) fr.src = 'validador/'; ajustarAlturaValidador(); }
 }
+
+// O quadro do Validador ocupa da sua posição até o pé da janela (sem sobra embaixo nem rolagem da página).
+function ajustarAlturaValidador() {
+  const fr = document.getElementById('validadorFrame');
+  if (!fr || !fr.offsetParent) return;
+  const topo = fr.getBoundingClientRect().top + window.scrollY;
+  fr.style.height = Math.max(480, window.innerHeight - topo - 6) + 'px';
+}
+window.addEventListener('resize', ajustarAlturaValidador);
 
 // O Validador de NF (dentro da aba) pede para abrir o card de uma nota no quadro.
 window.addEventListener('message', (ev) => {
