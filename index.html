@@ -1046,15 +1046,16 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
         </div>
         <div class="panel" id="importarCtesPanel">
           <h2>Importar CT-es do relatório SIENGE</h2>
-          <p class="desc">Selecione o relatório "CT-es Recebidos" exportado do SIENGE (.xlsx). Entram só os CT-es cujo tomador é a AMETA, a RAF ou um dos consórcios, e que ainda não foram escriturados (cancelados e escriturados são desprezados). Quando a nota fiscal que informou esse CT-e no frete é encontrada (pelo nº do CT-e e o transportador ou o valor do frete), os dados do CT-e entram no registro dela, marcados como "lançamento do frete pendente"; se a nota já tinha sido concluída/encerrada, o card é reaberto e vai para "Pendências" com essa observação. CT-es sem nota correspondente caem em "Importadas SIENGE" como cards próprios. Todo card ligado a um CT-e só pode ser concluído ou movido depois que o XML do CT-e for anexado nele (seção "XML do CT-e" do card) — ao anexar, o XML é analisado de novo e o CT-e vai para as notas fiscais que ele transporta.</p>
+          <p class="desc">Selecione o relatório "CT-es Recebidos" exportado do SIENGE (.xlsx). Entram só os CT-es cujo tomador é a AMETA, a RAF ou um dos consórcios, e que ainda não foram escriturados (cancelados e escriturados são desprezados). Quando a nota fiscal que informou esse CT-e no frete é encontrada (pelo nº do CT-e e o transportador ou o valor do frete), os dados do CT-e entram no registro dela, marcados como "lançamento do frete pendente"; se a nota já tinha sido concluída/encerrada, o card é reaberto e vai para "Pendências" com essa observação. CT-es sem nota correspondente caem em "Importadas SIENGE" como cards próprios. Depois da leitura do arquivo aparece a lista das empresas tomadoras encontradas — marque quais delas entram nesta importação. Todo card ligado a um CT-e só pode ser concluído ou movido depois que o XML do CT-e for anexado nele (seção "XML do CT-e" do card) — ao anexar, o XML é analisado de novo e o CT-e vai para as notas fiscais que ele transporta.</p>
           <div class="filters-row">
             <div class="field">
               <label for="ctesArquivoInput">Arquivo do relatório de CT-es (.xlsx)</label>
               <input type="file" id="ctesArquivoInput" accept=".xlsx" />
             </div>
-            <button class="btn" id="ctesImportarBtn" type="button">Importar CT-es</button>
+            <button class="btn" id="ctesImportarBtn" type="button">Ler relatório</button>
             <span id="ctesImportarMsg" class="legend-note"></span>
           </div>
+          <div id="ctesEmpresasSelecao"></div>
           <div id="ctesImportarResultado"></div>
         </div>
       </section>
@@ -4036,7 +4037,12 @@ function montarDescricaoImportacaoSienge(linha) {
 function setupImportarCtes() {
   const btn = document.getElementById('ctesImportarBtn');
   if (!btn) return;
-  btn.addEventListener('click', importarRelatorioCtes);
+  btn.addEventListener('click', lerRelatorioCtes);
+  document.getElementById('ctesArquivoInput').addEventListener('change', () => {
+    document.getElementById('ctesEmpresasSelecao').innerHTML = '';
+    document.getElementById('ctesImportarResultado').innerHTML = '';
+    document.getElementById('ctesImportarMsg').textContent = '';
+  });
 }
 
 const TOMADOR_GRUPO_REGEX = /\bAMETA\b|\bRAF\b|CONS[OÓ]RCIO/i;
@@ -4254,12 +4260,24 @@ function montarDescricaoImportacaoCte(linha, notaIdsPossiveis) {
   return partes.join(' ');
 }
 
-async function importarRelatorioCtes() {
+// Empresa tomadora de uma linha do relatório: o CNPJ do tomador identifica;
+// sem ele, o nome.
+function cteEmpresaTomadora(linha, empresas) {
+  const cnpj = soDigitos(linha['CPF/CNPJ tomador']);
+  const nome = String(linha['Tomador'] ?? '').trim();
+  return { chave: cnpj || nome.toUpperCase(), cnpj, nome: (cnpj && empresas[cnpj]) || nome || '—' };
+}
+
+// 1ª etapa: lê o arquivo, separa os CT-es a tratar e mostra as empresas
+// tomadoras encontradas para o usuário marcar quais entram na importação.
+async function lerRelatorioCtes() {
   const input = document.getElementById('ctesArquivoInput');
   const msg = document.getElementById('ctesImportarMsg');
   const btn = document.getElementById('ctesImportarBtn');
+  const selecaoEl = document.getElementById('ctesEmpresasSelecao');
   const resultadoEl = document.getElementById('ctesImportarResultado');
   msg.textContent = '';
+  selecaoEl.innerHTML = '';
   resultadoEl.innerHTML = '';
 
   if (!input.files || input.files.length === 0) {
@@ -4283,6 +4301,7 @@ async function importarRelatorioCtes() {
     const linhas = linhasRelatorioCtes(workbook.Sheets[workbook.SheetNames[0]]);
     if (!linhas) {
       toast('Esse arquivo não parece ser o relatório de CT-es do SIENGE (não achei as colunas "Chave de acesso" e "Tomador").', 'error');
+      msg.textContent = '';
       return;
     }
 
@@ -4294,11 +4313,83 @@ async function importarRelatorioCtes() {
       if (cteJaEscriturado(l)) { escriturados++; return false; }
       return !!soDigitos(l['Chave de acesso']);
     });
+    msg.textContent = '';
     if (candidatas.length === 0) {
       toast(`Nenhum CT-e para importar: ${escriturados} já escriturado(s), ${cancelados} cancelado(s) e ${foraDoGrupo} com tomador de fora do grupo.`, 'error');
       return;
     }
 
+    const grupos = new Map();
+    candidatas.forEach((l) => {
+      const emp = cteEmpresaTomadora(l, empresas);
+      if (!grupos.has(emp.chave)) grupos.set(emp.chave, { ...emp, linhas: [], valor: 0 });
+      const g = grupos.get(emp.chave);
+      g.linhas.push(l);
+      g.valor += Number(l['Valor total']) || 0;
+    });
+    const lista = Array.from(grupos.values()).sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+    const desprezados = { escriturados, cancelados, foraDoGrupo };
+
+    selecaoEl.innerHTML = `
+      <p class="legend-note" style="margin-top:12px;">${candidatas.length} CT-e(s) a tratar no relatório (desprezados: ${escriturados} escriturado(s), ${cancelados} cancelado(s), ${foraDoGrupo} de outros tomadores). Marque as empresas que entram nesta importação:</p>
+      <div style="max-height:320px;overflow:auto;"><table class="data-table">
+        <thead><tr><th><input type="checkbox" id="ctesEmpresasTodas" checked title="Marcar/desmarcar todas" /></th><th>Empresa tomadora</th><th>CNPJ</th><th>CT-es</th><th>Valor total</th></tr></thead>
+        <tbody>${lista.map((g, i) => `<tr>
+          <td><input type="checkbox" class="ctes-empresa-check" data-idx="${i}" checked /></td>
+          <td>${escapeHtml(g.nome)}</td>
+          <td>${escapeHtml(g.cnpj ? formatarCnpj(g.cnpj) : '—')}</td>
+          <td>${g.linhas.length}</td>
+          <td>${escapeHtml(fmtMoney(g.valor))}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>
+      <div class="form-actions" style="justify-content:flex-start;">
+        <button class="btn" id="ctesConfirmarBtn" type="button">Importar CT-es das empresas marcadas</button>
+        <button class="btn secondary" id="ctesCancelarBtn" type="button">Cancelar</button>
+        <span id="ctesSelecaoInfo" class="legend-note"></span>
+      </div>`;
+
+    const checks = Array.from(selecaoEl.querySelectorAll('.ctes-empresa-check'));
+    const todas = document.getElementById('ctesEmpresasTodas');
+    const info = document.getElementById('ctesSelecaoInfo');
+    const confirmarBtn = document.getElementById('ctesConfirmarBtn');
+    const atualizar = () => {
+      const marcadas = checks.filter((c) => c.checked);
+      const qtd = marcadas.reduce((t, c) => t + lista[Number(c.dataset.idx)].linhas.length, 0);
+      info.textContent = `${marcadas.length} empresa(s), ${qtd} CT-e(s) marcados.`;
+      todas.checked = marcadas.length === checks.length;
+      todas.indeterminate = marcadas.length > 0 && marcadas.length < checks.length;
+      confirmarBtn.disabled = qtd === 0;
+    };
+    checks.forEach((c) => c.addEventListener('change', atualizar));
+    todas.addEventListener('change', () => { checks.forEach((c) => { c.checked = todas.checked; }); atualizar(); });
+    atualizar();
+    document.getElementById('ctesCancelarBtn').addEventListener('click', () => { selecaoEl.innerHTML = ''; });
+    confirmarBtn.addEventListener('click', () => {
+      const marcadas = checks.filter((c) => c.checked).map((c) => lista[Number(c.dataset.idx)]);
+      const linhasSel = marcadas.flatMap((g) => g.linhas);
+      const deixadas = candidatas.length - linhasSel.length;
+      importarRelatorioCtes(linhasSel, { ...desprezados, empresasDesmarcadas: deixadas });
+    });
+  } catch (e) {
+    toast('Falha ao ler o relatório de CT-es: ' + e.message, 'error');
+    msg.textContent = '';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// 2ª etapa: importa os CT-es das empresas marcadas.
+async function importarRelatorioCtes(candidatas, { escriturados, cancelados, foraDoGrupo, empresasDesmarcadas }) {
+  const input = document.getElementById('ctesArquivoInput');
+  const msg = document.getElementById('ctesImportarMsg');
+  const btn = document.getElementById('ctesImportarBtn');
+  const selecaoEl = document.getElementById('ctesEmpresasSelecao');
+  const resultadoEl = document.getElementById('ctesImportarResultado');
+  const confirmarBtn = document.getElementById('ctesConfirmarBtn');
+  resultadoEl.innerHTML = '';
+  btn.disabled = true;
+  if (confirmarBtn) confirmarBtn.disabled = true;
+  try {
     const porChave = new Map();
     const ctes = candidatas.map((l) => {
       const cte = {
@@ -4346,7 +4437,9 @@ async function importarRelatorioCtes() {
     if (reabertos) mensagem += ` (${reabertos} nota(s) já concluída(s) reaberta(s) em "Pendências")`;
     mensagem += `, ${importadas.length} importado(s) como card novo em "Importadas SIENGE"`;
     if (jaTratados) mensagem += `, ${jaTratados} já importado(s) antes`;
-    mensagem += `. Desprezados: ${escriturados} escriturado(s), ${cancelados} cancelado(s), ${foraDoGrupo} de outros tomadores.`;
+    mensagem += `. Desprezados: ${escriturados} escriturado(s), ${cancelados} cancelado(s), ${foraDoGrupo} de outros tomadores`;
+    if (empresasDesmarcadas) mensagem += `, ${empresasDesmarcadas} de empresas não marcadas`;
+    mensagem += '.';
     if (semReabrir.length) mensagem += ` ${semReabrir.length} nota(s) concluída(s) receberam o CT-e mas não puderam ser reabertas — veja a lista abaixo.`;
     toast(mensagem, semReabrir.length ? 'error' : 'success');
 
@@ -4369,11 +4462,13 @@ async function importarRelatorioCtes() {
         </table></div>`;
     }
     msg.textContent = '';
+    selecaoEl.innerHTML = '';
     input.value = '';
     loadBoard();
   } catch (e) {
     toast('Falha ao importar os CT-es: ' + e.message, 'error');
     msg.textContent = '';
+    if (confirmarBtn) confirmarBtn.disabled = false;
   } finally {
     btn.disabled = false;
   }
