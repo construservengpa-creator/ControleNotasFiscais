@@ -1020,7 +1020,8 @@ const sbc=window.supabase&&!(window.parent&&window.parent!==window&&(()=>{ try{ 
   ?window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,ARQUIVO_LOCAL?{auth:{storage:window.sessionStorage,storageKey:'validador-nf-local'}}:undefined):null;
 const COLUNAS_CARD=[['importadas_sienge','Importadas SIENGE'],['entradas','Entradas'],['lancamento','Lançamento'],['financeiro_cx','Financeiro/CX'],['pendencias','Pendências'],['concluido','Finalização']];
 const COL_LABEL=Object.fromEntries(COLUNAS_CARD);
-const CARD_SEL='id,numero,fornecedor,status,assigned_to,created_by,chave_acesso,numero_titulo,obra_id,origem,created_at';
+const CARD_SEL='id,numero,fornecedor,status,assigned_to,chave_acesso,numero_titulo,obra_id,created_by';
+const CARD_CAMPOS=CARD_SEL.split(',');
 const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD','CONF_CARD'];
 const EMBUTIDO=window.parent&&window.parent!==window;
 const EMBUTIDO_ESTRANHO=EMBUTIDO&&(()=>{ try{ return window.parent.location.origin!==location.origin; }catch(e){ return true; } })();
@@ -1044,7 +1045,7 @@ async function conectar(){
     textoInicial();
   }catch(e){ console.error(e); conn('Não consegui falar com o Controle de Notas','off'); }
 }
-sbc&&sbc.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT'){ EU=null; CARDS_OK=false; $('#acoes').hidden=true; conn('Saiu do Controle de Notas','off'); if(typeof MODO!=='undefined'&&MODO==='base'){ ROWS=[]; LIDAS=[]; MODO='arquivo'; $('#vRes').hidden=true; $('#arqChip').hidden=true; $('#bExp').hidden=true; $('#vDrop').hidden=false; return; } if(ROWS.length){ aplicarCards(); desenhar(); } } });
+sbc&&sbc.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT'){ EU=null; cacheApagar(); CARDS_OK=false; $('#acoes').hidden=true; conn('Saiu do Controle de Notas','off'); if(typeof MODO!=='undefined'&&MODO==='base'){ ROWS=[]; LIDAS=[]; MODO='arquivo'; $('#vRes').hidden=true; $('#arqChip').hidden=true; $('#bExp').hidden=true; $('#vDrop').hidden=false; return; } if(ROWS.length){ aplicarCards(); desenhar(); } } });
 
 // Fora do Controle de Notas (arquivo aberto direto), entra com o mesmo e-mail e senha de lá.
 $('#bEntrar').onclick=()=>{
@@ -1073,11 +1074,23 @@ async function buscarCards(rows){
   const alvo=rows===ROWS; conn('consultando os cards…','');
   try{
     const porChave=new Map(), achados=new Map();
-    const chaves=[...new Set(rows.filter(o=>o.chave.length===44).map(o=>o.chave))];
-    await emParalelo(emLotes(chaves,150),4,async lote=>{
-      const {data,error}=await sbc.from('notas').select(CARD_SEL).in('chave_acesso',lote); if(error)throw error;
-      (data||[]).forEach(c=>{ const k=soAlnum(c.chave_acesso); porChave.set(k,melhorCard(porChave.get(k),c)); });
-    });
+    const guardar=c=>{ const k=soAlnum(c.chave_acesso); porChave.set(k,melhorCard(porChave.get(k),c)); };
+    // Base salva inteira: o banco cruza as chaves (validador_cards_da_base) — sem mandar as 13 mil chaves de volta.
+    let peloBanco=alvo&&MODO==='base';
+    if(peloBanco){
+      try{ for(let apos=0;;){ const {data,error}=await sbc.rpc('validador_cards_da_base',{p_apos_id:apos}); if(error)throw error;
+          const pag=data||[]; pag.forEach(a=>guardar(Object.fromEntries(CARD_CAMPOS.map((k,i)=>[k,a[i]]))));
+          if(pag.length<5000)break; apos=pag[pag.length-1][0]; } }
+      catch(e){ if(!/validador_cards_da_base|PGRST202|schema cache/i.test((e.code||'')+' '+(e.message||'')))throw e;
+        console.warn('validador_cards_da_base ainda não existe no banco — consultando pelas chaves.'); porChave.clear(); peloBanco=false; }
+    }
+    if(!peloBanco){
+      const chaves=[...new Set(rows.filter(o=>o.chave.length===44).map(o=>o.chave))];
+      await emParalelo(emLotes(chaves,150),4,async lote=>{
+        const {data,error}=await sbc.from('notas').select(CARD_SEL).in('chave_acesso',lote); if(error)throw error;
+        (data||[]).forEach(guardar);
+      });
+    }
     rows.forEach(o=>{ const c=porChave.get(o.chave); if(c)achados.set(o,c); });
     // Sem achar pela chave (card cadastrado à mão/pelo estoque sem chave): número + emitente, só para as pendentes.
     const resto=rows.filter(o=>!achados.has(o)&&ehPendente(o)&&o.numero);
@@ -1092,11 +1105,11 @@ async function buscarCards(rows){
       const c=cs.reduce(melhorCard,null); if(c)achados.set(o,c); });
     // Nomes do responsável e da obra
     const cards=[...new Set(achados.values())];
-    const ids=[...new Set(cards.flatMap(c=>[c.assigned_to,c.created_by]).filter(Boolean))], obras=[...new Set(cards.map(c=>c.obra_id).filter(Boolean))];
+    const ids=[...new Set(cards.map(c=>c.assigned_to).filter(Boolean))], obras=[...new Set(cards.map(c=>c.obra_id).filter(Boolean))];
     const nomes={}, nomesObra={};
     if(ids.length){ const {data}=await sbc.rpc('profile_names',{p_ids:ids}); (data||[]).forEach(r=>nomes[r.id]=r.name); }
     for(const lote of emLotes(obras,200)){ const {data}=await sbc.from('obras').select('id,nome').in('id',lote); (data||[]).forEach(r=>nomesObra[r.id]=r.nome); }
-    cards.forEach(c=>{ c.responsavel=c.assigned_to?nomes[c.assigned_to]||'':''; c.criadoPor=c.created_by?nomes[c.created_by]||'':''; c.obra=c.obra_id?nomesObra[c.obra_id]||'':''; });
+    cards.forEach(c=>{ c.responsavel=c.assigned_to?nomes[c.assigned_to]||'':''; c.obra=c.obra_id?nomesObra[c.obra_id]||'':''; });
     rows.forEach(o=>{ o.card=achados.get(o)||null; });
     if(alvo)CARDS_OK=true;
     await buscarDados(rows);
@@ -1230,9 +1243,17 @@ async function buscarDados(rows){
   if(!EU)return;
   try{
     const chaves=[...new Set(rows.filter(temChave).map(o=>o.chave))], mapa=new Map();
-    await emParalelo(emLotes(chaves,150),4,async lote=>{
-      const {data,error}=await sbc.from('validador_nf_dados').select('chave,pedido,responsavel_id,comprador_id,atualizado_por,atualizado_em').in('chave',lote);
-      if(error)throw error; (data||[]).forEach(d=>mapa.set(d.chave,d)); });
+    const DADOS_SEL='chave,pedido,responsavel_id,comprador_id,atualizado_por,atualizado_em';
+    if(chaves.length>2000){
+      // Muitas notas: sai mais barato ler a tabela inteira (só tem as notas com algum dado preenchido) do que mandar as chaves.
+      for(let ultima='';;){ let q=sbc.from('validador_nf_dados').select(DADOS_SEL).order('chave').limit(1000); if(ultima)q=q.gt('chave',ultima);
+        const {data,error}=await q; if(error)throw error; (data||[]).forEach(d=>mapa.set(d.chave,d));
+        if(!data||data.length<1000)break; ultima=data[data.length-1].chave; }
+    }else{
+      await emParalelo(emLotes(chaves,150),4,async lote=>{
+        const {data,error}=await sbc.from('validador_nf_dados').select(DADOS_SEL).in('chave',lote);
+        if(error)throw error; (data||[]).forEach(d=>mapa.set(d.chave,d)); });
+    }
     rows.forEach(o=>{ const d=mapa.get(o.chave); o.pedido=d&&d.pedido||''; o.respId=d&&d.responsavel_id||null; o.compId=d&&d.comprador_id||null; o.dadosEm=d&&d.atualizado_em||null; o.dadosPor=d&&d.atualizado_por||null; });
     await usuariosAtivos();
     const faltam=[...new Set(rows.flatMap(o=>[o.respId,o.compId,o.dadosPor]).filter(id=>id&&!NOMES_USR[id]))];
@@ -1390,6 +1411,17 @@ function cabecalhoArquivo(){
   }
 }
 
+/* Cache da base salva no navegador (IndexedDB): ao abrir de novo, só vêm do banco as notas com
+   atualizado_em mais novo que o do cache (com 10 min de folga para cargas que estavam gravando).
+   O cache é por usuário e é apagado ao sair do Controle de Notas. */
+const CACHE_DB='validador-nf-cache', CACHE_VER=1;
+function cacheAbrir(){ return new Promise((ok,erro)=>{ try{ const r=indexedDB.open(CACHE_DB,1); r.onupgradeneeded=()=>r.result.createObjectStore('base');
+  r.onsuccess=()=>ok(r.result); r.onerror=()=>erro(r.error); }catch(e){ erro(e); } }); }
+async function cacheLer(){ try{ const db=await cacheAbrir(); return await new Promise(ok=>{ const r=db.transaction('base').objectStore('base').get('base');
+  r.onsuccess=()=>{ const v=r.result; ok(v&&v.ver===CACHE_VER&&EU&&v.usuario===EU.id?v:null); }; r.onerror=()=>ok(null); }); }catch(e){ return null; } }
+async function cacheGravar(linhas,maxAtu){ try{ const db=await cacheAbrir(); db.transaction('base','readwrite').objectStore('base').put({ver:CACHE_VER,usuario:EU.id,maxAtu,linhas},'base'); }catch(e){} }
+function cacheApagar(){ try{ indexedDB.deleteDatabase(CACHE_DB); }catch(e){} }
+
 async function carregarBase(){
   if(!EU)return;
   mostrarMsg('Abrindo a base salva…');
@@ -1402,16 +1434,24 @@ async function carregarBase(){
     if(!BASE.ultima){ mostrarMsg(''); textoInicial(); return; }
     // Lê em sequência, 1.000 por vez, continuando da última chave (usa o índice da chave; sem contagem nem salto
     // de páginas, que ficam pesados e estouravam o tempo limite do banco).
-    const COLS='chave,emitente,cnpj_emitente,uf_emitente,destinatario,cnpj_destinatario,uf_destinatario,manifesto,natureza,recebimento,emissao,numero_serie,valor,escrituracao,titulo,linha,primeira_carga,ultima_carga,alterada_na_carga,titulo_desde';
-    const todas=[]; let ultimaChave='';
+    const COLS='chave,emitente,cnpj_emitente,uf_emitente,destinatario,cnpj_destinatario,uf_destinatario,manifesto,natureza,recebimento,emissao,numero_serie,valor,escrituracao,titulo,linha,primeira_carga,ultima_carga,alterada_na_carga,titulo_desde,atualizado_em';
+    const cache=await cacheLer();
+    const porChave=new Map(cache?cache.linhas.map(r=>[r.chave,r]):[]);
+    const desde=cache&&cache.maxAtu?new Date(Date.parse(cache.maxAtu)-10*60000).toISOString():'';
+    let ultimaChave='', baixadas=0, maxAtu=cache?cache.maxAtu:'';
     for(;;){
       let q=sbc.from('validador_nf_notas').select(COLS).order('chave').limit(1000);
+      if(desde)q=q.gt('atualizado_em',desde);
       if(ultimaChave)q=q.gt('chave',ultimaChave);
       const {data,error}=await q; if(error)throw error;
-      todas.push(...(data||[])); mostrarMsg(`Abrindo a base salva… ${intf(todas.length)} notas`);
+      (data||[]).forEach(r=>{ porChave.set(r.chave,r); if(!maxAtu||Date.parse(r.atualizado_em)>Date.parse(maxAtu))maxAtu=r.atualizado_em; });
+      baixadas+=(data||[]).length;
+      mostrarMsg(cache?`Atualizando a base salva… ${intf(baixadas)} nota(s) mudaram`:`Abrindo a base salva… ${intf(baixadas)} notas`);
       if(!data||data.length<1000)break;
       ultimaChave=data[data.length-1].chave;
     }
+    const todas=[...porChave.values()];
+    if(!cache||baixadas)cacheGravar(todas,maxAtu);
     const linhas=todas.sort((a,b)=>(a.emissao||'').localeCompare(b.emissao||'')||a.chave.localeCompare(b.chave));
     LIDAS=linhas.map((r,i)=>({linha:i+1,raw:k=>r[COL_BASE[k]],chaveNumero:false,base:r}));
     MODO='base'; ARQ='Base salva'; ABA='Relatório'; F={kpi:'',regra:''}; LIMITE=300; CARDS_OK=false;
