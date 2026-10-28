@@ -2922,7 +2922,7 @@ function switchView(view) {
   if (view === 'auditoria') loadAuditoria();
   if (view === 'relatorios') loadRelatorios();
   document.querySelector('main.content').classList.toggle('validador-ativo', view === 'validador');
-  if (view === 'validador') { const fr = document.getElementById('validadorFrame'); if (!fr.getAttribute('src')) fr.src = 'validador/?v=' + Date.now();  // sempre a versão publicada mais recente (sem cache do navegador) ajustarAlturaValidador(); }
+  if (view === 'validador') { const fr = document.getElementById('validadorFrame'); if (!fr.getAttribute('src')) fr.src = 'validador/?v=' + Date.now(); /* sempre a versão publicada mais recente (sem cache do navegador) */ ajustarAlturaValidador(); }
 }
 
 // O quadro do Validador ocupa da sua posição até o pé da janela (sem sobra embaixo nem rolagem da página).
