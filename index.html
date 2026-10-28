@@ -1771,6 +1771,7 @@ function fmtObraRow(o, nomes) {
   return {
     id: o.id, nome: o.nome, codigo: o.codigo || null, active: !!o.active, createdAt: o.created_at,
     validadorIds, validadorNomes: validadorIds.map((id) => nomes[id]).filter(Boolean),
+    validadores: validadorIds.filter((id) => nomes[id]).map((id) => ({ id, nome: nomes[id] })),
     cnpjs: o.cnpjs || [], // só dígitos — empresas (CNPJ) que podem ser destinatárias das notas desta obra
   };
 }
@@ -5095,8 +5096,9 @@ function renderComentariosList(comentarios) {
 
 // Reúne quem já participa da nota (responsável atual, quem cadastrou, quem
 // homologou/validou o lançamento e quem já comentou na thread) para compor
-// a lista de "direcionar mensagem para" — evita ter que digitar e-mail/nome
-// e evita listar todo mundo do sistema, só quem já tem relação com a nota.
+// a lista de "direcionar mensagem para" — evita ter que digitar e-mail/nome.
+// Além deles, qualquer usuário do grupo liberado para a obra da nota
+// (responsáveis pela validação de recebimento) também pode ser escolhido.
 function participantesDaNota(nota, comentarios) {
   const mapa = new Map();
   const add = (id, nome) => { if (id && nome && (!CURRENT_USER || id !== CURRENT_USER.id) && !mapa.has(id)) mapa.set(id, nome); };
@@ -5106,6 +5108,26 @@ function participantesDaNota(nota, comentarios) {
   add(nota.lancamentoValidadoPor, nota.lancamentoValidadoPorNome);
   (comentarios || []).forEach((c) => add(c.autor_id, c.autor_nome));
   return [...mapa.entries()].map(([id, nome]) => ({ id, nome }));
+}
+
+// Usuários do grupo liberado para a obra da nota que ainda não aparecem
+// entre os participantes — entram num grupo à parte no seletor do chat.
+function grupoDaObraParaChat(nota, participantes) {
+  const obra = nota.obra ? OBRAS_CACHE.find((o) => o.nome === nota.obra) : null;
+  if (!obra || !Array.isArray(obra.validadores)) return [];
+  const ja = new Set(participantes.map((p) => p.id));
+  return obra.validadores
+    .filter((v) => (!CURRENT_USER || v.id !== CURRENT_USER.id) && !ja.has(v.id))
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+}
+
+function opcoesDestinatarioChat(nota, comentarios) {
+  const participantes = participantesDaNota(nota, comentarios);
+  const grupo = grupoDaObraParaChat(nota, participantes);
+  const opcao = (p) => `<option value="${p.id}">Direcionar para: ${escapeHtml(p.nome)}</option>`;
+  if (!grupo.length) return participantes.map(opcao).join('');
+  return (participantes.length ? `<optgroup label="Participantes da nota">${participantes.map(opcao).join('')}</optgroup>` : '') +
+    `<optgroup label="Usuários liberados para a obra">${grupo.map(opcao).join('')}</optgroup>`;
 }
 
 function wireComentariosExcluir(notaId) {
@@ -5169,7 +5191,7 @@ function renderChatSectionHtml(nota, comentarios) {
       <div class="comentario-form-row">
         <select id="comentarioDestinatario">
           <option value="">Mensagem geral (todos os participantes)</option>
-          ${participantesDaNota(nota, comentarios).map((p) => `<option value="${p.id}">Direcionar para: ${escapeHtml(p.nome)}</option>`).join('')}
+          ${opcoesDestinatarioChat(nota, comentarios)}
         </select>
       </div>
       <div class="comentario-form-row">
