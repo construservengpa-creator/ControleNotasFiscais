@@ -463,6 +463,7 @@ const REGRAS={
   CARD_CONCL:    ['A','Card finalizado no Controle de Notas, mas a nota continua sem título no relatório'],
   CARD_ABERTO:   ['A','Já lançada no relatório (tem título), mas o card continua aberto no Controle de Notas'],
   SEM_CARD:      ['I','Pendente e ainda sem card no Controle de Notas'],
+  CONF_CARD:     ['I','Card finalizado no Controle de Notas com título “CONFIRMAÇÃO” — classificada como Apenas Confirmação'],
   FORA_ULTIMO:   ['I','Não veio no último relatório carregado'],
   UF_CHAVE:      ['I','UF do emitente vazia — preenchida pela chave de acesso'],
   NS_CHAVE:      ['I','Número/Série vazio — preenchido pela chave de acesso'],
@@ -1024,7 +1025,7 @@ const COLUNAS_CARD=[['importadas_sienge','Importadas SIENGE'],['entradas','Entra
 const COL_LABEL=Object.fromEntries(COLUNAS_CARD);
 const CARD_SEL='id,numero,fornecedor,status,assigned_to,chave_acesso,numero_titulo,obra_id,created_by';
 const CARD_CAMPOS=CARD_SEL.split(',');
-const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD'];
+const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD','CONF_CARD'];
 const EMBUTIDO=window.parent&&window.parent!==window;
 const EMBUTIDO_ESTRANHO=EMBUTIDO&&(()=>{ try{ return window.parent.location.origin!==location.origin; }catch(e){ return true; } })();
 let EU=null, CARDS_OK=false, USUARIOS=null;
@@ -1120,15 +1121,25 @@ async function buscarCards(rows){
     conn(`● ${EU.name} · Controle de Notas conectado`,'ok');
   }catch(e){ console.error(e); conn('Falha ao consultar os cards: '+(e.message||e),'off'); }
 }
+const cardConfirmacao=c=>!!c&&c.status==='concluido'&&norm(c.numero_titulo).startsWith('confirmacao');
 function aplicarCards(){
   ROWS.forEach(o=>{
     // Volta ao que o relatório diz antes de reaplicar (os cards podem ter mudado ou o usuário saído).
     o.oc=o.oc.filter(x=>!CARD_CODIGOS.includes(x.c));
+    if(o.ocRel){ o.oc.push(...o.ocRel); o.ocRel=null; }
     o.status=o.statusRel;
     o.cardCol=o.card?(COL_LABEL[o.card.status]||o.card.status):'';
     if(!CARDS_OK)return;
     const c=o.card, rot=c?`NF ${c.numero} em ${COL_LABEL[c.status]||c.status}${c.responsavel?' · '+c.responsavel:''}`:'';
     if(o.titulo>0){ if(c&&c.status!=='concluido')o.oc.push({c:'CARD_ABERTO',extra:rot}); }
+    else if(cardConfirmacao(c)&&ehPendente(o)){
+      // Card finalizado com título "CONFIRMAÇÃO": a nota não terá lançamento, só a confirmação — vai para Apenas Confirmação
+      // mesmo que o relatório ainda mostre ciência/sem manifestação. Sai das regras de prazo de manifestação.
+      o.status='Apenas Confirmação';
+      const prazo=x=>x.c==='PEND_DIAS'||x.c==='PRAZO_180';
+      o.ocRel=o.oc.filter(prazo); o.oc=o.oc.filter(x=>!prazo(x));
+      o.oc.push({c:'CONF_CARD',extra:rot});
+    }
     else if(ehPendente(o)){ if(!c)o.oc.push({c:'SEM_CARD'}); else o.oc.push({c:c.status==='concluido'?'CARD_CONCL':'CARD_PEND',extra:rot}); }
   });
   finalizar(ROWS,dias());
