@@ -806,6 +806,34 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
 @media (max-width: 640px) {
   html[data-tema="estoque"] main.content { margin: 8px; border-radius: 12px; }
 }
+
+/* ===== Marcas AMETA e RAF (comum a todas as aplicações) =====
+   As logos ficam em Painel-suprimentos/marca/ (ameta.png e raf.png) e todas as
+   aplicações usam esses mesmos arquivos: para trocar a logo basta substituí-los.
+   O fundo branco garante a leitura das logos em qualquer tema. A capivara passa
+   a ser só um detalhe discreto ao lado do nome do módulo. */
+.emp-logos{display:inline-flex;align-items:center;gap:8px;flex-shrink:0;padding:4px 8px;border-radius:7px;background:#fff;vertical-align:middle;line-height:0}
+.emp-logos img{display:block;height:30px;width:auto;max-width:90px;object-fit:contain}
+.emp-logos .emp-sep{width:1px;height:24px;background:#1A1E24;opacity:.18}
+.emp-logos.emp-grande{gap:14px;padding:10px 16px;border-radius:12px}
+.emp-logos.emp-grande img{height:56px;max-width:150px}
+.emp-logos.emp-grande .emp-sep{height:44px}
+.emp-logos.emp-login{margin-bottom:18px}
+.cap-selo{width:20px!important;height:20px!important;background:none!important;box-shadow:none!important;
+  color:inherit!important;opacity:.4;border-radius:0!important;margin-bottom:0!important}
+#capAbertura .emp-logos{animation:capPop .7s cubic-bezier(.2,1.4,.4,1) both;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+#capAbertura .emp-logos img{height:88px;max-width:220px}
+#capAbertura .emp-logos .emp-sep{height:70px}
+#capAbertura .cap-nome{font-size:26px!important;margin-top:28px!important;color:#8D97A3}
+#capAbertura .cap-modulo{font-size:15px!important}
+#capAbertura .cap-andando{color:#8D97A3}
+@media (max-width:640px){
+  .emp-logos{gap:6px;padding:3px 6px}
+  .emp-logos img{height:24px;max-width:70px}
+  .emp-logos .emp-sep{height:18px}
+  #capAbertura .emp-logos img{height:64px;max-width:160px}
+  #capAbertura .emp-logos .emp-sep{height:52px}
+}
 </style>
 </head>
 <body>
@@ -817,7 +845,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
 
 <!-- ===== Tela de abertura Capivara ===== -->
 <div id="capAbertura" data-manual="1" role="status" aria-label="Carregando Capivara Notas" title="Clique para pular">
-  <span class="cap-selo"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></span>
+  <span class="emp-logos"><img src="https://construservengpa-creator.github.io/Painel-suprimentos/marca/ameta.png" alt="AMETA"><span class="emp-sep" aria-hidden="true"></span><img src="https://construservengpa-creator.github.io/Painel-suprimentos/marca/raf.png" alt="RAF"></span>
   <div class="cap-nome">Capivara</div>
   <div class="cap-modulo">Notas</div>
   <div class="cap-tag">Controle de Notas Fiscais · Sede AMETA</div>
@@ -857,8 +885,8 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
   <!-- ===================== LOGIN ===================== -->
   <section id="loginScreen" class="login-screen">
     <div class="login-card">
+      <span class="emp-logos emp-grande emp-login"><img src="https://construservengpa-creator.github.io/Painel-suprimentos/marca/ameta.png" alt="AMETA"><span class="emp-sep" aria-hidden="true"></span><img src="https://construservengpa-creator.github.io/Painel-suprimentos/marca/raf.png" alt="RAF"></span>
       <div class="login-brand">
-        <span class="cap-selo"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></span>
         <div>
           <h1 class="cap-marca">Capivara <span class="cap-mod">Notas</span></h1>
           <p class="subtitle">Controle de Notas Fiscais · Sede AMETA</p>
@@ -893,6 +921,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
     <header class="topbar">
       <div class="brand">
         <button type="button" class="sidebar-toggle-btn" id="sidebarToggleBtn" title="Recolher menu">☰</button>
+        <span class="emp-logos"><img src="https://construservengpa-creator.github.io/Painel-suprimentos/marca/ameta.png" alt="AMETA"><span class="emp-sep" aria-hidden="true"></span><img src="https://construservengpa-creator.github.io/Painel-suprimentos/marca/raf.png" alt="RAF"></span>
         <span class="cap-selo logo" id="appLogo"><svg viewBox="0 0 64 64" aria-hidden="true"><use href="#capivaraSilhueta"/></svg></span>
         <div>
           <h1><span class="cap-marca">Capivara <span class="cap-mod">Notas</span></span> <span class="marca-sub">· Sede AMETA</span></h1>
