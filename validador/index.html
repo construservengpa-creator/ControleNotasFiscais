@@ -398,7 +398,7 @@ body.emb .top .emp-logos{display:none}
 
     <div class="barra">
       <div class="seg" id="segVista"><button data-v="tab" class="on">Tabela</button><button data-v="graf">Gráficos</button></div>
-      <input id="fBusca" type="search" placeholder="Buscar emitente, CNPJ, número, chave…">
+      <input id="fBusca" type="search" placeholder="Buscar emitente, CNPJ, número, chave, obra…">
       <select id="fEmp" multiple data-ph="Empresa: todas"></select>
       <select id="fSt" multiple data-ph="Status: todos"></select>
       <select id="fVal" multiple>
@@ -807,7 +807,7 @@ function filtradas(semRegra){
     if(fc.length&&!fc.some(v=>passaCard(o,v)))return false;
     if(fp.length&&!fp.some(v=>passaPessoa(o,v)))return false;
     if(fa.length&&!fa.some(v=>passaAtu(o,v)))return false;
-    if(b&&!norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.pedido,nomeUsr(o.respId),nomeUsr(o.compId)].join(' ')).includes(b))return false;
+    if(b&&!norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.pedido,nomeUsr(o.respId),nomeUsr(o.compId),o.card&&o.card.obra,o.card&&o.card.numero_titulo].join(' ')).includes(b))return false;
     return true;
   });
 }
@@ -1013,7 +1013,7 @@ function renderLista(){
   const emps=[...new Set(base.map(o=>o.empresa||'(não cadastrada)'))].sort(), sts=STATUS_ORDEM.filter(s=>base.some(o=>o.status===s));
   $('#dlgT').textContent=LISTA.f.d;
   $('#dlgB').innerHTML=`<div class="filtros">
-      <input id="lBusca" type="search" placeholder="Buscar emitente, CNPJ, número, chave, título…" value="${esc(q.b)}">
+      <input id="lBusca" type="search" placeholder="Buscar emitente, CNPJ, número, chave, título, obra…" value="${esc(q.b)}">
       <select id="lEmp">${opt('','Todas as empresas',q.emp)}${emps.map(e=>opt(e,e,q.emp)).join('')}</select>
       <select id="lSt">${opt('','Todos os status',q.st)}${sts.map(s=>opt(s,s,q.st)).join('')}</select>
       <select id="lVal">${[['','Todas as validações'],['E','Só com erro'],['A','Só com alerta'],['EA','Erro ou alerta'],['OK','Só OK']].map(([v,t])=>opt(v,t,q.val)).join('')}</select>
@@ -1032,7 +1032,7 @@ function desenharLista(){
   const {q,ord}=LISTA, b=norm(q.b), max=300, nivOrd={E:0,A:1,OK:2};
   const ns=LISTA.base.filter(o=>(!q.emp||(o.empresa||'(não cadastrada)')===q.emp)&&(!q.st||o.status===q.st)
     &&(!q.val||(q.val==='EA'?o.nivel!=='OK':o.nivel===q.val))
-    &&(!b||norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto].join(' ')).includes(b)));
+    &&(!b||norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.card&&o.card.obra,o.card&&o.card.numero_titulo].join(' ')).includes(b)));
   ns.sort((a,c)=>{ let x=a[ord.k],y=c[ord.k]; if(ord.k==='nivel'){x=nivOrd[x];y=nivOrd[y];}
     if(x instanceof Date||y instanceof Date){x=x?+x:-Infinity;y=y?+y:-Infinity;} if(x==null)x=''; if(y==null)y='';
     return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR',{numeric:true}))*ord.dir; });
