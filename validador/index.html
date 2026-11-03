@@ -510,7 +510,7 @@ const REGRAS={
   CARD_CONCL:    ['A','Card finalizado no Controle de Notas, mas a nota continua sem título no relatório'],
   CARD_ABERTO:   ['A','Já lançada no relatório (tem título), mas o card continua aberto no Controle de Notas'],
   SEM_CARD:      ['I','Pendente e ainda sem card no Controle de Notas'],
-  CONF_CARD:     ['I','Card finalizado no Controle de Notas com título “CONFIRMAÇÃO” — classificada como Apenas Confirmação e fora das pendentes de lançamento'],
+  CONF_CARD:     ['I','Card finalizado no Controle de Notas com título “CONFIRMAÇÃO” — classificada como Apenas Confirmação'],
   LANC_CARD:     ['I','Sem título no relatório (lançada sem XML), mas o card foi finalizado com o nº do título — classificada como Lançado'],
   FORA_ULTIMO:   ['I','Não veio no último relatório carregado'],
   UF_CHAVE:      ['I','UF do emitente vazia — preenchida pela chave de acesso'],
@@ -820,11 +820,11 @@ function desenhar(){
   const pctd=(n,t)=>t?(n/t*100).toLocaleString('pt-BR',{maximumFractionDigits:0})+'%':'0%';
   const nTot=ROWS.length, lanc=ROWS.filter(o=>o.status==='Lançado'), pend=ROWS.filter(ehPendente);
   const conf=pend.filter(o=>o.status==='Apenas Confirmação').length, pnd=pend.filter(o=>o.status==='Pendente').length, agu=pend.filter(o=>o.status==='Aguardando Confirmação').length;
-  const nE=ROWS.filter(o=>o.nivel==='E').length, nA=ROWS.filter(o=>o.nivel==='A').length, naoR=ROWS.filter(o=>o.status==='Não realizada'||o.status==='Desconhecida').length, soC=ROWS.filter(o=>o.soConf).length;
+  const nE=ROWS.filter(o=>o.nivel==='E').length, nA=ROWS.filter(o=>o.nivel==='A').length, naoR=ROWS.filter(o=>o.status==='Não realizada'||o.status==='Desconhecida').length;
   const barraK=parts=>`<div class="barra-k">${parts.filter(([v])=>v).map(([v,c])=>`<i style="flex:${v};background:${c}"></i>`).join('')}</div>`;
   const ks=[
     {k:'tot',l:MODO==='base'?'Notas na base':'Notas no relatório',v:intf(nTot),s:`${brl(soma(ROWS))}${naoR?` · ${intf(naoR)} não realizadas`:''}`,f:null},
-    {k:'lanc',l:'Lançadas',v:intf(lanc.length),cl:'ok',s:`<b>${pctd(lanc.length,nTot)}</b> das notas · ${brl(soma(lanc))}${soC?` · ${intf(soC)} só confirmação (card)`:''}`,f:o=>o.status==='Lançado',bar:barraK([[lanc.length,'var(--ok)'],[nTot-lanc.length,'transparent']])},
+    {k:'lanc',l:'Lançadas',v:intf(lanc.length),cl:'ok',s:`<b>${pctd(lanc.length,nTot)}</b> das notas · ${brl(soma(lanc))}`,f:o=>o.status==='Lançado',bar:barraK([[lanc.length,'var(--ok)'],[nTot-lanc.length,'transparent']])},
     {k:'pend',l:'Pendentes de lançamento',v:intf(pend.length),cl:'warn',s:`${intf(conf)} confirmadas · ${intf(pnd)} pendentes · ${intf(agu)} aguardando`,f:ehPendente,
       bar:barraK([[conf,COR_ST['Apenas Confirmação']],[pnd,COR_ST['Pendente']],[agu,COR_ST['Aguardando Confirmação']]])},
     {k:'aten',l:'Precisam de atenção',v:intf(nE+nA),cl:nE?'bad':'warn',s:`<b style="color:var(--bad)">${intf(nE)}</b> com erro · ${intf(nA)} com alerta`,f:o=>o.nivel!=='OK'},
@@ -899,10 +899,7 @@ function aplicarTema(t){
 window.addEventListener('message',ev=>{ if(ev.origin===location.origin&&ev.data&&ev.data.tipo==='vnf-tema')aplicarTema(ev.data.tema); });
 window.addEventListener('storage',ev=>{ if(ev.key==='painel-tema')aplicarTema(ev.newValue); });
 const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
-// Pendente pelo status (relatório ou card). Notas com card finalizado como "CONFIRMAÇÃO" (o.soConf) não terão
-// lançamento — a confirmação encerra a nota —, então não contam como pendentes de lançamento.
-const ehPendenteSt=o=>o.status==='Pendente'||o.status==='Aguardando Confirmação'||o.status==='Apenas Confirmação';
-const ehPendente=o=>!o.soConf&&ehPendenteSt(o);
+const ehPendente=o=>o.status==='Pendente'||o.status==='Aguardando Confirmação'||o.status==='Apenas Confirmação';
 const med=o=>MED==='valor'?(o.valor||0):1;
 const fmtM=v=>MED==='valor'?brl(v):intf(v)+(v===1?' nota':' notas');
 const fmtCurto=v=>MED==='valor'?(v>=1e6?(v/1e6).toLocaleString('pt-BR',{maximumFractionDigits:1})+' mi':v>=1e3?(v/1e3).toLocaleString('pt-BR',{maximumFractionDigits:0})+' mil':intf(Math.round(v))):intf(v);
@@ -1188,7 +1185,7 @@ async function buscarCards(rows){
     }
     rows.forEach(o=>{ const c=porChave.get(o.chave); if(c)achados.set(o,c); });
     // Sem achar pela chave (card cadastrado à mão/pelo estoque sem chave): número + emitente, só para as pendentes.
-    const resto=rows.filter(o=>!achados.has(o)&&ehPendenteSt(o)&&o.numero);
+    const resto=rows.filter(o=>!achados.has(o)&&ehPendente(o)&&o.numero);
     const nums=[...new Set(resto.map(o=>o.numero))];
     const porNum=new Map();
     await emParalelo(emLotes(nums,150),4,async lote=>{
@@ -1213,16 +1210,14 @@ async function buscarCards(rows){
     conn(`● ${EU.name} · Controle de Notas conectado`,'ok');
   }catch(e){ console.error(e); conn('Falha ao consultar os cards: '+(e.message||e),'off'); }
 }
-// Título "CONFIRMAÇÃO" e variações digitadas à mão ("Apenas confirmação", "Confirmada", "CONF.") — sem número de título.
-const cardConfirmacao=c=>{ if(!c||c.status!=='concluido')return false; const t=norm(c.numero_titulo);
-  return /confirm|^conf\b/.test(t)&&!/\d/.test(t); };
+const cardConfirmacao=c=>!!c&&c.status==='concluido'&&norm(c.numero_titulo).startsWith('confirmacao');
 const cardLancado=c=>!!c&&c.status==='concluido'&&/\d/.test(c.numero_titulo||'');
 function aplicarCards(){
   ROWS.forEach(o=>{
     // Volta ao que o relatório diz antes de reaplicar (os cards podem ter mudado ou o usuário saído).
     o.oc=o.oc.filter(x=>!CARD_CODIGOS.includes(x.c));
     if(o.ocRel){ o.oc.push(...o.ocRel); o.ocRel=null; }
-    o.status=o.statusRel; o.soConf=false;
+    o.status=o.statusRel;
     o.cardCol=o.card?(COL_LABEL[o.card.status]||o.card.status):'';
     if(!CARDS_OK)return;
     const c=o.card, rot=c?`NF ${c.numero} em ${COL_LABEL[c.status]||c.status}${c.responsavel?' · '+c.responsavel:''}`:'';
@@ -1230,8 +1225,8 @@ function aplicarCards(){
     else if(cardConfirmacao(c)&&ehPendente(o)){
       // Card finalizado com título "CONFIRMAÇÃO": a nota não terá lançamento, só a confirmação — vai para Apenas Confirmação
       // mesmo que o relatório ainda mostre ciência/sem manifestação. Sai das regras de prazo de manifestação.
-      o.status='Apenas Confirmação'; o.soConf=true;
-      const prazo=x=>x.c==='PEND_DIAS'||x.c==='PRAZO_180'||x.c==='CONF_SEM_LANC';
+      o.status='Apenas Confirmação';
+      const prazo=x=>x.c==='PEND_DIAS'||x.c==='PRAZO_180';
       o.ocRel=o.oc.filter(prazo); o.oc=o.oc.filter(x=>!prazo(x));
       o.oc.push({c:'CONF_CARD',extra:rot});
     }
