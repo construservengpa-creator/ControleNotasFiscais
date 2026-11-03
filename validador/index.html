@@ -807,7 +807,7 @@ function filtradas(semRegra){
     if(fc.length&&!fc.some(v=>passaCard(o,v)))return false;
     if(fp.length&&!fp.some(v=>passaPessoa(o,v)))return false;
     if(fa.length&&!fa.some(v=>passaAtu(o,v)))return false;
-    if(b&&!norm([o.emitente,o.cnpjEmit,o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.pedido,nomeUsr(o.respId),nomeUsr(o.compId)].join(' ')).includes(b))return false;
+    if(b&&!norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.pedido,nomeUsr(o.respId),nomeUsr(o.compId)].join(' ')).includes(b))return false;
     return true;
   });
 }
@@ -862,7 +862,7 @@ function desenhar(){
   $('#tb').innerHTML=vis.map(o=>`<tr data-l="${o.linha}" title="Linha ${o.linha} do relatório — clique para ver os detalhes">
     <td><span class="dot ${o.nivel}" title="${{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel]}"></span></td>
     <td class="cel-nf"><span class="mono">${esc(o.numero)}${o.serie?`<span style="color:var(--mu2)">/${esc(o.serie)}</span>`:''}</span><small>${dataBR(o.emissao)}</small></td>
-    <td class="cel-emit">${esc(o.emitente)}<small>${o.empresa?esc(o.empresa):'<span style="color:var(--bad)">empresa não cadastrada</span>'}</small></td>
+    <td class="cel-emit">${esc(o.emitente)}<small>${o.cnpjEmit?`<span class="mono">${esc(fmtCNPJ(o.cnpjEmit))}</span> · `:''}${o.empresa?esc(o.empresa):'<span style="color:var(--bad)">empresa não cadastrada</span>'}</small></td>
     <td class="num">${o.valor==null?'':brl(o.valor)}</td>
     <td class="cel-st"><span class="st"><i style="background:${COR_ST[o.status]||'var(--mu)'}"></i>${esc(o.status)}</span><small>${cardTag(o)}</small></td>
     <td class="cel-ped">${celPedido(o)}</td>
@@ -1007,7 +1007,7 @@ function abrirLista(f){
   LISTA={f,base:filtradas().filter(predF(f)),q:{b:'',emp:'',st:'',val:''},ord:{k:'valor',dir:-1}};
   renderLista(); if(!$('#dlg').open)$('#dlg').showModal();
 }
-const COLS_LISTA=[['numero','NF'],['emitente','Emitente'],['empresa','Empresa'],['emissao','Emissão'],['valor','Valor','num'],['status','Status'],['nivel','Validação'],['idade','Dias','num']];
+const COLS_LISTA=[['numero','NF'],['emitente','Emitente'],['cnpjEmit','CNPJ'],['empresa','Empresa'],['emissao','Emissão'],['valor','Valor','num'],['status','Status'],['nivel','Validação'],['idade','Dias','num']];
 function renderLista(){
   const {base,q}=LISTA, opt=(v,t,sel)=>`<option value="${esc(v)}"${v===sel?' selected':''}>${esc(t)}</option>`;
   const emps=[...new Set(base.map(o=>o.empresa||'(não cadastrada)'))].sort(), sts=STATUS_ORDEM.filter(s=>base.some(o=>o.status===s));
@@ -1032,7 +1032,7 @@ function desenharLista(){
   const {q,ord}=LISTA, b=norm(q.b), max=300, nivOrd={E:0,A:1,OK:2};
   const ns=LISTA.base.filter(o=>(!q.emp||(o.empresa||'(não cadastrada)')===q.emp)&&(!q.st||o.status===q.st)
     &&(!q.val||(q.val==='EA'?o.nivel!=='OK':o.nivel===q.val))
-    &&(!b||norm([o.emitente,o.cnpjEmit,o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto].join(' ')).includes(b)));
+    &&(!b||norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto].join(' ')).includes(b)));
   ns.sort((a,c)=>{ let x=a[ord.k],y=c[ord.k]; if(ord.k==='nivel'){x=nivOrd[x];y=nivOrd[y];}
     if(x instanceof Date||y instanceof Date){x=x?+x:-Infinity;y=y?+y:-Infinity;} if(x==null)x=''; if(y==null)y='';
     return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR',{numeric:true}))*ord.dir; });
@@ -1041,7 +1041,7 @@ function desenharLista(){
   $('#lLimpa').hidden=!filtrou;
   $('#lTh').innerHTML='<tr>'+COLS_LISTA.map(([c,t,cl])=>`<th class="${cl||''}" data-c="${c}">${esc(t)}${ord.k===c?(ord.dir>0?' ▲':' ▼'):''}</th>`).join('')+'</tr>';
   $('#lTh').querySelectorAll('th').forEach(th=>th.onclick=()=>{ const c=th.dataset.c; LISTA.ord=ord.k===c?{k:c,dir:-ord.dir}:{k:c,dir:c==='valor'||c==='idade'?-1:1}; desenharLista(); });
-  $('#lTb').innerHTML=ns.slice(0,max).map(o=>`<tr class="lv${o.nivel}" data-l="${o.linha}"><td class="mono">${esc(o.numero)}${o.serie?'/'+esc(o.serie):''}</td><td class="quebra">${esc(o.emitente)}</td><td>${esc(o.empresa||'(não cadastrada)')}</td><td>${dataBR(o.emissao)}</td><td class="num">${o.valor==null?'':brl(o.valor)}</td><td>${esc(o.status)}</td><td><span class="tag ${o.nivel}">${{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel]}</span></td><td class="num">${o.idade??''}</td></tr>`).join('')
+  $('#lTb').innerHTML=ns.slice(0,max).map(o=>`<tr class="lv${o.nivel}" data-l="${o.linha}"><td class="mono">${esc(o.numero)}${o.serie?'/'+esc(o.serie):''}</td><td class="quebra">${esc(o.emitente)}</td><td class="mono" style="white-space:nowrap">${esc(fmtCNPJ(o.cnpjEmit))}</td><td>${esc(o.empresa||'(não cadastrada)')}</td><td>${dataBR(o.emissao)}</td><td class="num">${o.valor==null?'':brl(o.valor)}</td><td>${esc(o.status)}</td><td><span class="tag ${o.nivel}">${{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel]}</span></td><td class="num">${o.idade??''}</td></tr>`).join('')
     ||`<tr><td colspan="${COLS_LISTA.length}" style="text-align:center;color:var(--mu);padding:24px">Nenhuma nota com esses filtros.</td></tr>`;
   $('#lTb').querySelectorAll('tr[data-l]').forEach(tr=>tr.onclick=()=>detalhe(ROWS.find(o=>o.linha===+tr.dataset.l),true));
 }
