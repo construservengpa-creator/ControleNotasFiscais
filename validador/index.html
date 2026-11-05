@@ -1307,10 +1307,16 @@ async function ligarCardBox(o,recarregar){
   // destinatários: quem já participa do card primeiro, depois os demais usuários ativos
   const part=new Map(); [[c.assigned_to,'atribuído no card'],[c.created_by,'cadastrou']].forEach(([id,r])=>{ if(id&&id!==EU.id&&!part.has(id))part.set(id,r); });
   (msgs||[]).forEach(m=>{ if(m.autor_id&&m.autor_id!==EU.id&&!part.has(m.autor_id))part.set(m.autor_id,'no diálogo'); });
-  const outros=(await usuariosAtivos()).filter(u=>u.id!==EU.id&&!part.has(u.id));
+  // demais: só os autorizados para a nota (administradores, responsáveis pela obra, mesma obra/empresa);
+  // sem o SQL nota_destinatarios_autorizados, todos os usuários ativos como antes.
+  const {data:aut,error:eAut}=await sbc.rpc('nota_destinatarios_autorizados',{p_nota_id:c.id});
+  const MOTIVO={administrador:'Administradores','responsável pela obra':'Responsáveis pela obra','mesma obra':'Mesma obra','mesma empresa':'Mesma empresa'};
+  const gruposOutros=new Map();
+  if(!eAut&&Array.isArray(aut)) aut.filter(u=>!part.has(u.id)).forEach(u=>{ const k=MOTIVO[u.motivo]||'Outros autorizados'; if(!gruposOutros.has(k))gruposOutros.set(k,[]); gruposOutros.get(k).push(u); });
+  else { const outros=(await usuariosAtivos()).filter(u=>u.id!==EU.id&&!part.has(u.id)); if(outros.length)gruposOutros.set('Avisar outro usuário',outros); }
   $('#chDest').innerHTML='<option value="">Observação geral (todos os participantes do card)</option>'
     +(part.size?`<optgroup label="Avisar quem participa do card">${[...part].map(([id,r])=>`<option value="${id}">🔔 ${esc(nomes[id]||'—')} (${r})</option>`).join('')}</optgroup>`:'')
-    +(outros.length?`<optgroup label="Avisar outro usuário">${outros.map(u=>`<option value="${u.id}">🔔 ${esc(u.name)}</option>`).join('')}</optgroup>`:'');
+    +[...gruposOutros].map(([l,us])=>`<optgroup label="${esc(l)}">${us.map(u=>`<option value="${u.id}">🔔 ${esc(u.name)}</option>`).join('')}</optgroup>`).join('');
   $('#fChat').onsubmit=async e=>{ e.preventDefault(); const t=$('#chTxt').value.trim(); if(!t){ $('#chMsg').innerHTML='<span class="errmsg">Escreva a mensagem.</span>'; return; }
     $('#chEnv').disabled=true;
     const {error}=await sbc.from('nota_comentarios').insert({nota_id:c.id,autor_id:EU.id,mensagem:t,destinatario_id:$('#chDest').value||null});

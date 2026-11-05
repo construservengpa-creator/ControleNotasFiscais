@@ -5183,6 +5183,39 @@ function opcoesDestinatarioChat(nota, comentarios) {
     `<optgroup label="Usuários liberados para a obra">${grupo.map(opcao).join('')}</optgroup>`;
 }
 
+// Acrescenta ao "Direcionar para" os usuários autorizados para a nota (função nota_destinatarios_autorizados):
+// administradores, responsáveis pela obra e quem tem acesso à mesma obra/empresa. Substitui o grupo
+// "Usuários liberados para a obra" montado pelo cache; sem o SQL novo, o seletor fica como estava.
+const MOTIVO_DEST_LABEL = { administrador: 'Administradores', 'responsável pela obra': 'Responsáveis pela obra', 'mesma obra': 'Mesma obra', 'mesma empresa': 'Mesma empresa' };
+async function carregarDestinatariosAutorizados(notaId) {
+  const { data, error } = await supabaseClient.rpc('nota_destinatarios_autorizados', { p_nota_id: Number(notaId) });
+  const sel = document.getElementById('comentarioDestinatario');
+  if (error || !sel || !Array.isArray(data)) return;
+  const escolhido = sel.value;
+  sel.querySelectorAll('optgroup[label="Usuários liberados para a obra"]').forEach((g) => g.remove());
+  const ja = new Set(Array.from(sel.querySelectorAll('option')).map((o) => o.value).filter(Boolean));
+  const grupos = new Map();
+  data.forEach((u) => {
+    if (ja.has(u.id)) return;
+    ja.add(u.id);
+    const k = MOTIVO_DEST_LABEL[u.motivo] || 'Outros autorizados';
+    if (!grupos.has(k)) grupos.set(k, []);
+    grupos.get(k).push(u);
+  });
+  // Participantes soltos (sem optgroup) entram num grupo próprio para a lista ficar organizada.
+  const soltos = Array.from(sel.children).filter((el) => el.tagName === 'OPTION' && el.value);
+  if (soltos.length && grupos.size) {
+    const g = document.createElement('optgroup'); g.label = 'Participantes da nota';
+    soltos.forEach((o) => g.appendChild(o)); sel.appendChild(g);
+  }
+  grupos.forEach((lista, label) => {
+    const g = document.createElement('optgroup'); g.label = label;
+    g.innerHTML = lista.map((u) => `<option value="${u.id}">Direcionar para: ${escapeHtml(u.name)}</option>`).join('');
+    sel.appendChild(g);
+  });
+  sel.value = escolhido;
+}
+
 function wireComentariosExcluir(notaId) {
   document.querySelectorAll('[data-action="excluir-comentario"]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -5287,6 +5320,7 @@ function wireAnexosEChatSection(id, onRefresh) {
   wireComentariosExcluir(id);
   marcarComentariosComoLidos(id);
   iniciarPollingComentarios(id);
+  carregarDestinatariosAutorizados(id);
 
   document.getElementById('anexoUploadForm').addEventListener('submit', async (ev) => {
     ev.preventDefault();
