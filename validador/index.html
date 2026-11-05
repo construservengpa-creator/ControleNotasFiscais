@@ -737,6 +737,8 @@ async function abrirArquivo(file){
 }
 let LIDAS=[];
 function processar(){
+  // Só as notas das empresas a que o usuário tem acesso (no arquivo conferido; a base salva já vem filtrada do banco).
+  if(EU&&ACESSO&&!ACESSO.todas)LIDAS=LIDAS.filter(l=>ACESSO.cnpjs.has(soDig(l.raw('cnpjDest'))));
   ROWS=tratar(LIDAS,dias());
   if(MODO==='base'){
     ROWS.forEach((o,i)=>{ o.base=LIDAS[i].base; if(BASE.ultima&&o.base.ultima_carga!==BASE.ultima.id)o.oc.push({c:'FORA_ULTIMO',extra:'último em que veio: '+dataCarga(o.base.ultima_carga)}); });
@@ -1118,6 +1120,17 @@ const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD','CONF_CARD
 const EMBUTIDO=window.parent&&window.parent!==window;
 const EMBUTIDO_ESTRANHO=EMBUTIDO&&(()=>{ try{ return window.parent.location.origin!==location.origin; }catch(e){ return true; } })();
 let EU=null, CARDS_OK=false, USUARIOS=null;
+/* Acesso por empresa/obra (validador_meu_acesso): {todas, cnpjs:Set}. O banco já só devolve as notas das empresas
+   liberadas; aqui a mesma regra vale para o arquivo aberto só para conferência. null = sem a regra (SQL não rodado). */
+let ACESSO=null;
+const soDig=s=>String(s==null?'':s).replace(/\D/g,'');
+const acessoChave=()=>!ACESSO||ACESSO.todas?'todas':[...ACESSO.cnpjs].sort().join(',');
+const acessoTexto=()=>!ACESSO||ACESSO.todas?'':` · acesso a ${ACESSO.cnpjs.size} empresa${ACESSO.cnpjs.size===1?'':'s'}`;
+async function carregarAcesso(){
+  const {data,error}=await sbc.rpc('validador_meu_acesso');
+  if(error){ if(/validador_meu_acesso|PGRST202|schema cache/i.test((error.code||'')+' '+(error.message||''))){ ACESSO=null; return; } throw error; }
+  ACESSO={todas:!!(data&&data.todas),cnpjs:new Set(((data&&data.cnpjs)||[]).map(soDig))};
+}
 if(EMBUTIDO)document.body.classList.add('emb');
 
 function conn(t,cl){ const e=$('#conn'); e.textContent=t; e.className='conn'+(cl?' '+cl:''); }
@@ -1130,14 +1143,15 @@ async function conectar(){
     $('#bEntrar').hidden=true;
     const {data:p,error}=await sbc.from('profiles').select('id,name,role,coluna,active').eq('id',session.user.id).maybeSingle();
     if(error||!p||!p.active||p.role==='pendente'){ conn('Seu usuário não está liberado no Controle de Notas','off'); return; }
-    EU=p; conn('● '+p.name,'ok');
+    EU=p; await carregarAcesso(); conn('● '+p.name+acessoTexto(),'ok');
     $('#acoes').hidden=false; $('#bCriar').hidden=!(p.role==='admin'||p.role==='supervisor');
     if(!ROWS.length)await carregarBase();
+    else if(MODO==='arquivo'&&ACESSO&&!ACESSO.todas){ processar(); return textoInicial(); }
     else if(!CARDS_OK)buscarCards(ROWS);
     textoInicial();
   }catch(e){ console.error(e); conn('Não consegui falar com o Controle de Notas','off'); }
 }
-sbc&&sbc.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT'){ EU=null; cacheApagar(); CARDS_OK=false; $('#acoes').hidden=true; conn('Saiu do Controle de Notas','off'); if(typeof MODO!=='undefined'&&MODO==='base'){ ROWS=[]; LIDAS=[]; MODO='arquivo'; $('#vRes').hidden=true; $('#arqChip').hidden=true; $('#bExp').hidden=true; $('#vDrop').hidden=false; return; } if(ROWS.length){ aplicarCards(); desenhar(); } } });
+sbc&&sbc.auth.onAuthStateChange((ev)=>{ if(ev==='SIGNED_OUT'){ EU=null; ACESSO=null; cacheApagar(); CARDS_OK=false; $('#acoes').hidden=true; conn('Saiu do Controle de Notas','off'); if(typeof MODO!=='undefined'&&MODO==='base'){ ROWS=[]; LIDAS=[]; MODO='arquivo'; $('#vRes').hidden=true; $('#arqChip').hidden=true; $('#bExp').hidden=true; $('#vDrop').hidden=false; return; } if(ROWS.length){ aplicarCards(); desenhar(); } } });
 
 // Fora do Controle de Notas (arquivo aberto direto), entra com o mesmo e-mail e senha de lá.
 $('#bEntrar').onclick=()=>{
@@ -1207,7 +1221,7 @@ async function buscarCards(rows){
     if(alvo&&MODO==='base'&&CACHE){ CARDS_CACHE=new Map(rows.filter(o=>o.card).map(o=>[o.chave,o.card])); CACHE.cards=[...CARDS_CACHE]; cacheGravar(); }
     await buscarDados(rows);
     aplicarCards(); desenhar();
-    conn(`● ${EU.name} · Controle de Notas conectado`,'ok');
+    conn(`● ${EU.name} · Controle de Notas conectado${acessoTexto()}`,'ok');
   }catch(e){ console.error(e); conn('Falha ao consultar os cards: '+(e.message||e),'off'); }
 }
 const cardConfirmacao=c=>!!c&&c.status==='concluido'&&norm(c.numero_titulo).startsWith('confirmacao');
@@ -1472,7 +1486,7 @@ $('#bPreencher').onclick=async()=>{
    "validador-relatorios". Sem login, ou para quem só quer conferir um arquivo, a análise local continua igual. */
 let MODO='arquivo', BASE={ultima:null,cargas:new Map()}, BASE_ERRO='';
 const BUCKET_REL='validador-relatorios';
-const podeCarregar=()=>!!EU&&(EU.role==='admin'||EU.role==='supervisor')&&!BASE_ERRO;
+const podeCarregar=()=>!!EU&&(EU.role==='admin'||EU.role==='supervisor')&&(!ACESSO||ACESSO.todas)&&!BASE_ERRO;
 const fmtDH=iso=>iso?new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}):'';
 function dataCarga(id){ const c=BASE.cargas.get(id); return c?new Date(c.enviado_em).toLocaleDateString('pt-BR'):'—'; }
 const COL_BASE={emitente:'emitente',cnpjEmit:'cnpj_emitente',ufEmit:'uf_emitente',destinatario:'destinatario',cnpjDest:'cnpj_destinatario',
@@ -1522,8 +1536,8 @@ let CACHE=null, CARDS_CACHE=null, CARREGANDO_BASE=false;
 function cacheAbrir(){ return new Promise((ok,erro)=>{ try{ const r=indexedDB.open(CACHE_DB,1); r.onupgradeneeded=()=>r.result.createObjectStore('base');
   r.onsuccess=()=>ok(r.result); r.onerror=()=>erro(r.error); }catch(e){ erro(e); } }); }
 async function cacheLer(){ try{ const db=await cacheAbrir(); return await new Promise(ok=>{ const r=db.transaction('base').objectStore('base').get('base');
-  r.onsuccess=()=>{ const v=r.result; ok(v&&v.ver===CACHE_VER&&EU&&v.usuario===EU.id?v:null); }; r.onerror=()=>ok(null); }); }catch(e){ return null; } }
-async function cacheGravar(){ if(!CACHE||!EU)return; try{ const db=await cacheAbrir(); db.transaction('base','readwrite').objectStore('base').put({...CACHE,ver:CACHE_VER,usuario:EU.id},'base'); }catch(e){} }
+  r.onsuccess=()=>{ const v=r.result; ok(v&&v.ver===CACHE_VER&&EU&&v.usuario===EU.id&&(v.acesso||'todas')===acessoChave()?v:null); }; r.onerror=()=>ok(null); }); }catch(e){ return null; } }
+async function cacheGravar(){ if(!CACHE||!EU)return; try{ const db=await cacheAbrir(); db.transaction('base','readwrite').objectStore('base').put({...CACHE,ver:CACHE_VER,usuario:EU.id,acesso:acessoChave()},'base'); }catch(e){} }
 function cacheApagar(){ CACHE=null; CARDS_CACHE=null; try{ indexedDB.deleteDatabase(CACHE_DB); }catch(e){} }
 
 const COLS_NOTAS='chave,emitente,cnpj_emitente,uf_emitente,destinatario,cnpj_destinatario,uf_destinatario,manifesto,natureza,recebimento,emissao,numero_serie,valor,escrituracao,titulo,linha,primeira_carga,ultima_carga,alterada_na_carga,titulo_desde,atualizado_em';
@@ -1553,6 +1567,10 @@ const maiorData=(a,b)=>!a?b:!b?a:(Date.parse(b)>Date.parse(a)?b:a);
 
 async function carregarBase(){
   if(!EU)return;
+  if(ACESSO&&!ACESSO.todas&&!ACESSO.cnpjs.size){
+    mostrarMsg('Seu usuário ainda não tem acesso a nenhuma empresa ou obra no Validador de NF — peça ao administrador para liberar (Controle de Notas › Usuários › Editar).',true);
+    return;
+  }
   CARREGANDO_BASE=true;
   try{
     // 1) Painel na hora com o cache (se houver)
@@ -1704,7 +1722,7 @@ $('#bHist').onclick=async()=>{
   const nomes={}; (nm||[]).forEach(r=>nomes[r.id]=r.name);
   $('#dlgB').innerHTML=cs.length?`<div class="tw" style="max-height:60vh"><table><thead><tr><th>Quando</th><th>Arquivo</th><th>Por</th><th class="num">Linhas</th><th class="num">Novas</th><th class="num">Alteradas</th><th class="num">Ignoradas</th><th></th></tr></thead><tbody>
     ${cs.map(c=>`<tr><td>${esc(fmtDH(c.enviado_em))}</td><td>${esc(c.arquivo)}</td><td>${esc(nomes[c.enviado_por]||'—')}</td><td class="num">${intf(c.linhas)}</td><td class="num">${intf(c.novas)}</td><td class="num">${intf(c.alteradas)}</td><td class="num">${intf(c.ignoradas)}</td>
-      <td>${c.arquivo_path?`<button class="lnk" data-path="${esc(c.arquivo_path)}">⬇ baixar</button>`:'<span style="color:var(--mu2)">sem arquivo</span>'}</td></tr>`).join('')}
+      <td>${c.arquivo_path&&ACESSO&&!ACESSO.todas?'<span style="color:var(--mu2)" title="O arquivo tem todas as empresas — só quem tem acesso a todas baixa">—</span>':c.arquivo_path?`<button class="lnk" data-path="${esc(c.arquivo_path)}">⬇ baixar</button>`:'<span style="color:var(--mu2)">sem arquivo</span>'}</td></tr>`).join('')}
     </tbody></table></div>`:'<p>Nenhum relatório salvo ainda.</p>';
   $('#dlgB').querySelectorAll('[data-path]').forEach(b=>b.onclick=async()=>{
     const {data,error}=await sbc.storage.from(BUCKET_REL).createSignedUrl(b.dataset.path,120,{download:true});

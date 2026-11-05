@@ -1315,6 +1315,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
                 </select>
               </div>
             </div>
+            <div id="uAcessoValidador"></div>
             <div class="form-actions">
               <button type="submit" class="btn">Criar usuário</button>
               <span id="usuarioMsg" class="legend-note"></span>
@@ -1331,7 +1332,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
             Supabase em <strong>Authentication &gt; Users</strong>.
           </p>
           <table class="data-table">
-            <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Coluna</th><th>Status</th><th>Último acesso</th><th></th></tr></thead>
+            <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Coluna</th><th>Empresas/obras</th><th>Status</th><th>Último acesso</th><th></th></tr></thead>
             <tbody id="usuariosBody"></tbody>
           </table>
         </div>
@@ -1791,6 +1792,26 @@ function ligarValidacaoDestinatario({ cnpjEl, nomeEl, obraEl, avisoEl }) {
   };
 }
 
+/* Acesso ao Validador de NF por empresa/obra (tabela validador_acessos — SQL 20261105_validador_acesso_por_empresa.sql).
+   O banco aplica a regra (RLS); aqui só se lê e grava a configuração. Retorna null se a tabela ainda não existe. */
+async function lerAcessosValidador(ids) {
+  if (!ids.length) return {};
+  const { data, error } = await supabaseClient.from('validador_acessos').select('user_id,todas,cnpjs,obra_ids').in('user_id', ids);
+  if (error) { console.warn('validador_acessos:', error.message); return null; }
+  const out = {};
+  (data || []).forEach((a) => { out[a.user_id] = { todas: !!a.todas, cnpjs: a.cnpjs || [], obraIds: (a.obra_ids || []).map(Number) }; });
+  return out;
+}
+async function gravarAcessoValidador(userId, acesso) {
+  const linha = {
+    user_id: userId, todas: !!acesso.todas,
+    cnpjs: acesso.todas ? [] : (acesso.cnpjs || []).map(soDigitos).filter((c) => c.length === 14),
+    obra_ids: acesso.todas ? [] : (acesso.obraIds || []).map(Number).filter(Boolean),
+  };
+  const { error } = await supabaseClient.from('validador_acessos').upsert(linha, { onConflict: 'user_id' });
+  throwSupabaseError(error, 'Usuário salvo, mas não foi possível gravar o acesso a empresas e obras.');
+}
+
 function fmtUserRow(u) {
   return { id: u.id, name: u.name, email: u.email, role: u.role, coluna: u.coluna, active: !!u.active, createdAt: u.created_at, lastLoginAt: u.last_login_at };
 }
@@ -2039,7 +2060,8 @@ async function apiGet(path) {
   if (pathname === '/api/users') {
     const { data, error } = await supabaseClient.from('profiles').select('*').order('role').order('name');
     throwSupabaseError(error, 'Sem permissão.');
-    return { users: (data || []).map(fmtUserRow) };
+    const acessos = await lerAcessosValidador((data || []).map((u) => u.id));
+    return { users: (data || []).map((u) => ({ ...fmtUserRow(u), validadorAcesso: acessos ? (acessos[u.id] || { todas: false, cnpjs: [], obraIds: [] }) : null })) };
   }
 
   if (pathname === '/api/obras') {
@@ -2380,6 +2402,7 @@ async function apiPost(path, body) {
       ? await supabaseClient.from('profiles').update(linha).eq('id', uid.data).select().single()
       : await supabaseClient.from('profiles').insert(linha).select().single();
     throwSupabaseError(error, 'Não foi possível vincular o usuário.');
+    if (body.validadorAcesso) await gravarAcessoValidador(uid.data, body.validadorAcesso);
     return { user: fmtUserRow(data) };
   }
 
@@ -2465,6 +2488,7 @@ async function apiPut(path, body) {
     if (body.active !== undefined) patch.active = !!body.active;
     const { data, error } = await supabaseClient.from('profiles').update(patch).eq('id', seg[2]).select().single();
     throwSupabaseError(error, 'Não foi possível atualizar o usuário.');
+    if (body.validadorAcesso) await gravarAcessoValidador(seg[2], body.validadorAcesso);
     return { user: fmtUserRow(data) };
   }
 
@@ -5825,6 +5849,8 @@ function setupUsuarioForm() {
   const colunaField = document.getElementById('uColunaField');
   papelSel.addEventListener('change', () => {
     colunaField.style.display = papelSel.value === 'admin' ? 'none' : '';
+    const ac = document.getElementById('uAcessoValidador');
+    if (ac) ac.style.display = papelSel.value === 'admin' ? 'none' : '';
   });
 
   document.getElementById('usuarioForm').addEventListener('submit', async (ev) => {
@@ -5842,10 +5868,13 @@ function setupUsuarioForm() {
       role: papelSel.value,
       coluna: colunaValor || null,
     };
+    const acessoNovo = lerAcessoValidadorForm('u');
+    if (acessoNovo && papelSel.value !== 'admin') body.validadorAcesso = acessoNovo;
     try {
       await api.post('/api/users', body);
       toast('Usuário vinculado com sucesso.', 'success');
       ev.target.reset();
+      if (document.getElementById('uAcTodas')) montarAcessoValidadorNovo();
       loadUsuarios();
     } catch (e) {
       msg.textContent = e.message;
@@ -5854,6 +5883,7 @@ function setupUsuarioForm() {
 }
 
 async function loadUsuarios() {
+  OPCOES_ACESSO_VALIDADOR = null;
   try {
     const { users } = await api.get('/api/users');
     USERS_CACHE = users;
@@ -5869,6 +5899,7 @@ async function loadUsuarios() {
         <td>${escapeHtml(u.email)}</td>
         <td><span class="badge role-${u.role}">${ROLE_LABELS[u.role] || u.role}</span></td>
         <td>${u.coluna ? COLUNA_LABELS[u.coluna] : '—'}</td>
+        <td>${resumoAcessoValidador(u)}</td>
         <td><span class="badge ${u.active ? 'status-active' : 'status-inactive'}">${u.active ? 'Ativo' : 'Inativo'}</span></td>
         <td>${u.lastLoginAt ? fmtDateTime(u.lastLoginAt) : 'Nunca'}</td>
         <td>${isAdmin && u.role === 'pendente' ? `
@@ -5879,10 +5910,11 @@ async function loadUsuarios() {
           <button class="btn secondary small" data-action="toggle" data-id="${u.id}" data-active="${u.active ? 1 : 0}">${u.active ? 'Desativar' : 'Ativar'}</button>
           <button class="btn secondary small" data-action="excluir-usuario" data-id="${u.id}">Excluir</button>
         ` : ''}</td>
-      </tr>`).join('') || '<tr><td colspan="7" class="legend-note">Nenhum usuário encontrado.</td></tr>';
+      </tr>`).join('') || '<tr><td colspan="8" class="legend-note">Nenhum usuário encontrado.</td></tr>';
     if (isAdmin) {
       const nota = document.getElementById('usuariosResetNota');
       if (nota) nota.style.display = '';
+      if (users.some((u) => u.validadorAcesso)) montarAcessoValidadorNovo();
     }
 
     tbody.querySelectorAll('[data-action="editar-usuario"]').forEach((btn) => btn.addEventListener('click', () => {
@@ -5917,6 +5949,96 @@ async function loadUsuarios() {
   }
 }
 
+/* ---------- Acesso a empresas e obras (quadro e Validador de NF) ----------
+   Seção "Acesso a empresas e obras" do cadastro e da edição de usuário. Opções: todas as empresas, ou só as
+   marcadas — empresas (CNPJ do destinatário das notas) e/ou obras (valem os CNPJs cadastrados na obra).
+   Administrador sempre vê tudo. A regra é aplicada pelo banco (RLS dos cards e da base do validador —
+   SQL 20261105_validador_acesso_por_empresa.sql e 20261106_quadro_acesso_por_empresa.sql). */
+let OPCOES_ACESSO_VALIDADOR = null;
+async function carregarOpcoesAcessoValidador() {
+  if (OPCOES_ACESSO_VALIDADOR) return OPCOES_ACESSO_VALIDADOR;
+  const [base, cadastradas, obrasResp] = await Promise.all([
+    supabaseClient.rpc('validador_empresas_da_base').then((r) => r.data || [], () => []),
+    carregarEmpresas().catch(() => ({})),
+    api.get('/api/obras').catch(() => ({ obras: [] })),
+  ]);
+  const empresas = new Map();
+  const incluir = (cnpj, nome, notas) => {
+    const c = soDigitos(cnpj); if (c.length !== 14) return;
+    const atual = empresas.get(c) || { cnpj: c, nome: '', notas: 0 };
+    if (cadastradas[c]) atual.nome = cadastradas[c]; else if (!atual.nome && nome) atual.nome = nome;
+    atual.notas += notas || 0;
+    empresas.set(c, atual);
+  };
+  base.forEach((e) => incluir(e.cnpj, e.nome, Number(e.notas) || 0));
+  Object.keys(cadastradas || {}).forEach((c) => incluir(c, cadastradas[c], 0));
+  const obras = (obrasResp.obras || []).map((o) => ({ id: Number(o.id), nome: o.nome, cnpjs: o.cnpjs || [], active: o.active !== false }));
+  obras.forEach((o) => o.cnpjs.forEach((c) => incluir(c, '', 0)));
+  OPCOES_ACESSO_VALIDADOR = {
+    empresas: [...empresas.values()].sort((a, b) => (a.nome || a.cnpj).localeCompare(b.nome || b.cnpj, 'pt-BR')),
+    obras: obras.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR')),
+  };
+  return OPCOES_ACESSO_VALIDADOR;
+}
+
+function resumoAcessoValidador(u) {
+  if (u.role === 'admin') return '<span class="legend-note">Todas</span>';
+  const a = u.validadorAcesso;
+  if (!a) return '<span class="legend-note">—</span>';
+  if (a.todas) return 'Todas';
+  const partes = [];
+  if (a.cnpjs.length) partes.push(`${a.cnpjs.length} empresa${a.cnpjs.length === 1 ? '' : 's'}`);
+  if (a.obraIds.length) partes.push(`${a.obraIds.length} obra${a.obraIds.length === 1 ? '' : 's'}`);
+  return partes.length ? partes.join(' · ') : '<span class="badge role-pendente">Nenhuma</span>';
+}
+
+async function montarAcessoValidador(prefixo, acesso) {
+  const box = document.getElementById(prefixo + 'AcessoValidador');
+  if (!box) return;
+  box.innerHTML = '<p class="legend-note">Carregando empresas e obras…</p>';
+  const op = await carregarOpcoesAcessoValidador();
+  if (!document.body.contains(box)) return;
+  const a = acesso || { todas: false, cnpjs: [], obraIds: [] };
+  const cnpjs = new Set(a.cnpjs.map(soDigitos)), obras = new Set(a.obraIds.map(Number));
+  box.innerHTML = `
+    <div class="field">
+      <label>Acesso a empresas e obras (quadro e Validador de NF)</label>
+      <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer">
+        <input type="checkbox" id="${prefixo}AcTodas" style="width:auto;margin:0" ${a.todas ? 'checked' : ''} /> Todas as empresas e obras
+      </label>
+      <div id="${prefixo}AcLista" style="display:${a.todas ? 'none' : ''}">
+        <p class="legend-note" style="margin:6px 0">Este usuário só vê os cards e as notas do validador destas empresas (CNPJ do destinatário) e obras. Marcar uma obra libera também as empresas cadastradas nela. No quadro ele continua vendo os cards atribuídos a ele, os que ele cadastrou e os das obras em que é responsável pela validação.</p>
+        <div class="legend-note" style="margin:6px 0 2px">Empresas</div>
+        <div class="check-list" id="${prefixo}AcEmpresas">${op.empresas.map((e) => `<label><input type="checkbox" value="${e.cnpj}" ${cnpjs.has(e.cnpj) ? 'checked' : ''} /> ${escapeHtml(e.nome || formatarCnpj(e.cnpj))} <span class="legend-note">${formatarCnpj(e.cnpj)}${e.notas ? ' · ' + e.notas.toLocaleString('pt-BR') + ' notas' : ''}</span></label>`).join('') || '<span class="legend-note">Nenhuma empresa encontrada.</span>'}</div>
+        <div class="legend-note" style="margin:10px 0 2px">Obras</div>
+        <div class="check-list" id="${prefixo}AcObras">${op.obras.map((o) => `<label><input type="checkbox" value="${o.id}" ${obras.has(o.id) ? 'checked' : ''} /> ${escapeHtml(o.nome)} <span class="legend-note">${o.cnpjs.length ? o.cnpjs.map(formatarCnpj).join(', ') : 'sem CNPJ cadastrado na obra'}${o.active ? '' : ' · inativa'}</span></label>`).join('') || '<span class="legend-note">Nenhuma obra cadastrada.</span>'}</div>
+      </div>
+    </div>`;
+  const todas = document.getElementById(prefixo + 'AcTodas');
+  todas.addEventListener('change', () => { document.getElementById(prefixo + 'AcLista').style.display = todas.checked ? 'none' : ''; });
+}
+function montarAcessoValidadorNovo() {
+  const box = document.getElementById('uAcessoValidador');
+  if (box) box.style.display = document.getElementById('uPapel').value === 'admin' ? 'none' : '';
+  if (!box || box.dataset.montado === '1') {
+    if (box && document.getElementById('uAcTodas')) {
+      document.getElementById('uAcTodas').checked = false;
+      document.getElementById('uAcLista').style.display = '';
+      box.querySelectorAll('#uAcEmpresas input, #uAcObras input').forEach((el) => { el.checked = false; });
+    }
+    return;
+  }
+  box.dataset.montado = '1';
+  montarAcessoValidador('u', null);
+}
+// null quando a seção não foi montada (SQL do acesso ainda não rodado, ou ainda carregando) — aí nada é gravado.
+function lerAcessoValidadorForm(prefixo) {
+  const todas = document.getElementById(prefixo + 'AcTodas');
+  if (!todas) return null;
+  const marcados = (id) => Array.from(document.querySelectorAll(`#${prefixo}${id} input[type="checkbox"]:checked`)).map((el) => el.value);
+  return { todas: todas.checked, cnpjs: marcados('AcEmpresas'), obraIds: marcados('AcObras').map(Number) };
+}
+
 // Edição de dados do usuário (nome, papel, coluna) — o e-mail é o campo-chave
 // (identifica a conta/login) e é sempre mostrado como somente leitura aqui,
 // nunca enviado no corpo da requisição de atualização.
@@ -5944,6 +6066,7 @@ function openEditUsuarioModal(usuario, opts) {
           <option value="pendencias" ${usuario.coluna === 'pendencias' ? 'selected' : ''}>Pendências</option>
         </select>
       </div>
+      <div id="euAcessoValidador"></div>
       <div class="error-msg" id="editUsuarioError"></div>
       <div class="form-actions">
         <button type="button" class="btn secondary" id="editUsuarioCancel">Cancelar</button>
@@ -5953,9 +6076,16 @@ function openEditUsuarioModal(usuario, opts) {
   `);
   const papelSel = document.getElementById('euPapel');
   const colunaField = document.getElementById('euColunaField');
-  const atualizarColunaField = () => { colunaField.style.display = papelSel.value === 'admin' ? 'none' : ''; };
+  const atualizarColunaField = () => {
+    colunaField.style.display = papelSel.value === 'admin' ? 'none' : '';
+    const ac = document.getElementById('euAcessoValidador');
+    if (ac) ac.style.display = papelSel.value === 'admin' ? 'none' : '';
+  };
   papelSel.addEventListener('change', atualizarColunaField);
   atualizarColunaField();
+  if (usuario.validadorAcesso) {
+    montarAcessoValidador('eu', usuario.validadorAcesso);
+  }
 
   document.getElementById('editUsuarioCancel').addEventListener('click', closeModal);
   document.getElementById('editUsuarioForm').addEventListener('submit', async (ev) => {
@@ -5977,6 +6107,8 @@ function openEditUsuarioModal(usuario, opts) {
       body.coluna = null;
     }
     if (liberar) body.active = true;
+    const acessoEditado = lerAcessoValidadorForm('eu');
+    if (acessoEditado && papelSel.value !== 'admin') body.validadorAcesso = acessoEditado;
     try {
       await api.put(`/api/users/${usuario.id}`, body);
       toast(liberar ? 'Acesso liberado.' : 'Usuário atualizado com sucesso.', 'success');
