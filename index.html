@@ -1332,7 +1332,7 @@ html[data-tema="estoque"] main.content .dest-aviso.dest-erro { color: #C2333A; }
             Supabase em <strong>Authentication &gt; Users</strong>.
           </p>
           <table class="data-table">
-            <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Coluna</th><th>Validador NF</th><th>Status</th><th>Último acesso</th><th></th></tr></thead>
+            <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Coluna</th><th>Empresas/obras</th><th>Status</th><th>Último acesso</th><th></th></tr></thead>
             <tbody id="usuariosBody"></tbody>
           </table>
         </div>
@@ -1809,7 +1809,7 @@ async function gravarAcessoValidador(userId, acesso) {
     obra_ids: acesso.todas ? [] : (acesso.obraIds || []).map(Number).filter(Boolean),
   };
   const { error } = await supabaseClient.from('validador_acessos').upsert(linha, { onConflict: 'user_id' });
-  throwSupabaseError(error, 'Usuário salvo, mas não foi possível gravar o acesso ao Validador de NF.');
+  throwSupabaseError(error, 'Usuário salvo, mas não foi possível gravar o acesso a empresas e obras.');
 }
 
 function fmtUserRow(u) {
@@ -5949,10 +5949,11 @@ async function loadUsuarios() {
   }
 }
 
-/* ---------- Acesso ao Validador de NF (por empresa / obra) ----------
-   Seção "Acesso ao Validador de NF" do cadastro e da edição de usuário. Opções: todas as empresas, ou só as
+/* ---------- Acesso a empresas e obras (quadro e Validador de NF) ----------
+   Seção "Acesso a empresas e obras" do cadastro e da edição de usuário. Opções: todas as empresas, ou só as
    marcadas — empresas (CNPJ do destinatário das notas) e/ou obras (valem os CNPJs cadastrados na obra).
-   Administrador sempre vê tudo. A regra é aplicada pelo banco (RLS da base do validador). */
+   Administrador sempre vê tudo. A regra é aplicada pelo banco (RLS dos cards e da base do validador —
+   SQL 20261105_validador_acesso_por_empresa.sql e 20261106_quadro_acesso_por_empresa.sql). */
 let OPCOES_ACESSO_VALIDADOR = null;
 async function carregarOpcoesAcessoValidador() {
   if (OPCOES_ACESSO_VALIDADOR) return OPCOES_ACESSO_VALIDADOR;
@@ -6001,12 +6002,12 @@ async function montarAcessoValidador(prefixo, acesso) {
   const cnpjs = new Set(a.cnpjs.map(soDigitos)), obras = new Set(a.obraIds.map(Number));
   box.innerHTML = `
     <div class="field">
-      <label>Acesso ao Validador de NF</label>
+      <label>Acesso a empresas e obras (quadro e Validador de NF)</label>
       <label style="display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;font-weight:500;cursor:pointer">
         <input type="checkbox" id="${prefixo}AcTodas" style="width:auto;margin:0" ${a.todas ? 'checked' : ''} /> Todas as empresas e obras
       </label>
       <div id="${prefixo}AcLista" style="display:${a.todas ? 'none' : ''}">
-        <p class="legend-note" style="margin:6px 0">Só as notas destas empresas (CNPJ do destinatário) aparecem no validador para este usuário. Marcar uma obra libera as empresas cadastradas nela.</p>
+        <p class="legend-note" style="margin:6px 0">Este usuário só vê os cards e as notas do validador destas empresas (CNPJ do destinatário) e obras. Marcar uma obra libera também as empresas cadastradas nela. No quadro ele continua vendo os cards atribuídos a ele, os que ele cadastrou e os das obras em que é responsável pela validação.</p>
         <div class="legend-note" style="margin:6px 0 2px">Empresas</div>
         <div class="check-list" id="${prefixo}AcEmpresas">${op.empresas.map((e) => `<label><input type="checkbox" value="${e.cnpj}" ${cnpjs.has(e.cnpj) ? 'checked' : ''} /> ${escapeHtml(e.nome || formatarCnpj(e.cnpj))} <span class="legend-note">${formatarCnpj(e.cnpj)}${e.notas ? ' · ' + e.notas.toLocaleString('pt-BR') + ' notas' : ''}</span></label>`).join('') || '<span class="legend-note">Nenhuma empresa encontrada.</span>'}</div>
         <div class="legend-note" style="margin:10px 0 2px">Obras</div>
