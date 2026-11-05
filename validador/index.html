@@ -1277,7 +1277,7 @@ function cardBoxHtml(o){
   if(!EU)return `<div class="cardbox"><h4>Controle de Notas</h4><p class="info" style="margin:0">Entre no Controle de Notas para ver o card desta nota, registrar observações e avisar os usuários.</p></div>`;
   if(!CARDS_OK)return `<div class="cardbox"><h4>Controle de Notas</h4><p class="info" style="margin:0">Consultando os cards…</p></div>`;
   const c=o.card;
-  if(!c){ const pode=ehPendente(o)&&(EU.role==='admin'||EU.role==='supervisor');
+  if(!c){ const pode=ehPendente(o)&&(EU.role==='admin'||EU.role==='supervisor'||(MODO==='base'&&!!o.base&&temChave(o)));
     return `<div class="cardbox"><h4>Controle de Notas</h4><p class="info" style="margin:0 0 8px">Esta nota ainda não tem card no Controle de Notas${ehPendente(o)?'':' (e já está lançada)'}. As observações e avisos ficam no diálogo do card.</p>
       ${pode?'<button class="btn pri" id="bCriarUm">➕ Criar card em Importadas SIENGE</button> <span id="cbMsg"></span>':''}</div>`; }
   return `<div class="cardbox"><h4>Card no Controle de Notas</h4>
@@ -1292,7 +1292,7 @@ function cardBoxHtml(o){
     </form></div>`;
 }
 async function ligarCardBox(o,recarregar){
-  const bc=$('#bCriarUm'); if(bc)bc.onclick=async()=>{ bc.disabled=true; $('#cbMsg').textContent='Criando…'; const r=await criarCards([o]); if(r)recarregar(); else bc.disabled=false; };
+  const bc=$('#bCriarUm'); if(bc)bc.onclick=async()=>{ bc.disabled=true; $('#cbMsg').textContent='Criando…'; const r=await criarCardUm(o); if(r)recarregar(); else{ bc.disabled=false; $('#cbMsg').textContent=''; } };
   const c=o.card; if(!c||!$('#chat'))return;
   $('#bAbrirCard').onclick=()=>abrirCard(c.id);
   // diálogo do card
@@ -1327,6 +1327,22 @@ async function usuariosAtivos(){
 }
 
 /* Criar os cards que faltam (mesmo formato da Importação SIENGE do quadro) */
+// Um card só, pela chave da nota na base salva: o banco (validador_criar_card) pega os dados da base, confere o
+// acesso por empresa e se a nota ainda não tem card — vale para qualquer usuário liberado, inclusive operador.
+// Fora da base salva (arquivo só conferido) admin/supervisor seguem pela importação em lote.
+async function criarCardUm(o){
+  const adminSup=EU.role==='admin'||EU.role==='supervisor';
+  if(!(MODO==='base'&&o.base&&temChave(o)))return adminSup?criarCards([o]):false;
+  const {error}=await sbc.rpc('validador_criar_card',{p_chave:o.chave});
+  if(error){
+    if(/validador_criar_card|PGRST202|schema cache/i.test((error.code||'')+' '+(error.message||''))){
+      if(adminSup)return criarCards([o]);
+      alert('Criar card pelo operador ainda não está ativo no banco (falta rodar o SQL 20261107_validador_operador_cria_card.sql).'); return false; }
+    alert('Não foi possível criar o card: '+(error.message||error)); return false;
+  }
+  await buscarCards([o]);
+  return true;
+}
 async function criarCards(lst){
   const notas=lst.filter(o=>!o.card&&ehPendente(o)&&o.emitente).map(o=>({
     numero:o.numero||o.chave, fornecedor:o.emitente, valor:o.valor||0,
