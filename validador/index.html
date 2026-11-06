@@ -254,6 +254,9 @@ td.cel-oc .mais-oc{color:var(--mu2);margin-left:4px}
 .st{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .st i{width:7px;height:7px;border-radius:50%;display:inline-block}
 .cardt{font-size:12px;color:var(--info);white-space:nowrap}
+.tlst{margin:4px 0 0;padding-left:18px;font-size:12.5px;color:var(--mu);max-height:160px;overflow:auto}
+.ocl .tlst li{display:list-item;border:0;padding:1px 0;margin:0;background:none}
+.ocl li>span:last-child{min-width:0}
 .tcte{display:inline-block;margin-left:6px;padding:0 5px;border-radius:4px;font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--info);border:1px solid currentColor;vertical-align:1px}
 .cardt.fim{color:var(--ok)} .cardt.sem{color:var(--mu2)}
 
@@ -1828,6 +1831,10 @@ async function atualizarBase(file){
     // 4) fecha a carga
     const {error:e3}=await sbc.rpc('validador_nf_concluir_carga',{p_carga:carga,p_linhas:linhas.length,p_novas:novas,p_alteradas:alteradas,p_ignoradas:semChave+repetidas+ignoradas,p_arquivo_path:path}); if(e3)throw e3;
     await carregarBase();
+    // 5) notas que vieram com título e têm card aberto: conclui o card com o título (vai para validação)
+    mostrarMsg('Conferindo os cards das notas lançadas…');
+    const tit=await concluirCardsComTitulo(todasRegs);
+    mostrarMsg('');
     const fora=ROWS.filter(o=>o.base&&o.base.ultima_carga!==carga).length;
     $('#dlgT').textContent='Base atualizada';
     $('#dlgB').innerHTML=`<ul class="ocl">
@@ -1835,10 +1842,53 @@ async function atualizarBase(file){
       <li><span class="tag I">Alteradas</span><span><b>${intf(alteradas)}</b> notas mudaram (manifesto, título, escrituração…)</span></li>
       <li><span class="tag A">Fora</span><span><b>${intf(fora)}</b> notas da base não vieram neste relatório (continuam salvas)</span></li>
       ${semChave+repetidas+ignoradas?`<li><span class="tag E">Ignoradas</span><span><b>${intf(semChave+repetidas+ignoradas)}</b> linhas sem chave de acesso válida ou repetidas</span></li>`:''}
-    </ul><p class="info" style="margin:0">${esc(file.name)} · ${intf(linhas.length)} linhas${path?' · arquivo original guardado no histórico':''}. Use o filtro “Atualização” para ver as novas, as alteradas e as que ficaram de fora.</p>`;
+    </ul>${resumoTitulos(tit)}<p class="info" style="margin:0">${esc(file.name)} · ${intf(linhas.length)} linhas${path?' · arquivo original guardado no histórico':''}. Use o filtro “Atualização” para ver as novas, as alteradas e as que ficaram de fora.</p>`;
     $('#dlg').showModal();
   }catch(e){ console.error(e);
     mostrarMsg('Não foi possível atualizar a base: '+(e.message||e)+(carga?' — a parte já gravada fica salva; carregue o arquivo de novo para completar.':''),true); }
+}
+
+/* Título do relatório → card do Controle de Notas.
+   A cada relatório carregado, a nota que veio com nº de título e ainda tem card aberto (qualquer coluna antes da
+   Finalização) tem o card concluído com esse título pela mesma rotina do botão "Concluir" do quadro
+   (rpc_mudar_status): o card vai para Finalização e fica aguardando a validação do lançamento pelo supervisor.
+   Só pela chave de acesso (card achado por número + emitente fica de fora). Ficam de fora também, como no quadro,
+   o card em Pendências aguardando a homologação do recebimento e o card que precisa do XML do CT-e; o que o banco
+   recusar aparece no resumo com o motivo. */
+const tituloDoRelatorio=v=>{ const t=String(v==null?'':v).trim(); if(/^\d+$/.test(t))return +t>0?t.replace(/^0+/,''):''; const n=paraNum(v); return n>0?String(Math.trunc(n)):''; };
+async function concluirCardsComTitulo(regs){
+  const res={ok:[],pulados:[],erros:[]};
+  const porChave=new Map(regs.map(r=>[r.chave,tituloDoRelatorio(r.titulo)]).filter(([,t])=>t));
+  if(!porChave.size)return res;
+  try{
+    const sel='id,numero,status,numero_titulo,origem,homologado_por,chave_acesso,frete_cte_chave,cte_xml_recebido_em,cte_xml_dispensado_em';
+    const cards=new Map();
+    await emParalelo(emLotes([...porChave.keys()],150),4,async lote=>{
+      const {data,error}=await sbc.from('notas').select(sel).in('chave_acesso',lote).neq('status','concluido'); if(error)throw error;
+      (data||[]).forEach(c=>{ const k=soAlnum(c.chave_acesso), a=cards.get(k); if(!a||c.id>a.id)cards.set(k,c); });
+    });
+    const fazer=[];
+    cards.forEach((c,k)=>{ const t=porChave.get(k), item={id:c.id,numero:c.numero,coluna:COL_LABEL[c.status]||c.status,titulo:t};
+      if(c.status==='pendencias'&&c.origem==='sienge'&&!c.homologado_por)res.pulados.push({...item,motivo:'aguardando a homologação do recebimento'});
+      else if((c.frete_cte_chave||ehChaveCte(c.chave_acesso))&&!c.cte_xml_recebido_em&&!c.cte_xml_dispensado_em)res.pulados.push({...item,motivo:'falta o XML do CT-e'});
+      else fazer.push(item); });
+    await emParalelo(fazer,3,async it=>{
+      const {error}=await sbc.rpc('rpc_mudar_status',{p_nota_id:it.id,p_status:'concluido',p_assigned_to:null,
+        p_nota_msg:`Título ${it.titulo} informado pelo relatório SIENGE carregado no Validador de NF.`,p_numero_titulo:it.titulo});
+      if(error)res.erros.push({...it,motivo:error.message||String(error)}); else res.ok.push(it);
+    });
+    if(res.ok.length)await buscarCards(ROWS);
+  }catch(e){ console.error(e); res.falha=e.message||String(e); }
+  return res;
+}
+function resumoTitulos(t){
+  if(!t||(!t.ok.length&&!t.pulados.length&&!t.erros.length&&!t.falha))return '';
+  const lista=(a,comMotivo)=>`<ul class="tlst">${a.slice(0,50).map(x=>`<li>NF ${esc(x.numero)} · título ${esc(x.titulo)} · estava em ${esc(x.coluna)}${comMotivo?` — <span style="color:var(--mu)">${esc(x.motivo)}</span>`:''}</li>`).join('')}${a.length>50?`<li>… e mais ${intf(a.length-50)}</li>`:''}</ul>`;
+  return `<h4 style="margin:14px 0 6px">Cards das notas lançadas</h4><ul class="ocl">
+    ${t.ok.length?`<li><span class="tag OK">Validação</span><span style="display:block"><b>${intf(t.ok.length)}</b> card(s) receberam o nº do título do relatório e foram para Finalização, aguardando a validação do lançamento${lista(t.ok)}</span></li>`:''}
+    ${t.pulados.length?`<li><span class="tag A">Ficaram</span><span style="display:block"><b>${intf(t.pulados.length)}</b> card(s) com título no relatório continuam onde estão${lista(t.pulados,true)}</span></li>`:''}
+    ${t.erros.length?`<li><span class="tag E">Recusados</span><span style="display:block"><b>${intf(t.erros.length)}</b> card(s) não puderam ser concluídos${lista(t.erros,true)}</span></li>`:''}
+    ${t.falha?`<li><span class="tag E">Erro</span><span>Não consegui conferir os cards: ${esc(t.falha)}</span></li>`:''}</ul>`;
 }
 
 // Histórico das cargas, com o arquivo original para baixar
