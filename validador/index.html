@@ -254,6 +254,7 @@ td.cel-oc .mais-oc{color:var(--mu2);margin-left:4px}
 .st{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .st i{width:7px;height:7px;border-radius:50%;display:inline-block}
 .cardt{font-size:12px;color:var(--info);white-space:nowrap}
+.tcte{display:inline-block;margin-left:6px;padding:0 5px;border-radius:4px;font-size:10.5px;font-weight:600;letter-spacing:.03em;color:var(--info);border:1px solid currentColor;vertical-align:1px}
 .cardt.fim{color:var(--ok)} .cardt.sem{color:var(--mu2)}
 
 .cel-nf small,.cel-st small{display:block;color:var(--mu2);font-size:11.5px;margin-top:1px}
@@ -408,6 +409,11 @@ body.emb .top .emp-logos{display:none}
         <option value="A">Só com alerta</option>
         <option value="OK">Só OK</option>
       </select>
+      <select id="fTipo" multiple hidden>
+        <option value="">Tipo: todos</option>
+        <option value="nfe">NF-e (relatório)</option>
+        <option value="cte">Frete (CT-e)</option>
+      </select>
       <select id="fCard" multiple hidden></select>
       <select id="fPessoa" multiple hidden></select>
       <select id="fAtu" multiple hidden>
@@ -512,6 +518,10 @@ const REGRAS={
   SEM_CARD:      ['I','Pendente e ainda sem card no Controle de Notas'],
   CONF_CARD:     ['I','Card finalizado no Controle de Notas com título “CONFIRMAÇÃO” — classificada como Apenas Confirmação'],
   LANC_CARD:     ['I','Sem título no relatório (lançada sem XML), mas o card foi finalizado com o nº do título — classificada como Lançado'],
+  FRETE_DIAS:    ['A','Frete (CT-e) com card aberto e sem lançamento há mais de {d} dias'],
+  FRETE_SEM_XML: ['A','Card de frete (CT-e) aberto sem o XML do CT-e anexado'],
+  FRETE_NF_PEND: ['A','Card da nota com o lançamento do frete (CT-e) pendente'],
+  FRETE_CARD:    ['I','Card de frete (CT-e) do Controle de Notas — não vem no relatório de NF-e'],
   FORA_ULTIMO:   ['I','Não veio no último relatório carregado'],
   UF_CHAVE:      ['I','UF do emitente vazia — preenchida pela chave de acesso'],
   NS_CHAVE:      ['I','Número/Série vazio — preenchido pela chave de acesso'],
@@ -744,13 +754,14 @@ function processar(){
     ROWS.forEach((o,i)=>{ o.base=LIDAS[i].base; if(BASE.ultima&&o.base.ultima_carga!==BASE.ultima.id)o.oc.push({c:'FORA_ULTIMO',extra:'último em que veio: '+dataCarga(o.base.ultima_carga)}); });
     finalizar(ROWS,dias());
   }
+  juntarFretes();
   cabecalhoArquivo();
   $('#vDrop').hidden=true; $('#vRes').hidden=false; $('#arqChip').hidden=false; $('#bExp').hidden=false;
   const emps=[...new Set(ROWS.map(o=>o.empresa||'(não cadastrada)'))].sort(), empAntes=msGet($('#fEmp'));
   $('#fEmp').innerHTML='<option value="">Empresa: todas</option>'+emps.map(e=>`<option>${esc(e)}</option>`).join('');
   msSet($('#fEmp'),empAntes);
   // Base salva: mostra na hora os cards guardados no cache (buscarCards atualiza logo depois).
-  if(MODO==='base'&&CARDS_CACHE){ ROWS.forEach(o=>{ o.card=CARDS_CACHE.get(o.chave)||null; }); CARDS_OK=true; }
+  if(MODO==='base'&&CARDS_CACHE){ ROWS.forEach(o=>{ if(o.tipo!=='cte')o.card=CARDS_CACHE.get(o.chave)||null; }); CARDS_OK=true; }
   if(CARDS_OK)aplicarCards(); else opcoesStatus();
   desenhar();
   if(EU&&!CARDS_OK&&!CARREGANDO_BASE)buscarCards(ROWS);
@@ -759,7 +770,7 @@ function processar(){
 /* ===== Filtro de múltipla escolha =====
    O <select multiple> continua guardando as opções e a seleção (a 1ª opção, de valor vazio, é o rótulo
    "Status: todos" etc.). Por cima dele vai um botão que abre uma lista com caixas de marcar. */
-const FILTROS_MS=['#fEmp','#fSt','#fVal','#fCard','#fPessoa','#fAtu'];
+const FILTROS_MS=['#fEmp','#fSt','#fVal','#fTipo','#fCard','#fPessoa','#fAtu'];
 const msGet=sel=>[...sel.selectedOptions].map(o=>o.value).filter(Boolean);
 function msSet(sel,vals){ const v=new Set(vals||[]); [...sel.options].forEach(o=>o.selected=!!o.value&&v.has(o.value)); msAtualizar(sel); }
 function msAtualizar(sel){
@@ -798,7 +809,7 @@ document.addEventListener('keydown',e=>{ if(e.key==='Escape')document.querySelec
 
 function filtradas(semRegra){
   // Cada filtro aceita vários valores: dentro do mesmo filtro vale qualquer um (OU); entre filtros, todos (E).
-  const b=norm($('#fBusca').value), emp=msGet($('#fEmp')), st=msGet($('#fSt')), val=msGet($('#fVal')), fc=msGet($('#fCard')), fp=msGet($('#fPessoa')), fa=MODO==='base'?msGet($('#fAtu')):[];
+  const b=norm($('#fBusca').value), emp=msGet($('#fEmp')), st=msGet($('#fSt')), val=msGet($('#fVal')), fc=msGet($('#fCard')), ft=msGet($('#fTipo')), fp=msGet($('#fPessoa')), fa=MODO==='base'?msGet($('#fAtu')):[];
   return ROWS.filter(o=>{
     if(emp.length&&!emp.includes(o.empresa||'(não cadastrada)'))return false;
     if(st.length&&!st.includes(o.status))return false;
@@ -806,10 +817,11 @@ function filtradas(semRegra){
     if(!semRegra&&F.regra&&!o.oc.some(x=>x.c===F.regra))return false;
     if(F.kpi&&!F.kpi(o))return false;
     if(F.graf&&!predF(F.graf)(o))return false;
+    if(ft.length&&!ft.includes(o.tipo||'nfe'))return false;
     if(fc.length&&!fc.some(v=>passaCard(o,v)))return false;
     if(fp.length&&!fp.some(v=>passaPessoa(o,v)))return false;
     if(fa.length&&!fa.some(v=>passaAtu(o,v)))return false;
-    if(b&&!norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.pedido,nomeUsr(o.respId),nomeUsr(o.compId),o.card&&o.card.obra,o.card&&o.card.numero_titulo].join(' ')).includes(b))return false;
+    if(b&&!norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.pedido,nomeUsr(o.respId),nomeUsr(o.compId),o.card&&o.card.obra,o.card&&o.card.numero_titulo,o.tipo==='cte'?'cte ct-e frete':''].join(' ')).includes(b))return false;
     return true;
   });
 }
@@ -822,10 +834,11 @@ function desenhar(){
   const pctd=(n,t)=>t?(n/t*100).toLocaleString('pt-BR',{maximumFractionDigits:0})+'%':'0%';
   const nTot=ROWS.length, lanc=ROWS.filter(o=>o.status==='Lançado'), pend=ROWS.filter(ehPendente);
   const conf=pend.filter(o=>o.status==='Apenas Confirmação').length, pnd=pend.filter(o=>o.status==='Pendente').length, agu=pend.filter(o=>o.status==='Aguardando Confirmação').length;
+  const nFrete=ROWS.filter(o=>o.tipo==='cte').length;
   const nE=ROWS.filter(o=>o.nivel==='E').length, nA=ROWS.filter(o=>o.nivel==='A').length, naoR=ROWS.filter(o=>o.status==='Não realizada'||o.status==='Desconhecida').length;
   const barraK=parts=>`<div class="barra-k">${parts.filter(([v])=>v).map(([v,c])=>`<i style="flex:${v};background:${c}"></i>`).join('')}</div>`;
   const ks=[
-    {k:'tot',l:MODO==='base'?'Notas na base':'Notas no relatório',v:intf(nTot),s:`${brl(soma(ROWS))}${naoR?` · ${intf(naoR)} não realizadas`:''}`,f:null},
+    {k:'tot',l:MODO==='base'?'Notas na base':'Notas no relatório',v:intf(nTot),s:`${brl(soma(ROWS))}${naoR?` · ${intf(naoR)} não realizadas`:''}${nFrete?` · ${intf(nFrete)} fretes (CT-e)`:''}`,f:null},
     {k:'lanc',l:'Lançadas',v:intf(lanc.length),cl:'ok',s:`<b>${pctd(lanc.length,nTot)}</b> das notas · ${brl(soma(lanc))}`,f:o=>o.status==='Lançado',bar:barraK([[lanc.length,'var(--ok)'],[nTot-lanc.length,'transparent']])},
     {k:'pend',l:'Pendentes de lançamento',v:intf(pend.length),cl:'warn',s:`${intf(conf)} confirmadas · ${intf(pnd)} pendentes · ${intf(agu)} aguardando`,f:ehPendente,
       bar:barraK([[conf,COR_ST['Apenas Confirmação']],[pnd,COR_ST['Pendente']],[agu,COR_ST['Aguardando Confirmação']]])},
@@ -861,9 +874,9 @@ function desenhar(){
   const ocCurta=o=>{ const v=o.oc.filter(x=>REGRAS[x.c][0]!=='I'); if(!v.length)return '';
     const pri=[...v].sort((a,b)=>(REGRAS[a.c][0]==='E'?0:1)-(REGRAS[b.c][0]==='E'?0:1))[0];
     return `${esc(txtRegra(pri.c,dias()))}${v.length>1?`<span class="mais-oc">+${v.length-1}</span>`:''}`; };
-  $('#tb').innerHTML=vis.map(o=>`<tr data-l="${o.linha}" title="Linha ${o.linha} do relatório — clique para ver os detalhes">
+  $('#tb').innerHTML=vis.map(o=>`<tr data-l="${o.linha}" title="${o.tipo==='cte'?'Card de frete (CT-e) do Controle de Notas':`Linha ${o.linha} do relatório`} — clique para ver os detalhes">
     <td><span class="dot ${o.nivel}" title="${{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel]}"></span></td>
-    <td class="cel-nf"><span class="mono">${esc(o.numero)}${o.serie?`<span style="color:var(--mu2)">/${esc(o.serie)}</span>`:''}</span><small>${dataBR(o.emissao)}</small></td>
+    <td class="cel-nf"><span class="mono">${esc(o.numero)}${o.serie?`<span style="color:var(--mu2)">/${esc(o.serie)}</span>`:''}</span>${o.tipo==='cte'?' <span class="tcte" title="Frete — CT-e">CT-e</span>':''}<small>${dataBR(o.emissao)}</small></td>
     <td class="cel-emit">${esc(o.emitente)}<small>${o.cnpjEmit?`<span class="mono">${esc(fmtCNPJ(o.cnpjEmit))}</span> · `:''}${o.empresa?esc(o.empresa):'<span style="color:var(--bad)">empresa não cadastrada</span>'}</small></td>
     <td class="num">${o.valor==null?'':brl(o.valor)}</td>
     <td class="cel-st"><span class="st"><i style="background:${COR_ST[o.status]||'var(--mu)'}"></i>${esc(o.status)}</span><small>${cardTag(o)}</small></td>
@@ -1034,7 +1047,7 @@ function desenharLista(){
   const {q,ord}=LISTA, b=norm(q.b), max=300, nivOrd={E:0,A:1,OK:2};
   const ns=LISTA.base.filter(o=>(!q.emp||(o.empresa||'(não cadastrada)')===q.emp)&&(!q.st||o.status===q.st)
     &&(!q.val||(q.val==='EA'?o.nivel!=='OK':o.nivel===q.val))
-    &&(!b||norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.card&&o.card.obra,o.card&&o.card.numero_titulo].join(' ')).includes(b)));
+    &&(!b||norm([o.emitente,o.cnpjEmit,soAlnum(o.cnpjEmit),fmtCNPJ(o.cnpjEmit),o.numero,o.chave,o.titulo,o.empresa,o.natureza,o.manifesto,o.card&&o.card.obra,o.card&&o.card.numero_titulo,o.tipo==='cte'?'cte ct-e frete':''].join(' ')).includes(b)));
   ns.sort((a,c)=>{ let x=a[ord.k],y=c[ord.k]; if(ord.k==='nivel'){x=nivOrd[x];y=nivOrd[y];}
     if(x instanceof Date||y instanceof Date){x=x?+x:-Infinity;y=y?+y:-Infinity;} if(x==null)x=''; if(y==null)y='';
     return (typeof x==='number'&&typeof y==='number'?x-y:String(x).localeCompare(String(y),'pt-BR',{numeric:true}))*ord.dir; });
@@ -1055,10 +1068,15 @@ $('#segMed').onclick=e=>{ const b=e.target.closest('button'); if(!b)return; MED=
 
 function detalhe(o,daLista){
   if(!o)return;
-  $('#dlgT').textContent=`NF ${o.numero||'?'}${o.serie?'/'+o.serie:''} — linha ${o.linha}`;
+  const cte=o.tipo==='cte';
+  $('#dlgT').textContent=cte?`CT-e ${o.numero||'?'}${o.serie?'/'+o.serie:''} — card de frete`:`NF ${o.numero||'?'}${o.serie?'/'+o.serie:''} — linha ${o.linha}`;
   const oc=o.oc.length?`<ul class="ocl">${o.oc.map(x=>`<li><span class="tag ${REGRAS[x.c][0]}">${{E:'Erro',A:'Alerta',I:'Info'}[REGRAS[x.c][0]]}</span><span>${esc(txtRegra(x.c,dias()))}${x.extra?` <span style="color:var(--mu)">— ${esc(x.extra)}</span>`:''}</span></li>`).join('')}</ul>`
     :'<p><span class="tag OK">OK</span> Nenhuma ocorrência nesta nota.</p>';
-  const campos=[['Status',o.status+(o.statusRel&&o.statusRel!==o.status?` (no relatório: ${o.statusRel})`:'')],['Empresa',o.empresa||'(não cadastrada)'],['CNPJ destinatário',o.cnpjDest],['UF destinatário',o.ufDest],
+  const campos=cte?[['Status',o.status],['Tipo','Frete (CT-e) — card do Controle de Notas, não vem no relatório de NF-e'],['Empresa (tomador)',o.empresa||'(não cadastrada)'],
+    ['Tomador',o.destinatarioOrig],['CNPJ tomador',o.cnpjDest],['Transportador',o.emitente],['CNPJ transportador',o.cnpjEmit],['UF',o.ufEmit],
+    ['Emissão',dataBR(o.emissao)],['Valor do frete',o.valor==null?'':brl(o.valor)],['Título',o.card&&o.card.numero_titulo||'—'],
+    ['XML do CT-e',o.xmlCte],['Chave de acesso',o.chave],['Card no Controle de Notas desde',o.criadoEm?new Date(o.criadoEm).toLocaleDateString('pt-BR'):'—']]
+   :[['Status',o.status+(o.statusRel&&o.statusRel!==o.status?` (no relatório: ${o.statusRel})`:'')],['Empresa',o.empresa||'(não cadastrada)'],['CNPJ destinatário',o.cnpjDest],['UF destinatário',o.ufDest],
     ['Emitente',o.emitente],['CNPJ emitente',o.cnpjEmit],['UF emitente',o.ufEmit],['Natureza da operação',o.natureza],
     ['Manifesto',o.manifesto],['Emissão',dataBR(o.emissao)],['Recebimento',dataBR(o.recebimento)],['Valor',o.valor==null?'':brl(o.valor)],
     ['Escrituração',o.escrituracao],['Título/NF avulsa',o.titulo||'0'],['Chave de acesso',o.chave],
@@ -1076,20 +1094,20 @@ function exportar(){
   const lst=filtradas();
   // Colunas na ordem da consulta do Power Query + o resultado da validação.
   const notas=lst.map(o=>({
-    'Emitente':o.emitente,'CNPJ emitente':o.cnpjEmit,'UF emitente':o.ufEmit,'CNPJ destinatário':o.cnpjDest,'UF destinatário':o.ufDest,
+    'Tipo':o.tipo==='cte'?'Frete (CT-e)':'NF-e','Emitente':o.emitente,'CNPJ emitente':o.cnpjEmit,'UF emitente':o.ufEmit,'CNPJ destinatário':o.cnpjDest,'UF destinatário':o.ufDest,
     'Manifesto':o.manifesto,'Natureza da operação':o.natureza,'Recebimento':o.recebimento,'Emissão':o.emissao,'Chave de acesso':o.chave,
     'Número NF':o.numero,'Série':o.serie,'Valor':o.valor,'Escrituração':o.escrituracao,'Título/Nota fiscal avulsa':o.titulo,
-    'Empresas':o.empresa,'Status manifestação':o.status,'Status no relatório':o.statusRel,'Validação':{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel],'Ocorrências':o.ocTexto,'Linha no relatório':o.base?o.base.linha:o.linha,
+    'Empresas':o.empresa,'Status manifestação':o.status,'Status no relatório':o.statusRel,'Validação':{E:'Erro',A:'Alerta',OK:'OK'}[o.nivel],'Ocorrências':o.ocTexto,'Linha no relatório':o.tipo==='cte'?'':o.base?o.base.linha:o.linha,
     ...(o.base?{'Na base desde':dataCarga(o.base.primeira_carga),'Último relatório em que veio':dataCarga(o.base.ultima_carga),'Título desde':o.base.titulo_desde?new Date(o.base.titulo_desde):''}:{}),
     ...(DADOS_OK?{'Pedido':o.pedido||'','Responsável':nomeUsr(o.respId),'Comprador':nomeUsr(o.compId)}:{}),
     ...(CARDS_OK?{'Card no Controle de Notas':o.card?(COL_LABEL[o.card.status]||o.card.status):'','Atribuído no card':o.card?o.card.responsavel||'':''}:{})
   }));
   const ocs=[]; lst.forEach(o=>o.oc.forEach(x=>{ if(REGRAS[x.c][0]==='I')return;
-    ocs.push({'Linha no relatório':o.base?o.base.linha:o.linha,'Nível':REGRAS[x.c][0]==='E'?'Erro':'Alerta','Ocorrência':txtRegra(x.c,dias()),'Detalhe':x.extra||'',
+    ocs.push({'Linha no relatório':o.tipo==='cte'?'card de frete':o.base?o.base.linha:o.linha,'Nível':REGRAS[x.c][0]==='E'?'Erro':'Alerta','Ocorrência':txtRegra(x.c,dias()),'Detalhe':x.extra||'',
       'Empresa':o.empresa,'Emitente':o.emitente,'Número NF':o.numero,'Série':o.serie,'Emissão':o.emissao,'Valor':o.valor,'Manifesto':o.manifesto,'Título':o.titulo,'Chave de acesso':o.chave}); }));
   const wb=XLSX.utils.book_new();
   const ws1=XLSX.utils.json_to_sheet(notas,{cellDates:true,dateNF:'dd/mm/yyyy'});
-  ws1['!cols']=[{wch:38},{wch:20},{wch:6},{wch:20},{wch:6},{wch:24},{wch:30},{wch:12},{wch:12},{wch:48},{wch:10},{wch:6},{wch:14},{wch:14},{wch:10},{wch:28},{wch:22},{wch:10},{wch:80},{wch:8}];
+  ws1['!cols']=[{wch:12},{wch:38},{wch:20},{wch:6},{wch:20},{wch:6},{wch:24},{wch:30},{wch:12},{wch:12},{wch:48},{wch:10},{wch:6},{wch:14},{wch:14},{wch:10},{wch:28},{wch:22},{wch:10},{wch:80},{wch:8}];
   XLSX.utils.book_append_sheet(wb,ws1,'Notas validadas');
   const ws2=XLSX.utils.json_to_sheet(ocs.length?ocs:[{'Ocorrência':'Nenhuma ocorrência'}],{cellDates:true,dateNF:'dd/mm/yyyy'});
   ws2['!cols']=[{wch:8},{wch:8},{wch:60},{wch:30},{wch:28},{wch:38},{wch:10},{wch:6},{wch:12},{wch:14},{wch:24},{wch:10},{wch:48}];
@@ -1116,7 +1134,7 @@ const COLUNAS_CARD=[['importadas_sienge','Importadas SIENGE'],['entradas','Entra
 const COL_LABEL=Object.fromEntries(COLUNAS_CARD);
 const CARD_SEL='id,numero,fornecedor,status,assigned_to,chave_acesso,numero_titulo,obra_id,created_by';
 const CARD_CAMPOS=CARD_SEL.split(',');
-const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD','CONF_CARD','LANC_CARD'];
+const CARD_CODIGOS=['CARD_PEND','CARD_CONCL','CARD_ABERTO','SEM_CARD','CONF_CARD','LANC_CARD','FRETE_NF_PEND'];
 const EMBUTIDO=window.parent&&window.parent!==window;
 const EMBUTIDO_ESTRANHO=EMBUTIDO&&(()=>{ try{ return window.parent.location.origin!==location.origin; }catch(e){ return true; } })();
 let EU=null, CARDS_OK=false, USUARIOS=null;
@@ -1178,6 +1196,7 @@ const melhorCard=(a,b)=>!a?b:!b?a:((a.status==='concluido')!==(b.status==='concl
 async function buscarCards(rows){
   if(!EU||!rows.length)return;
   const alvo=rows===ROWS; conn('consultando os cards…','');
+  if(alvo)rows=rows.filter(o=>o.tipo!=='cte');
   try{
     const porChave=new Map(), achados=new Map();
     const guardar=c=>{ const k=soAlnum(c.chave_acesso); porChave.set(k,melhorCard(porChave.get(k),c)); };
@@ -1218,16 +1237,100 @@ async function buscarCards(rows){
     cards.forEach(c=>{ c.responsavel=c.assigned_to?nomes[c.assigned_to]||'':''; c.obra=c.obra_id?nomesObra[c.obra_id]||'':''; });
     rows.forEach(o=>{ o.card=achados.get(o)||null; });
     if(alvo)CARDS_OK=true;
-    if(alvo&&MODO==='base'&&CACHE){ CARDS_CACHE=new Map(rows.filter(o=>o.card).map(o=>[o.chave,o.card])); CACHE.cards=[...CARDS_CACHE]; cacheGravar(); }
+    if(alvo&&MODO==='base'&&CACHE){ CARDS_CACHE=new Map(rows.filter(o=>o.card&&o.tipo!=='cte').map(o=>[o.chave,o.card])); CACHE.cards=[...CARDS_CACHE]; cacheGravar(); }
+    if(alvo){ await buscarFretes(); juntarFretes(); rows=ROWS; cabecalhoArquivo(); }
     await buscarDados(rows);
     aplicarCards(); desenhar();
     conn(`● ${EU.name} · Controle de Notas conectado${acessoTexto()}`,'ok');
   }catch(e){ console.error(e); conn('Falha ao consultar os cards: '+(e.message||e),'off'); }
 }
+/* ---------- Cards de frete (CT-e) ----------
+   O relatório da base é só de NF-e; os CT-es (frete) entram no Controle de Notas pela importação do relatório de
+   CT-es do SIENGE ou pelo XML. O CT-e que achou a nota fiscal fica gravado no card da nota (frete_cte) e o card
+   próprio dele é encerrado com "CT-e vinculado à(s) NF …" — esse não entra aqui (o frete já está na nota, e a nota
+   ganha o alerta FRETE_NF_PEND enquanto o lançamento do frete estiver pendente). Os demais cards de CT-e (chave
+   modelo 57) entram no validador como linhas próprias, com status pelo card: aberto = Pendente, finalizado = Lançado. */
+let FRETES=[];               // cards de CT-e (linhas de notas) já com responsável/obra
+const FRETE_PEND=new Map();  // id do card da nota → nº do CT-e, para as notas com lançamento do frete pendente
+const FRETE_BASE=10000000;   // linha das notas de frete na tela = FRETE_BASE + id do card (não colide com as linhas do relatório)
+const FRETE_SEL=CARD_SEL+',valor,data_emissao,destinatario,cnpj_destinatario,created_at,lancamento_validado_obs,cte_xml_recebido_em,cte_xml_dispensado_em';
+const ehChaveCte=ch=>{ const d=soDig(ch); return d.length===44&&d.slice(20,22)==='57'; };
+const cteEncerradoPorVinculo=c=>c.status==='concluido'&&String(c.lancamento_validado_obs||'').startsWith('CT-e vinculado à(s) NF ');
+async function buscarFretes(){
+  try{
+    const lista=[];
+    // Chave com "57" nas posições 21-22 (modelo do CT-e); confere de novo aqui porque o filtro do banco não tira a máscara.
+    for(let apos=0;;){
+      const {data,error}=await sbc.from('notas').select(FRETE_SEL).like('chave_acesso','____________________57%').gt('id',apos).order('id').limit(1000);
+      if(error)throw error;
+      (data||[]).forEach(c=>{ if(ehChaveCte(c.chave_acesso)&&!cteEncerradoPorVinculo(c))lista.push(c); });
+      if(!data||data.length<1000)break; apos=data[data.length-1].id;
+    }
+    const ids=[...new Set(lista.map(c=>c.assigned_to).filter(Boolean))], obras=[...new Set(lista.map(c=>c.obra_id).filter(Boolean))];
+    const nomes={}, nomesObra={};
+    if(ids.length){ const {data}=await sbc.rpc('profile_names',{p_ids:ids}); (data||[]).forEach(r=>nomes[r.id]=r.name); }
+    for(const lote of emLotes(obras,200)){ const {data}=await sbc.from('obras').select('id,nome').in('id',lote); (data||[]).forEach(r=>nomesObra[r.id]=r.nome); }
+    lista.forEach(c=>{ c.responsavel=c.assigned_to?nomes[c.assigned_to]||'':''; c.obra=c.obra_id?nomesObra[c.obra_id]||'':''; });
+    FRETES=lista;
+  }catch(e){ console.warn('Não consegui ler os cards de frete (CT-e):',e); }
+  // Notas fiscais com o lançamento do frete pendente no card.
+  try{
+    const mapa=new Map();
+    for(let apos=0;;){
+      const {data,error}=await sbc.from('notas').select('id,frete_cte').eq('frete_lancamento_pendente',true).gt('id',apos).order('id').limit(1000);
+      if(error)throw error; (data||[]).forEach(r=>mapa.set(r.id,r.frete_cte||''));
+      if(!data||data.length<1000)break; apos=data[data.length-1].id;
+    }
+    FRETE_PEND.clear(); mapa.forEach((v,k)=>FRETE_PEND.set(k,v));
+  }catch(e){ console.warn('Não consegui ler as notas com frete pendente:',e); }
+}
+// Card de CT-e → linha do validador (mesmos campos das notas do relatório).
+function linhaFrete(c,d,hoje){
+  const ch=soDig(c.chave_acesso), o={tipo:'cte',linha:FRETE_BASE+c.id,oc:[],card:c}, add=(k,extra)=>o.oc.push({c:k,extra});
+  o.chave=ch; o.emitente=String(c.fornecedor||'').trim(); o.cnpjEmit=fmtCNPJ(ch.slice(6,20)); o.ufEmit=UF_COD[+ch.slice(0,2)]||'';
+  o.destinatarioOrig=String(c.destinatario||'').trim(); o.cnpjDest=String(c.cnpj_destinatario||'').trim(); o.ufDest='';
+  o.manifesto=''; o.manifCod=''; o.natureza='Frete (CT-e)'; o.escrituracao=''; o.recebimento=null;
+  o.emissao=paraData(c.data_emissao); o.valor=c.valor==null?null:Number(c.valor); o.criadoEm=c.created_at||null;
+  o.numero=String(c.numero||'').trim()||String(+ch.slice(25,34)); o.serie=String(+ch.slice(22,25));
+  o.titulo=c.status==='concluido'&&/\d/.test(c.numero_titulo||'')?(parseInt(soDig(c.numero_titulo),10)||1):0;
+  o.empresa=EMPRESAS[soAlnum(o.cnpjDest)]||null;
+  if(!o.empresa)add('EMP_NAO_CAD',o.cnpjDest||'tomador vazio');
+  o.status=o.statusRel=c.status==='concluido'?(cardConfirmacao(c)?'Apenas Confirmação':'Lançado'):'Pendente';
+  const base=o.emissao||(o.criadoEm?paraData(o.criadoEm):null);
+  o.idade=base?Math.floor((hoje-base)/864e5):null;
+  o.xmlCte=c.cte_xml_recebido_em?'anexado em '+new Date(c.cte_xml_recebido_em).toLocaleDateString('pt-BR'):c.cte_xml_dispensado_em?'dispensado em '+new Date(c.cte_xml_dispensado_em).toLocaleDateString('pt-BR'):'não anexado';
+  if(dvMod11(ch.slice(0,43),9)!==+ch[43])add('CHAVE_DV');
+  if(o.valor==null||o.valor<=0)add('VALOR');
+  const rot=`CT-e ${c.numero} em ${COL_LABEL[c.status]||c.status}${c.responsavel?' · '+c.responsavel:''}`;
+  if(c.status!=='concluido'){
+    if(o.idade>d)add('FRETE_DIAS',o.idade+' dias');
+    if(!c.cte_xml_recebido_em&&!c.cte_xml_dispensado_em)add('FRETE_SEM_XML',rot);
+  }
+  add('FRETE_CARD',rot);
+  o.cardCol=COL_LABEL[c.status]||c.status;
+  return o;
+}
+// Põe os cards de frete em ROWS (tira os anteriores). Na base salva entram todos os que o usuário enxerga; no
+// arquivo conferido, só os das empresas que aparecem no arquivo.
+function juntarFretes(){
+  ROWS=ROWS.filter(o=>o.tipo!=='cte');
+  if(!EU||!FRETES.length)return;
+  const hoje=new Date(); hoje.setHours(0,0,0,0);
+  const d=dias(), emps=MODO==='base'?null:new Set(ROWS.map(o=>o.empresa).filter(Boolean));
+  const vistas=new Set(ROWS.map(o=>o.chave));
+  const fr=FRETES.map(c=>linhaFrete(c,d,hoje)).filter(o=>!vistas.has(o.chave)&&(!emps||emps.has(o.empresa))
+    &&(!ACESSO||ACESSO.todas||ACESSO.cnpjs.has(soDig(o.cnpjDest))));
+  finalizar(fr,d);
+  ROWS.push(...fr);
+  // Empresas novas (só de frete) entram no filtro.
+  const sel=$('#fEmp'), antes=msGet(sel), emList=[...new Set(ROWS.map(o=>o.empresa||'(não cadastrada)'))].sort();
+  sel.innerHTML='<option value="">Empresa: todas</option>'+emList.map(e=>`<option>${esc(e)}</option>`).join(''); msSet(sel,antes);
+}
 const cardConfirmacao=c=>!!c&&c.status==='concluido'&&norm(c.numero_titulo).startsWith('confirmacao');
 const cardLancado=c=>!!c&&c.status==='concluido'&&/\d/.test(c.numero_titulo||'');
 function aplicarCards(){
   ROWS.forEach(o=>{
+    if(o.tipo==='cte'){ o.cardCol=COL_LABEL[o.card.status]||o.card.status; return; }
     // Volta ao que o relatório diz antes de reaplicar (os cards podem ter mudado ou o usuário saído).
     o.oc=o.oc.filter(x=>!CARD_CODIGOS.includes(x.c));
     if(o.ocRel){ o.oc.push(...o.ocRel); o.ocRel=null; }
@@ -1235,6 +1338,7 @@ function aplicarCards(){
     o.cardCol=o.card?(COL_LABEL[o.card.status]||o.card.status):'';
     if(!CARDS_OK)return;
     const c=o.card, rot=c?`NF ${c.numero} em ${COL_LABEL[c.status]||c.status}${c.responsavel?' · '+c.responsavel:''}`:'';
+    if(c&&FRETE_PEND.has(c.id))o.oc.push({c:'FRETE_NF_PEND',extra:(FRETE_PEND.get(c.id)?'CT-e '+FRETE_PEND.get(c.id)+' · ':'')+rot});
     if(o.titulo>0){ if(c&&c.status!=='concluido')o.oc.push({c:'CARD_ABERTO',extra:rot}); }
     else if(cardConfirmacao(c)&&ehPendente(o)){
       // Card finalizado com título "CONFIRMAÇÃO": a nota não terá lançamento, só a confirmação — vai para Apenas Confirmação
@@ -1257,6 +1361,7 @@ function aplicarCards(){
   opcoesStatus();
   const sel=$('#fCard'), v=msGet(sel);
   sel.hidden=!CARDS_OK;
+  const st=$('#fTipo'); st.hidden=!ROWS.some(o=>o.tipo==='cte'); if(st.hidden)msSet(st,[]);
   sel.innerHTML=`<option value="">Card: todos</option><option value="com">Com card</option><option value="sem">Pendentes sem card</option>`+COLUNAS_CARD.map(([k,l])=>`<option value="col:${k}">Card em ${esc(l)}</option>`).join('');
   msSet(sel,CARDS_OK?v:[]);
 }
@@ -1281,7 +1386,7 @@ function cardBoxHtml(o){
     return `<div class="cardbox"><h4>Controle de Notas</h4><p class="info" style="margin:0 0 8px">Esta nota ainda não tem card no Controle de Notas${ehPendente(o)?'':' (e já está lançada)'}. As observações e avisos ficam no diálogo do card.</p>
       ${pode?'<button class="btn pri" id="bCriarUm">➕ Criar card em Importadas SIENGE</button> <span id="cbMsg"></span>':''}</div>`; }
   return `<div class="cardbox"><h4>Card no Controle de Notas</h4>
-    <div class="lin"><span>NF <b>${esc(c.numero)}</b></span><span>Coluna <b>${esc(COL_LABEL[c.status]||c.status)}</b></span>${c.responsavel?`<span>Atribuído a <b>${esc(c.responsavel)}</b></span>`:''}${c.obra?`<span>Obra <b>${esc(c.obra)}</b></span>`:''}${c.numero_titulo?`<span>Título <b>${esc(c.numero_titulo)}</b></span>`:''}</div>
+    <div class="lin"><span>${o.tipo==='cte'?'CT-e':'NF'} <b>${esc(c.numero)}</b></span><span>Coluna <b>${esc(COL_LABEL[c.status]||c.status)}</b></span>${c.responsavel?`<span>Atribuído a <b>${esc(c.responsavel)}</b></span>`:''}${c.obra?`<span>Obra <b>${esc(c.obra)}</b></span>`:''}${c.numero_titulo?`<span>Título <b>${esc(c.numero_titulo)}</b></span>`:''}</div>
     <button class="btn" id="bAbrirCard" style="margin:0 0 10px">↗ Abrir card no quadro</button>
     <div class="modal-t" style="font-size:12px;color:var(--mu);text-transform:uppercase;letter-spacing:.05em;margin:4px 0 6px">Diálogo / observações</div>
     <div class="chat" id="chat"><span class="info">Carregando…</span></div>
