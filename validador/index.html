@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <!-- capivara-biometria:inicio -->
-<script>
+<script data-sessao="sb-kygainafarusnsstvvhc-auth-token">
 /* Capivara · desbloqueio por digital ou rosto (biometria do próprio aparelho, via WebAuthn).
  *
  * Fonte única. Este mesmo código vai embutido (entre os comentários
@@ -23,12 +23,18 @@
  *   5 minutos em segundo plano) aparece uma tela de bloqueio que só sai com a digital/rosto.
  *   "Entrar com senha" encerra a sessão salva e volta para a tela de login normal do app.
  * - Navegar de um app para outro na mesma aba não pede de novo (vale por 5 minutos).
+ * - Cada app só considera a PRÓPRIA sessão (os apps usam projetos Supabase diferentes, mas
+ *   ficam no mesmo endereço e enxergam as sessões uns dos outros). A chave da sessão do app vai
+ *   no atributo data-sessao da tag <script> (várias separadas por vírgula). Sem data-sessao
+ *   (página inicial) o script não trava nem oferece: só serve para ativar/desativar.
  * - É uma trava do aparelho: a senha continua sendo a forma de entrar; a biometria só
  *   substitui digitá-la de novo enquanto a sessão salva estiver válida.
  */
 (function () {
   'use strict';
   if (window.CapivaraBiometria) return;
+  var eu = document.currentScript;
+  var SESSOES = ((eu && eu.getAttribute('data-sessao')) || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
 
   var CHAVE = 'capivara-bio';           // localStorage: { id, email, criado }
   var CHAVE_RECUSA = 'capivara-bio-recusa'; // localStorage: data em que respondeu "Agora não"
@@ -43,13 +49,13 @@
   function gravar(st, k, v) { try { if (v == null) st.removeItem(k); else st.setItem(k, v); } catch (e) {} }
   function config() { try { var c = JSON.parse(ler(localStorage, CHAVE) || 'null'); return c && c.id ? c : null; } catch (e) { return null; } }
 
-  /* Sessões do Supabase salvas no navegador (cada app usa a sua chave). */
-  function chavesSessao() {
+  /* Sessões do Supabase salvas no navegador. Sem "todas", só as deste app (data-sessao). */
+  function chavesSessao(todas) {
     var r = [];
     try {
       for (var i = 0; i < localStorage.length; i++) {
         var k = localStorage.key(i);
-        if (!k || !/auth/i.test(k)) continue;
+        if (!k || (todas ? !/auth/i.test(k) : SESSOES.indexOf(k) < 0)) continue;
         try {
           var v = JSON.parse(localStorage.getItem(k));
           var s = v && (v.currentSession || v);
@@ -174,7 +180,7 @@
   /* ---------- ativar / desativar ---------- */
   function ativar() {
     if (!suportado) return Promise.reject(new Error('nao-suportado'));
-    var s = chavesSessao()[0];
+    var s = chavesSessao()[0] || chavesSessao(true)[0];
     var email = (s && s.email) || 'usuario';
     return navigator.credentials.create({ publicKey: {
       challenge: aleatorio(32),
@@ -196,7 +202,7 @@
   function desativar() {
     var fim = function () { gravar(localStorage, CHAVE, null); avisar(); return true; };
     if (!config()) return Promise.resolve(true);
-    if (!logado()) return Promise.resolve(fim());
+    if (!chavesSessao(true).length) return Promise.resolve(fim());
     return verificar().then(fim);
   }
 
