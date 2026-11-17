@@ -47,6 +47,7 @@
   var CHAVE_RECUSA = 'capivara-bio-recusa'; // localStorage: data do "Agora não"
   var CHAVE_OK = 'capivara-bio-ok';         // sessionStorage: último momento desbloqueado nesta aba
   var CHAVE_PULAR = 'capivara-bio-pular';   // sessionStorage: escolheu "Usar email e senha" nesta aba
+  var CHAVE_QUER = 'capivara-bio-quer';     // sessionStorage: pediu para ativar (oferece logo após o login)
   var PRAZO = 5 * 60 * 1000;
   var REOFERTA = 30 * 24 * 3600 * 1000;
 
@@ -220,6 +221,7 @@
     if (trava) return;
     if (m === 'trava' && (!config() || !logado())) return;
     if (m === 'entrar' && (logado() || !podeEntrar())) return;
+    if (m === 'ativar' && logado()) return;
     estilo(); fecharPilula(); fecharOferta();
     modo = m;
     var email = m === 'entrar' ? emailDoCofre() : '';
@@ -228,15 +230,23 @@
     trava.setAttribute('role', 'dialog'); trava.setAttribute('aria-modal', 'true'); trava.setAttribute('aria-labelledby', 'cbio-tit');
     trava.innerHTML = '<div class="cbio-caixa"><div class="cbio-ico">' + ICONE + '</div>' +
       (m === 'trava'
-        ? '<h2 id="cbio-tit">Capivara bloqueado</h2><p>Use a digital ou o reconhecimento de rosto do aparelho para continuar.</p>'
-        : '<h2 id="cbio-tit">Entrar no Capivara</h2><p>Use a digital ou o rosto para entrar' + (email ? ' como <b>' + esc(email) + '</b>' : '') + '.</p>') +
+        ? '<h2 id="cbio-tit">Capivara bloqueado</h2><p>Use a digital, o rosto ou o PIN do aparelho para continuar.</p>'
+        : m === 'ativar'
+        ? '<h2 id="cbio-tit">Ativar digital, rosto ou PIN</h2><p>Neste aparelho ainda não está ativado. Entre <b>uma vez</b> com seu email e senha; logo em seguida aparece o botão <b>Ativar</b>, que pede a digital, o rosto ou o PIN do aparelho. Depois disso, é só usar a digital para entrar em todos os apps do Capivara.</p>'
+        : '<h2 id="cbio-tit">Entrar no Capivara</h2><p>Use a digital, o rosto ou o PIN do aparelho para entrar' + (email ? ' como <b>' + esc(email) + '</b>' : '') + '.</p>') +
       '<div class="cbio-msg" aria-live="polite"></div>' +
-      '<button type="button" class="cbio-btn cbio-pri">' + (m === 'trava' ? 'Desbloquear' : 'Entrar com digital ou rosto') + '</button>' +
-      '<button type="button" class="cbio-btn cbio-sec">Usar email e senha</button></div>';
-    trava.querySelector('.cbio-pri').addEventListener('click', function () { confirmar(false); });
-    trava.querySelector('.cbio-sec').addEventListener('click', usarSenha);
+      '<button type="button" class="cbio-btn cbio-pri">' + (m === 'trava' ? 'Desbloquear' : m === 'ativar' ? 'Entendi, entrar com email e senha' : 'Entrar com digital, rosto ou PIN') + '</button>' +
+      (m === 'ativar' ? '' : '<button type="button" class="cbio-btn cbio-sec">Usar email e senha</button>') + '</div>';
     document.documentElement.appendChild(trava);
     try { document.documentElement.style.overflow = 'hidden'; } catch (e) {}
+    if (m === 'ativar') {
+      trava.querySelector('.cbio-pri').addEventListener('click', function () {
+        gravar(sessionStorage, CHAVE_QUER, '1'); gravar(localStorage, CHAVE_RECUSA, null); fechar();
+      });
+      return;
+    }
+    trava.querySelector('.cbio-pri').addEventListener('click', function () { confirmar(false); });
+    trava.querySelector('.cbio-sec').addEventListener('click', usarSenha);
     if (automatico) {
       // tenta abrir o leitor direto; alguns navegadores (iPhone) exigem o toque no botão
       setTimeout(function () { if (document.visibilityState === 'visible') confirmar(true); }, 250);
@@ -256,7 +266,7 @@
     if (!trava) return;
     var b = trava.querySelector('.cbio-pri');
     b.disabled = sim;
-    b.textContent = sim ? 'Entrando…' : (modo === 'trava' ? 'Desbloquear' : 'Entrar com digital ou rosto');
+    b.textContent = sim ? 'Entrando…' : (modo === 'trava' ? 'Desbloquear' : 'Entrar com digital, rosto ou PIN');
   }
 
   /* Pede a digital/rosto. Devolve a saída PRF (quando houver) para abrir o cofre. */
@@ -367,15 +377,18 @@
     fechar();
   }
 
-  /* Botão flutuante na tela de login do app (depois de "Usar email e senha" ou de sair). */
-  var pilula = null;
+  /* Botão flutuante na tela de login do app. Sem ativação ainda, explica o primeiro passo. */
+  var pilula = null, temLeitor = false;
   function mostrarPilula() {
-    if (pilula || trava || oferta || !document.body || logado() || !podeEntrar()) return;
+    if (pilula || trava || oferta || !document.body || logado() || !temLeitor || !PROJETO || !SESSOES.length) return;
     estilo();
     pilula = document.createElement('button');
     pilula.type = 'button'; pilula.id = 'cbio-pilula';
-    pilula.innerHTML = ICONE + '<span>Entrar com digital ou rosto</span>';
-    pilula.addEventListener('click', function () { gravar(sessionStorage, CHAVE_PULAR, null); abrir('entrar', false); });
+    pilula.innerHTML = ICONE + '<span>Entrar com digital, rosto ou PIN</span>';
+    pilula.addEventListener('click', function () {
+      gravar(sessionStorage, CHAVE_PULAR, null);
+      if (podeEntrar()) abrir('entrar', false); else abrir('ativar', false);
+    });
     document.body.appendChild(pilula);
   }
   function fecharPilula() { if (pilula) { pilula.remove(); pilula = null; } }
@@ -457,22 +470,22 @@
   function oferecer() {
     if (oferta || trava || completo(config()) || !logado()) return;
     var recusa = +ler(localStorage, CHAVE_RECUSA) || 0;
-    if (Date.now() - recusa < REOFERTA) return;
+    if (Date.now() - recusa < REOFERTA && ler(sessionStorage, CHAVE_QUER) !== '1') return;
     PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function (tem) {
       if (!tem || oferta || trava || completo(config()) || !logado() || !document.body) return;
       estilo();
       oferta = document.createElement('div');
-      oferta.id = 'cbio-oferta'; oferta.setAttribute('role', 'dialog'); oferta.setAttribute('aria-label', 'Entrar com digital ou rosto');
-      oferta.innerHTML = '<b>Entrar com digital ou rosto?</b>' +
-        '<span>Neste aparelho, os apps do Capivara passam a entrar com sua digital ou reconhecimento facial, sem digitar email e senha.</span>' +
+      oferta.id = 'cbio-oferta'; oferta.setAttribute('role', 'dialog'); oferta.setAttribute('aria-label', 'Entrar com digital, rosto ou PIN');
+      oferta.innerHTML = '<b>Entrar com digital, rosto ou PIN?</b>' +
+        '<span>Neste aparelho, os apps do Capivara passam a entrar com sua digital, rosto ou PIN do aparelho, sem digitar email e senha.</span>' +
         '<div class="cbio-acoes"><button type="button" class="cbio-btn cbio-sec">Agora não</button>' +
         '<button type="button" class="cbio-btn cbio-pri">Ativar</button></div>';
       oferta.querySelector('.cbio-sec').addEventListener('click', function () {
-        gravar(localStorage, CHAVE_RECUSA, String(Date.now())); fecharOferta();
+        gravar(localStorage, CHAVE_RECUSA, String(Date.now())); gravar(sessionStorage, CHAVE_QUER, null); fecharOferta();
       });
       oferta.querySelector('.cbio-pri').addEventListener('click', function () {
         var b = this; b.disabled = true; b.textContent = 'Aguarde…';
-        ativar().then(fecharOferta).catch(function () { b.disabled = false; b.textContent = 'Tentar de novo'; });
+        ativar().then(function () { gravar(sessionStorage, CHAVE_QUER, null); fecharOferta(); }).catch(function () { b.disabled = false; b.textContent = 'Tentar de novo'; });
       });
       document.body.appendChild(oferta);
     }).catch(function () {});
@@ -490,6 +503,7 @@
     disponivel: function () { return suportado ? PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().catch(function () { return false; }) : Promise.resolve(false); }
   };
   if (!suportado) return;
+  PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(function (v) { temLeitor = !!v; mostrarPilula(); }, function () {});
 
   /* ---------- ciclo ---------- */
   var tinhaSessao = logado();
@@ -513,7 +527,7 @@
     if (agora && !tinhaSessao) { marcarOk(); gravar(sessionStorage, CHAVE_PULAR, null); } // acabou de entrar nesta aba
     if (agora) fecharPilula();
     else { fecharOferta(); if (modo === 'trava') fechar(); }
-    if (agora && modo === 'entrar') fechar();
+    if (agora && (modo === 'entrar' || modo === 'ativar')) fechar();
     tinhaSessao = agora;
     if (!trava && agora && document.visibilityState === 'visible') marcarOk();
     oferecer();
