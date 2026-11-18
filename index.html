@@ -8024,6 +8024,7 @@ document.addEventListener('DOMContentLoaded', () => {
     el.querySelector('button').addEventListener('click', function(){ marcarUso(true); fechar(); });
   }
   function mostrarEncerrada(){
+    return; /* mensagem "Sessão encerrada" retirada (18/11/2026): a saída continua, sem aviso */
     var el = abrir('fim',
       '<div style="font-size:17px;font-weight:700;margin-bottom:6px;">🔒 Sessão encerrada</div>' +
       '<div style="font-size:14px;color:#B3BCC8;">Você foi desconectado depois de 10 minutos sem uso. Entre novamente para continuar.</div>' +
