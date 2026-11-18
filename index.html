@@ -9,6 +9,7 @@
  * Fonte única. Este mesmo código vai embutido (entre os comentários
  * "capivara-biometria:inicio" e "capivara-biometria:fim") em todos os apps do Capivara:
  *   Painel-suprimentos: index.html, inicio.html, medicoes/ (arquivo medicoes/capivara-biometria.js,
+ *                       com data-sessao="sb-medicoes-auth", a chave própria da CAP-Refeições —
  *                       porque a página de Refeições só aceita scripts em arquivo)
  *   almoxarifado:       index.html, aprovacoes/, contagem/, notificacoes/
  *   ControleNotasFiscais: index.html, validador/
@@ -48,6 +49,7 @@
   var CHAVE_OK = 'capivara-bio-ok';         // sessionStorage: último momento desbloqueado nesta aba
   var CHAVE_PULAR = 'capivara-bio-pular';   // sessionStorage: escolheu "Usar email e senha" nesta aba
   var CHAVE_QUER = 'capivara-bio-quer';     // sessionStorage: pediu para ativar (oferece logo após o login)
+  var CHAVE_CARREGA = 'capivara-bio-carrega'; // sessionStorage: acabou de entrar com a digital (recarregando)
   var PRAZO = 5 * 60 * 1000;
   var REOFERTA = 30 * 24 * 3600 * 1000;
 
@@ -194,7 +196,16 @@
     '#cbio-oferta .cbio-btn{width:auto;flex:1;padding:10px 12px;font-size:14px;}' +
     '#cbio-oferta .cbio-sec{margin-top:0;}' +
     '#cbio-pilula{position:fixed;left:50%;bottom:max(16px,env(safe-area-inset-bottom));transform:translateX(-50%);z-index:2147483646;display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;padding:11px 18px 11px 14px;background:#F5C433;color:#1B1408;font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14.5px;font-weight:600;cursor:pointer;box-shadow:0 12px 28px -10px rgba(0,0,0,.5);}' +
-    '#cbio-pilula svg{width:20px;height:20px;}';
+    '#cbio-pilula svg{width:20px;height:20px;}' +
+    '#cbio-trava .cbio-espera{display:none;text-align:center;}' +
+    '#cbio-trava.cbio-carregando .cbio-caixa{display:none;}' +
+    '#cbio-trava.cbio-carregando .cbio-espera{display:block;}' +
+    '#cbio-trava .cbio-giro{width:46px;height:46px;margin:0 auto 20px;border-radius:50%;border:4px solid rgba(245,196,51,.18);border-top-color:#F5C433;animation:cbio-gira .8s linear infinite;}' +
+    '#cbio-trava .cbio-espera b{display:block;font-size:19px;font-weight:700;margin-bottom:4px;}' +
+    '#cbio-trava .cbio-espera span{font-size:14px;color:#B3BCC8;}' +
+    '@keyframes cbio-gira{to{transform:rotate(360deg);}}' +
+    '@media (prefers-reduced-motion:reduce){#cbio-trava .cbio-giro{animation-duration:2.4s;}}';
+  var ESPERA = '<div class="cbio-espera" role="status" aria-live="polite"><div class="cbio-giro"></div><b>Entrando no Capivara…</b><span>Aguarde, carregando.</span></div>';
   var ICONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 11c0 3.5-1 6.5-2.5 8.5"/><path d="M8.6 6.6A6 6 0 0 1 18 11c0 1.5-.1 3-.4 4.4"/><path d="M6 10a6 6 0 0 1 .7-2.8"/><path d="M6 13.5c0 1.8-.4 3.3-1.2 4.5"/><path d="M15 12c0 2.6-.4 5.1-1.3 7.2"/><path d="M9 11a3 3 0 0 1 6-.2"/><path d="M4.3 6.5A9.9 9.9 0 0 1 12 2c5.5 0 10 4.5 10 10 0 .9 0 1.8-.1 2.7"/></svg>';
 
   function estilo() {
@@ -236,7 +247,7 @@
         : '<h2 id="cbio-tit">Entrar no Capivara</h2><p>Use a digital, o rosto ou o PIN do aparelho para entrar' + (email ? ' como <b>' + esc(email) + '</b>' : '') + '.</p>') +
       '<div class="cbio-msg" aria-live="polite"></div>' +
       '<button type="button" class="cbio-btn cbio-pri">' + (m === 'trava' ? 'Desbloquear' : m === 'ativar' ? 'Entendi, entrar com email e senha' : 'Entrar com digital, rosto ou PIN') + '</button>' +
-      (m === 'ativar' ? '' : '<button type="button" class="cbio-btn cbio-sec">Usar email e senha</button>') + '</div>';
+      (m === 'ativar' ? '' : '<button type="button" class="cbio-btn cbio-sec">Usar email e senha</button>') + '</div>' + ESPERA;
     document.documentElement.appendChild(trava);
     try { document.documentElement.style.overflow = 'hidden'; } catch (e) {}
     if (m === 'ativar') {
@@ -260,7 +271,48 @@
     modo = '';
     try { document.documentElement.style.overflow = ''; } catch (e) {}
   }
-  function soltar() { fechar(); marcarOk(); }
+  function soltar() { marcarOk(); if (senhaNaTela()) carregando(); else fechar(); }
+
+  /* ---------- "Aguarde, carregando" no lugar da tela de email e senha ----------
+     Depois da digital, a página recarrega já com a sessão; até o app ler a sessão e trocar de tela,
+     ele mostraria o formulário de login. Esta tela fica por cima até o formulário sumir. */
+  function senhaNaTela() {
+    var ps = document.querySelectorAll('input[type="password"]');
+    for (var i = 0; i < ps.length; i++) {
+      var el = ps[i];
+      if (trava && trava.contains(el)) continue;
+      if (!el.getClientRects().length) continue;
+      var cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || +cs.opacity === 0) continue;
+      return true;
+    }
+    return false;
+  }
+  var esperaTimer = 0;
+  function carregando() {
+    estilo(); fecharPilula(); fecharOferta();
+    if (!trava) {
+      trava = document.createElement('div');
+      trava.id = 'cbio-trava';
+      trava.innerHTML = '<div class="cbio-caixa"></div>' + ESPERA;
+      document.documentElement.appendChild(trava);
+      try { document.documentElement.style.overflow = 'hidden'; } catch (e) {}
+    }
+    trava.classList.add('cbio-carregando');
+    modo = 'carregando';
+    if (esperaTimer) return;
+    var inicio = Date.now(), livre = 0;
+    esperaTimer = setInterval(function () {
+      var passou = Date.now() - inicio;
+      livre = (document.readyState !== 'loading' && !senhaNaTela()) ? livre + 1 : 0;
+      // pronto: formulário de login sumiu (2 checagens seguidas); ou desiste depois de 15 s
+      if ((passou > 600 && livre >= 2) || passou > 15000 || !logado()) {
+        clearInterval(esperaTimer); esperaTimer = 0;
+        if (modo === 'carregando') fechar();
+      }
+    }, 250);
+  }
+  function semCarregando() { if (trava) trava.classList.remove('cbio-carregando'); }
   function mensagem(t) { if (trava) trava.querySelector('.cbio-msg').textContent = t || ''; }
   function ocupado(sim) {
     if (!trava) return;
@@ -339,6 +391,7 @@
       // senha de outro app serviu aqui: passa a valer também para este app
       if (ok.proj !== PROJETO) guardar({ projeto: PROJETO, corpo: ok.corpo }).catch(function () {});
       gravar(sessionStorage, CHAVE_PULAR, null);
+      gravar(sessionStorage, CHAVE_CARREGA, String(Date.now()));
       marcarOk();
       location.reload();
       return new Promise(function () {}); // a página vai recarregar
@@ -351,10 +404,11 @@
     var m = modo;
     verificar().then(function (res) {
       if (m === 'trava') { pedindo = false; soltar(); return; }
-      ocupado(true);
+      ocupado(true); carregando();
       return entrarComCofre(res);
     }).catch(function (e) {
       pedindo = false; ocupado(false);
+      if (modo === 'carregando') { semCarregando(); modo = m; }
       var n = (e && (e.name === 'Error' ? e.message : e.name)) || '';
       if (automatico && (n === 'NotAllowedError' || n === 'AbortError')) return; // espera o toque no botão
       mensagem(n === 'NotAllowedError' || n === 'AbortError' ? 'Não confirmado. Toque no botão para tentar de novo.'
@@ -507,7 +561,10 @@
 
   /* ---------- ciclo ---------- */
   var tinhaSessao = logado();
-  if (tinhaSessao && config() && !okRecente()) abrir('trava', true);
+  var carregaEm = +ler(sessionStorage, CHAVE_CARREGA) || 0;
+  gravar(sessionStorage, CHAVE_CARREGA, null);
+  if (tinhaSessao && Date.now() - carregaEm < 30000) { marcarOk(); carregando(); }
+  else if (tinhaSessao && config() && !okRecente()) abrir('trava', true);
   else if (tinhaSessao) marcarOk();
   else if (podeEntrar() && !pulado()) abrir('entrar', true);
 
@@ -526,7 +583,7 @@
     var agora = logado();
     if (agora && !tinhaSessao) { marcarOk(); gravar(sessionStorage, CHAVE_PULAR, null); } // acabou de entrar nesta aba
     if (agora) fecharPilula();
-    else { fecharOferta(); if (modo === 'trava') fechar(); }
+    else { fecharOferta(); if (modo === 'trava' || modo === 'carregando') fechar(); }
     if (agora && (modo === 'entrar' || modo === 'ativar')) fechar();
     tinhaSessao = agora;
     if (!trava && agora && document.visibilityState === 'visible') marcarOk();
