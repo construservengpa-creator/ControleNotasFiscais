@@ -8060,7 +8060,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if(!agoraLogado){ if(caixa && caixa.tipo === 'aviso') fechar(); return; }
     var ocioso = Date.now() - ultimoUso();
     if(ocioso >= LIMITE) sair();
-    else if(ocioso >= LIMITE - AVISO) mostrarAviso(Math.ceil((LIMITE - ocioso) / 1000));
+    /* aviso de contagem regressiva retirado (18/11/2026): a saída continua aos 10 min, sem a caixa "Você ainda está aí?" */
     else if(caixa && caixa.tipo === 'aviso') fechar();
   }
 
