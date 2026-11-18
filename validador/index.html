@@ -327,7 +327,7 @@
     if (!c) return Promise.reject(new Error('sem-config'));
     var pk = {
       challenge: aleatorio(32),
-      allowCredentials: [{ type: 'public-key', id: deB64u(c.id), transports: ['internal', 'hybrid'] }],
+      allowCredentials: [{ type: 'public-key', id: deB64u(c.id), transports: ['internal'] }], // só o leitor deste aparelho (sem QR code de celular: a chave nunca fica no celular)
       userVerification: 'required',
       timeout: 60000
     };
