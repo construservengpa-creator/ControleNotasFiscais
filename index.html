@@ -42,6 +42,10 @@
   var SESSOES = atrib('data-sessao').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
   var PROJETO = atrib('data-projeto').replace(/\/+$/, '');
   var APIKEY = atrib('data-apikey');
+  /* Gaveta do cofre deste app: projeto + chave da sessão. Dois apps no mesmo projeto Supabase (Painel e
+     CAP-Refeições) têm usuários diferentes; com a gaveta só por projeto, o login de um apagava o do outro. */
+  var COFRE_ID = PROJETO + (SESSOES[0] ? '#' + SESSOES[0] : '');
+  function projetoDe(k) { return String(k).split('#')[0]; }
 
   var CHAVE = 'capivara-bio';               // localStorage: configuração (id da chave, chave pública...)
   var CHAVE_COFRE = 'capivara-bio-cofre';   // localStorage: { projeto: { email, quando, dados cifrados } }
@@ -154,7 +158,7 @@
           if (corpo && corpo.password) {
             p.then(function (r) {
               if (!r || !r.ok) return;
-              pendente = { projeto: PROJETO, corpo: { email: corpo.email, phone: corpo.phone, password: corpo.password } };
+              pendente = { projeto: COFRE_ID, corpo: { email: corpo.email, phone: corpo.phone, password: corpo.password } };
               guardar(pendente).catch(function () {});
             }).catch(function () {});
           }
@@ -219,13 +223,15 @@
   var trava = null, modo = '', pedindo = false;
 
   function emailDoCofre() {
-    var cf = cofre(), e = cf[PROJETO];
+    var cf = cofre(), e = cf[COFRE_ID];
     if (e) return e.email;
-    for (var k in cf) if (cf[k] && cf[k].email) return cf[k].email;
+    for (var k in cf) if (usavel(k) && cf[k] && cf[k].email) return cf[k].email;
     return '';
   }
+  /* gaveta que este app pode usar: a dele, ou a de um app de OUTRO projeto (mesma senha em todos os apps) */
+  function usavel(k) { return k === COFRE_ID || projetoDe(k) !== PROJETO; }
   function podeEntrar() {
-    return !!(suportado && PROJETO && APIKEY && SESSOES.length && completo(config()) && Object.keys(cofre()).length);
+    return !!(suportado && PROJETO && APIKEY && SESSOES.length && completo(config()) && Object.keys(cofre()).some(usavel));
   }
 
   function abrir(m, automatico) {
@@ -358,9 +364,11 @@
   function entrarComCofre(res) {
     return chavePrivada(res).then(function (priv) {
       var cf = cofre(), ordem = [];
-      if (cf[PROJETO]) ordem.push(PROJETO);
+      if (cf[COFRE_ID]) ordem.push(COFRE_ID);
+      // a gaveta antiga (só por projeto) não é usada aqui: pode ser de outro app deste projeto, com outro usuário
+      // depois, a senha usada nos outros apps — menos a de outro app do MESMO projeto (é outro usuário)
       Object.keys(cf).sort(function (a, b) { return (cf[b].quando || '') < (cf[a].quando || '') ? -1 : 1; })
-        .forEach(function (k) { if (k !== PROJETO) ordem.push(k); });
+        .forEach(function (k) { if (k !== COFRE_ID && usavel(k)) ordem.push(k); });
       var tentados = {}, semRede = false;
       function proximo(i) {
         if (i >= ordem.length) throw new Error(semRede ? 'sem-rede' : 'senha-recusada');
@@ -375,8 +383,8 @@
             body: JSON.stringify(corpo)
           }).then(function (r) {
             if (r.ok) return r.json().then(function (s) { return { sessao: s, corpo: corpo, proj: proj }; });
-            if (proj === PROJETO && (r.status === 400 || r.status === 401)) {
-              var atual = cofre(); delete atual[PROJETO]; gravar(localStorage, CHAVE_COFRE, JSON.stringify(atual));
+            if (proj === COFRE_ID && (r.status === 400 || r.status === 401)) {
+              var atual = cofre(); delete atual[proj]; gravar(localStorage, CHAVE_COFRE, JSON.stringify(atual));
             }
             return proximo(i + 1);
           }, function () { semRede = true; return proximo(i + 1); });
@@ -389,7 +397,7 @@
       if (!s.expires_at && s.expires_in) s.expires_at = Math.floor(Date.now() / 1000) + s.expires_in;
       gravar(localStorage, SESSOES[0], JSON.stringify(s));
       // senha de outro app serviu aqui: passa a valer também para este app
-      if (ok.proj !== PROJETO) guardar({ projeto: PROJETO, corpo: ok.corpo }).catch(function () {});
+      if (ok.proj !== COFRE_ID) guardar({ projeto: COFRE_ID, corpo: ok.corpo }).catch(function () {});
       gravar(sessionStorage, CHAVE_PULAR, null);
       gravar(sessionStorage, CHAVE_CARREGA, String(Date.now()));
       marcarOk();
