@@ -955,6 +955,28 @@ html[data-tema="estoque"] .drop{background:#FFFFFF;border-color:rgba(27,33,41,.1
 }
 body.emb .top .emp-logos{display:none}
 </style>
+<style id="capivara-liga-desliga">
+/* Capivara: toda caixa de marcar aparece como botão liga/desliga. É o mesmo <input type="checkbox">
+   (mesmo clique, mesmo "checked", mesmos eventos) — só muda a aparência. Igual em todos os apps do Capivara. */
+input[type=checkbox]{
+  -webkit-appearance:none !important;appearance:none !important;
+  position:relative;display:inline-block;vertical-align:middle;box-sizing:border-box;
+  width:36px !important;height:20px !important;min-width:36px !important;max-width:36px !important;flex:0 0 36px !important;
+  padding:0 !important;border:0 !important;border-radius:999px !important;transform:none !important;
+  background:#A3ABB5 !important;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);cursor:pointer;transition:background-color .15s;
+}
+input[type=checkbox]::before{
+  content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+  background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35);transition:transform .15s;
+}
+input[type=checkbox]:checked{background:#22A35A !important}
+input[type=checkbox]:checked::before{transform:translateX(16px)}
+input[type=checkbox]:indeterminate{background:#7FBF97 !important}
+input[type=checkbox]:indeterminate::before{transform:translateX(8px)}
+input[type=checkbox]:disabled{opacity:.5;cursor:not-allowed}
+input[type=checkbox]:focus-visible{outline:2px solid #22A35A;outline-offset:2px}
+@media (prefers-reduced-motion:reduce){input[type=checkbox],input[type=checkbox]::before{transition:none}}
+</style>
 </head>
 <body>
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
