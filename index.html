@@ -915,6 +915,10 @@ body.arrastando-ativo, body.arrastando-ativo * { cursor: grabbing !important; us
   outline: 2px solid var(--accent); outline-offset: 1px;
   background: color-mix(in srgb, var(--accent) 7%, var(--surface-1));
 }
+/* Seleção pelo próprio card: clique no card seleciona/tira (um ou vários). A caixa continua no card, escondida,
+   só para guardar o estado — não aparece mais o botão "selecionar". */
+.card .checkbox-row { display: none; }
+.card.pode-arrastar:has(.checkbox-row):hover { border-top-color: var(--accent-dim); border-right-color: var(--accent-dim); border-bottom-color: var(--accent-dim); }
 .card.arrastando { opacity: 0.4; }
 .col.drop-ok { outline: 2px dashed var(--accent-dim); outline-offset: -2px; }
 .col.drop-hover { outline: 2px solid var(--accent); outline-offset: -2px; background: color-mix(in srgb, var(--accent) 6%, var(--page)); }
@@ -1592,7 +1596,7 @@ input[type=checkbox]:focus-visible{outline:2px solid #22A35A;outline-offset:2px}
             <span><span class="contador" id="selecaoMoverContador">0</span> nota(s) selecionada(s) — arraste qualquer uma delas até a coluna de destino para mover todas de uma vez.</span>
             <button class="btn secondary small" id="selecaoMoverLimparBtn" type="button">Limpar seleção</button>
           </div>
-          <p class="legend-note hidden" id="selecaoMoverDica" style="margin:8px 0 0;">Dica: marque as notas (ou Ctrl/⌘ + clique no card) e arraste para outra coluna para mover em massa. Também dá para arrastar um card sozinho.</p>
+          <p class="legend-note hidden" id="selecaoMoverDica" style="margin:8px 0 0;">Dica: clique nos cards para selecionar (um ou vários) e arraste para outra coluna para mover em massa. Também dá para arrastar um card sozinho.</p>
         </div>
 
         <div class="panel" id="distribuicaoPanel">
@@ -4306,12 +4310,13 @@ function setupArrastarSoltar() {
   board.addEventListener('dragstart', (ev) => { if (ev.target.closest && ev.target.closest('.card.pode-arrastar')) ev.preventDefault(); });
   board.addEventListener('contextmenu', (ev) => { if (ARRASTE.pendente || ARRASTE.ativo) ev.preventDefault(); });
 
-  // Clique logo após soltar não deve abrir nada; Ctrl/⌘ + clique alterna a seleção.
+  // Clique logo após soltar não deve abrir nada; clique no card (fora de botões, listas e links) seleciona ou tira a seleção.
   board.addEventListener('click', (ev) => {
     if (ARRASTE.engolirClique) { ev.stopPropagation(); ev.preventDefault(); return; }
-    if (!(ev.ctrlKey || ev.metaKey)) return;
     const card = ev.target.closest('.card.pode-arrastar');
     if (!card || ev.target.closest(EL_INTERATIVO)) return;
+    const sel = window.getSelection && window.getSelection();
+    if (sel && !sel.isCollapsed && card.contains(sel.anchorNode)) return; // estava selecionando texto para copiar
     ev.preventDefault();
     const box = card.querySelector('.entrada-check, .atribuir-lote-check, .mover-check');
     if (!box) return;
