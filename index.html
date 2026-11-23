@@ -908,6 +908,18 @@ main.content.validador-ativo { padding: 8px 10px 0; }
 .col[data-col="concluido"] .col-head { background: color-mix(in srgb, var(--col-concluido) 14%, transparent); }
 .col-body { padding: 10px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
 /* ---------- Arrastar e soltar (mover em massa) ---------- */
+.perfis-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.perfil-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; background: var(--surface-1); display: flex; flex-direction: column; gap: 8px; }
+.perfil-card h3 { margin: 0; font-size: 15px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.perfil-card .perfil-rotina { font-size: 13px; color: var(--text-muted); white-space: pre-wrap; margin: 0; }
+.perfil-perms { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; }
+.perfil-perms li.nao { color: var(--text-muted); text-decoration: line-through; opacity: .75; }
+.perfil-card .actions { display: flex; gap: 6px; margin-top: auto; flex-wrap: wrap; }
+.perm-opcao { display: flex; align-items: flex-start; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); cursor: pointer; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.perm-opcao input { width: auto; margin: 3px 0 0; }
+.perm-opcao small { display: block; color: var(--text-muted); font-weight: 400; }
+.field label.perm-opcao, .field label.perm-opcao small { text-transform: none; letter-spacing: 0; font-family: var(--font-body); font-size: 13.5px; color: var(--text-primary); }
+.field label.perm-opcao small { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
 .card.pode-arrastar { cursor: grab; touch-action: manipulation; -webkit-touch-callout: none; }
 .card.pode-arrastar :is(button, select, input, a, label) { cursor: pointer; }
 body.arrastando-ativo, body.arrastando-ativo * { cursor: grabbing !important; user-select: none !important; -webkit-user-select: none !important; }
@@ -1575,6 +1587,7 @@ input[type=checkbox]:focus-visible{outline:2px solid #22A35A;outline-offset:2px}
       <button data-view="validador" id="tabValidador">Validador NF</button>
       <button data-view="obras" id="tabObras">Obras</button>
       <button data-view="usuarios" id="tabUsuarios">Usuários</button>
+      <button data-view="perfis" id="tabPerfis" class="hidden">Perfis</button>
       <button data-view="auditoria" id="tabAuditoria">Auditoria</button>
       <button data-view="relatorios">Relatórios</button>
     </nav>
@@ -1903,8 +1916,8 @@ input[type=checkbox]:focus-visible{outline:2px solid #22A35A;outline-offset:2px}
           <p class="desc">
             O login (e-mail e senha) é criado no painel do Supabase, em
             <strong>Authentication &gt; Users</strong> (peça isso ao responsável técnico).
-            Aqui você só define o papel de acesso e, para supervisor/operador, a coluna de
-            trabalho — use exatamente o mesmo e-mail já criado no Supabase.
+            Aqui você só define o perfil de acesso (crie e ajuste perfis na aba <strong>Perfis</strong>) e,
+            para perfis de supervisor/operador, a coluna de trabalho — use exatamente o mesmo e-mail já criado no Supabase.
           </p>
           <form id="usuarioForm">
             <div class="form-grid">
@@ -1917,7 +1930,7 @@ input[type=checkbox]:focus-visible{outline:2px solid #22A35A;outline-offset:2px}
                 <input type="email" id="uEmail" required />
               </div>
               <div class="field">
-                <label for="uPapel">Papel *</label>
+                <label for="uPapel">Perfil *</label>
                 <select id="uPapel" required>
                   <option value="operador">Operador</option>
                   <option value="supervisor">Supervisor</option>
@@ -1951,9 +1964,26 @@ input[type=checkbox]:focus-visible{outline:2px solid #22A35A;outline-offset:2px}
             Supabase em <strong>Authentication &gt; Users</strong>.
           </p>
           <table class="data-table">
-            <thead><tr><th>Nome</th><th>E-mail</th><th>Papel</th><th>Coluna</th><th>Empresas/obras</th><th>Status</th><th>Último acesso</th><th></th></tr></thead>
+            <thead><tr><th>Nome</th><th>E-mail</th><th>Perfil</th><th>Coluna</th><th>Empresas/obras</th><th>Status</th><th>Último acesso</th><th></th></tr></thead>
             <tbody id="usuariosBody"></tbody>
           </table>
+        </div>
+      </section>
+
+      <!-- ---------- PERFIS ---------- -->
+      <section class="view" id="view-perfis">
+        <div class="panel">
+          <h2>Perfis de acesso</h2>
+          <p class="desc">
+            Cada usuário tem um perfil. O <strong>nível</strong> do perfil (Supervisor ou Operador) define o que a pessoa
+            enxerga no quadro e as regras de coluna; as <strong>permissões</strong> ligam ou desligam cada ação; e a
+            <strong>rotina</strong> descreve o que esse perfil faz no dia a dia (a pessoa vê clicando no nome do perfil, no topo da tela).
+            Os perfis Administrador, Supervisor e Operador são do sistema: não podem ser excluídos, mas as permissões e a rotina de Supervisor e Operador podem ser ajustadas.
+          </p>
+          <div class="form-actions" style="margin:0 0 12px">
+            <button type="button" class="btn" id="novoPerfilBtn">Novo perfil</button>
+          </div>
+          <div id="perfisLista" class="perfis-lista"></div>
         </div>
       </section>
 
@@ -2166,7 +2196,7 @@ async function loginComSupabaseAuth(email, password) {
   const uid = authData.user.id;
 
   let { data: perfil, error: perfilError } = await supabaseClient
-    .from('profiles').select('id,name,email,role,coluna,active').eq('id', uid).maybeSingle();
+    .from('profiles').select('id,name,email,role,coluna,active,perfil_id').eq('id', uid).maybeSingle();
   if (perfilError) { await supabaseClient.auth.signOut(); throw new Error('Não foi possível carregar seu perfil: ' + perfilError.message); }
 
   if (!perfil) {
@@ -2192,7 +2222,7 @@ async function loginComSupabaseAuth(email, password) {
   }
 
   try { await supabaseClient.rpc('registrar_login'); } catch (e) { /* melhor esforço, não bloqueia o login */ }
-  return { id: perfil.id, name: perfil.name, email: perfil.email, role: perfil.role, coluna: perfil.coluna };
+  return anexarPerfil({ id: perfil.id, name: perfil.name, email: perfil.email, role: perfil.role, coluna: perfil.coluna }, perfil.perfil_id);
 }
 
 async function logoutSupabaseAuth() {
@@ -2432,7 +2462,7 @@ async function gravarAcessoValidador(userId, acesso) {
 }
 
 function fmtUserRow(u) {
-  return { id: u.id, name: u.name, email: u.email, role: u.role, coluna: u.coluna, active: !!u.active, createdAt: u.created_at, lastLoginAt: u.last_login_at };
+  return { id: u.id, name: u.name, email: u.email, role: u.role, perfilId: u.perfil_id || null, coluna: u.coluna, active: !!u.active, createdAt: u.created_at, lastLoginAt: u.last_login_at };
 }
 
 function fmtObraRow(o, nomes) {
@@ -2533,9 +2563,9 @@ async function apiGet(path) {
   if (pathname === '/api/auth/me') {
     const { data: authData } = await supabaseClient.auth.getUser();
     if (!authData || !authData.user) fail(401, 'Não autenticado.');
-    const { data: perfil, error } = await supabaseClient.from('profiles').select('id,name,email,role,coluna,active').eq('id', authData.user.id).maybeSingle();
+    const { data: perfil, error } = await supabaseClient.from('profiles').select('id,name,email,role,coluna,active,perfil_id').eq('id', authData.user.id).maybeSingle();
     if (error || !perfil || !perfil.active) fail(401, 'Sessão inválida ou usuário inativo.');
-    return { user: { id: perfil.id, name: perfil.name, email: perfil.email, role: perfil.role, coluna: perfil.coluna } };
+    return { user: await anexarPerfil({ id: perfil.id, name: perfil.name, email: perfil.email, role: perfil.role, coluna: perfil.coluna }, perfil.perfil_id) };
   }
 
   if (pathname === '/api/comentarios/pendentes') {
@@ -3016,6 +3046,7 @@ async function apiPost(path, body) {
       id: uid.data, name: body.name, email: String(body.email).toLowerCase().trim(),
       role: body.role, coluna: body.role === 'admin' ? null : body.coluna, active: true,
     };
+    if (body.perfilId) linha.perfil_id = Number(body.perfilId);
     const { data: jaExiste } = await supabaseClient.from('profiles').select('id').eq('id', uid.data).maybeSingle();
     const { data, error } = jaExiste
       ? await supabaseClient.from('profiles').update(linha).eq('id', uid.data).select().single()
@@ -3103,6 +3134,7 @@ async function apiPut(path, body) {
     const patch = {};
     if (body.name !== undefined) patch.name = body.name;
     if (body.role !== undefined) patch.role = body.role;
+    if (body.perfilId !== undefined) patch.perfil_id = body.perfilId ? Number(body.perfilId) : null;
     if (body.coluna !== undefined) patch.coluna = body.coluna;
     if (body.active !== undefined) patch.active = !!body.active;
     const { data, error } = await supabaseClient.from('profiles').update(patch).eq('id', seg[2]).select().single();
@@ -3191,11 +3223,58 @@ const PRIORIDADE_ORDEM = { alta: 0, media: 1, baixa: 2 };
 
 let CURRENT_USER = null;
 
+/* ---------- Perfis e permissões ----------
+   Cada usuário tem um perfil (tabela "perfis"): um nível base (Administrador, Supervisor ou Operador — define
+   o que ele enxerga e as regras de coluna, como o antigo "papel") e permissões liga/desliga. Só valem as
+   permissões que existem para o nível; o Administrador tem todas. O banco aplica as mesmas regras
+   (SQL 20261124_perfis_configuraveis.sql — tem_permissao / exigir_permissao); aqui elas só escondem os botões. */
+const PERMISSOES = [
+  { chave: 'cadastrar_nota', rotulo: 'Cadastrar nota', desc: 'Aba "Cadastrar Nota".', niveis: ['supervisor', 'operador'] },
+  { chave: 'editar_card', rotulo: 'Editar dados do card', desc: 'Botão "Editar" (número, fornecedor, valor, obra, vencimento, frete…).', niveis: ['supervisor', 'operador'] },
+  { chave: 'concluir_card', rotulo: 'Concluir card', desc: 'Botão "Concluir" (operador: só nos cards atribuídos a ele, na sua coluna).', niveis: ['supervisor', 'operador'] },
+  { chave: 'escalar_pendencias', rotulo: 'Encaminhar para Pendências', desc: 'Botão "Escalar p/ Pendências" nos cards atribuídos a ele.', niveis: ['operador'] },
+  { chave: 'mover_cards', rotulo: 'Mover cards entre colunas', desc: 'Arrastar cards, "Mover para…", mover em massa e "Reabrir".', niveis: ['supervisor'] },
+  { chave: 'distribuir_cards', rotulo: 'Distribuir e atribuir responsável', desc: 'Distribuição de Entradas, "Atribuir a…" e atribuição em massa.', niveis: ['supervisor'] },
+  { chave: 'alterar_prioridade', rotulo: 'Alterar prioridade', desc: 'Seletor de prioridade nos cards de Entradas / Importadas SIENGE.', niveis: ['supervisor'] },
+  { chave: 'validar_lancamento', rotulo: 'Validar lançamento', desc: '"Validar lançamento e encerrar" na Finalização.', niveis: ['supervisor'] },
+  { chave: 'excluir_anexos', rotulo: 'Excluir anexos de outras pessoas', desc: 'Excluir documentos anexados aos cards.', niveis: ['supervisor'] },
+  { chave: 'importar', rotulo: 'Importar SIENGE e CT-es', desc: 'Aba "Importar SIENGE" e importação de CT-es.', niveis: ['supervisor'] },
+  { chave: 'gerenciar_obras', rotulo: 'Cadastrar e editar obras', desc: 'Aba "Obras".', niveis: ['supervisor'] },
+  { chave: 'ver_usuarios', rotulo: 'Ver a equipe', desc: 'Aba "Usuários" (só consulta — editar usuários é do Administrador).', niveis: ['supervisor'] },
+  { chave: 'ver_auditoria', rotulo: 'Ver auditoria', desc: 'Aba "Auditoria".', niveis: ['supervisor'] },
+];
+const NIVEL_LABELS = { admin: 'Administrador', supervisor: 'Supervisor', operador: 'Operador' };
+function permissoesDoNivel(nivel) {
+  return PERMISSOES.filter((p) => p.niveis.includes(nivel)).map((p) => p.chave);
+}
+function pode(chave) {
+  if (!CURRENT_USER) return false;
+  if (CURRENT_USER.role === 'admin') return true;
+  if (!permissoesDoNivel(CURRENT_USER.role).includes(chave)) return false;
+  // Sem perfil carregado (ex.: SQL dos perfis ainda não aplicado) vale o padrão do nível — o comportamento antigo.
+  const perms = CURRENT_USER.perfil ? CURRENT_USER.perfil.permissoes || [] : permissoesDoNivel(CURRENT_USER.role);
+  return perms.includes(chave);
+}
+async function anexarPerfil(user, perfilId) {
+  user.perfilId = perfilId || null;
+  user.perfil = null;
+  try {
+    let q = supabaseClient.from('perfis').select('id,nome,nivel,descricao,permissoes,sistema');
+    q = perfilId ? q.eq('id', perfilId) : q.eq('sistema', true).eq('nivel', user.role);
+    const { data } = await q.maybeSingle();
+    if (data) user.perfil = data;
+  } catch (e) { /* sem a tabela de perfis: usa o padrão do nível */ }
+  return user;
+}
+function nomePerfilDoUsuario(u) {
+  return (u.perfil && u.perfil.nome) || u.perfilNome || ROLE_LABELS[u.role] || u.role;
+}
+
 /* ---------- Versão publicada ----------
    IMPORTANTE ao editar este arquivo: mude APP_VERSION a cada publicação. A tela compara com a versão do arquivo
    no servidor (a cada 2 min e ao voltar para a aba) e, se mudou, mostra a faixa "Nova versão — Recarregar".
    Assim ninguém fica dias com uma aba antiga rodando lógica velha. */
-const APP_VERSION = '2026-10-15T17:00:00-03:00';
+const APP_VERSION = '2026-11-23T14:00:00-03:00';
 let _versaoAvisoMostrado = false, _versaoUltimaChecagem = 0;
 function iniciarVerificacaoDeVersao() {
   const logo = document.getElementById('appLogo');
@@ -3497,7 +3576,11 @@ function afterLogin(user) {
   document.getElementById('loginScreen').classList.add('hidden');
   document.getElementById('appShell').classList.remove('hidden');
   document.getElementById('userName').textContent = user.name;
-  document.getElementById('userRoleBadge').textContent = ROLE_LABELS[user.role] + (user.coluna ? ' · ' + COLUNA_LABELS[user.coluna] : '');
+  const badgePerfil = document.getElementById('userRoleBadge');
+  badgePerfil.textContent = nomePerfilDoUsuario(user) + (user.coluna ? ' · ' + COLUNA_LABELS[user.coluna] : '');
+  badgePerfil.title = 'Ver a rotina e as permissões do seu perfil';
+  badgePerfil.style.cursor = 'pointer';
+  badgePerfil.onclick = () => openMinhaRotinaModal();
 
   // Os avisos 🗂️ e 💬 aparecem para todo usuário logado desde o login (antes só surgiam depois da 1ª consulta
   // responder — se ela falhasse, ficavam escondidos sem aviso nenhum).
@@ -3522,20 +3605,19 @@ function afterLogin(user) {
 
   const isAdmin = user.role === 'admin';
   const isSupervisor = user.role === 'supervisor';
-  const isOperador = user.role === 'operador';
-  // Cadastro de notas agora é liberado para os três perfis (admin,
-  // supervisor e operador) — antes só admin/supervisor viam essa aba.
-  document.getElementById('tabCadastro').classList.toggle('hidden', !(isAdmin || isSupervisor || isOperador));
-  document.getElementById('tabImportarSienge').classList.toggle('hidden', !(isAdmin || isSupervisor));
-  document.getElementById('tabObras').classList.toggle('hidden', !(isAdmin || isSupervisor));
-  document.getElementById('tabUsuarios').classList.toggle('hidden', !(isAdmin || isSupervisor));
-  document.getElementById('tabAuditoria').classList.toggle('hidden', !(isAdmin || isSupervisor));
+  // O que cada um vê depende das permissões do perfil (ver PERMISSOES / pode()).
+  document.getElementById('tabCadastro').classList.toggle('hidden', !pode('cadastrar_nota'));
+  document.getElementById('tabImportarSienge').classList.toggle('hidden', !pode('importar'));
+  document.getElementById('tabObras').classList.toggle('hidden', !pode('gerenciar_obras'));
+  document.getElementById('tabUsuarios').classList.toggle('hidden', !(isAdmin || pode('ver_usuarios')));
+  document.getElementById('tabPerfis').classList.toggle('hidden', !isAdmin);
+  document.getElementById('tabAuditoria').classList.toggle('hidden', !pode('ver_auditoria'));
   document.getElementById('distribuicaoPanel').classList.add('hidden');
   document.getElementById('atribuicaoLotePanel').classList.add('hidden');
-  document.getElementById('importarSiengePanel').classList.toggle('hidden', !(isAdmin || isSupervisor));
-  document.getElementById('importarCtesPanel').classList.toggle('hidden', !(isAdmin || isSupervisor));
+  document.getElementById('importarSiengePanel').classList.toggle('hidden', !pode('importar'));
+  document.getElementById('importarCtesPanel').classList.toggle('hidden', !pode('importar'));
   document.getElementById('novoUsuarioPanel').classList.toggle('hidden', !isAdmin);
-  document.getElementById('novaObraPanel').classList.toggle('hidden', !(isAdmin || isSupervisor));
+  document.getElementById('novaObraPanel').classList.toggle('hidden', !pode('gerenciar_obras'));
 
   if (isSupervisor && user.coluna) {
     const sel = document.getElementById('distribuirColunaSelect');
@@ -3591,6 +3673,7 @@ function switchView(view) {
   if (view === 'cadastro') { loadUltimosCadastros(); popularObraSelect(document.getElementById('nfObra')); }
   if (view === 'obras') loadObras();
   if (view === 'usuarios') loadUsuarios();
+  if (view === 'perfis') loadPerfis();
   if (view === 'auditoria') loadAuditoria();
   if (view === 'relatorios') loadRelatorios();
   document.querySelector('main.content').classList.toggle('validador-ativo', view === 'validador');
@@ -3867,25 +3950,25 @@ function renderCard(nota, coluna) {
   const div = document.createElement('div');
   div.className = 'card';
   div.dataset.prioridade = nota.prioridade || 'media';
-  const canDistribuir = CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor';
-  // O operador também edita os dados gerais de qualquer card que enxerga —
-  // só não pode mudar status/responsável (isso fica restrito a
-  // admin/supervisor, ver PUT /api/notas/:id).
-  const canEditarDados = canDistribuir || CURRENT_USER.role === 'operador';
-  const canConcluir =
+  // Ações liberadas pelas permissões do perfil (ver PERMISSOES / pode()). Status e responsável pelo
+  // "Editar" seguem restritos a admin/supervisor com permissão de mover (ver PUT /api/notas/:id).
+  const canDistribuir = pode('distribuir_cards');
+  const canMover = pode('mover_cards');
+  const canEditarDados = pode('editar_card');
+  const canConcluir = pode('concluir_card') && (
     CURRENT_USER.role === 'admin' ||
     (CURRENT_USER.role === 'supervisor' && CURRENT_USER.coluna === nota.status) ||
-    (CURRENT_USER.role === 'operador' && CURRENT_USER.id === nota.assignedTo);
-  const canEscalar =
+    (CURRENT_USER.role === 'operador' && CURRENT_USER.id === nota.assignedTo));
+  const canEscalar = pode('escalar_pendencias') &&
     CURRENT_USER.role === 'operador' && CURRENT_USER.id === nota.assignedTo && coluna !== 'entradas' && coluna !== 'pendencias';
-  const canEditarPrioridade = (coluna === 'entradas' || coluna === 'importadas_sienge') && canDistribuir;
+  const canEditarPrioridade = (coluna === 'entradas' || coluna === 'importadas_sienge') && pode('alterar_prioridade');
 
   let checkboxHtml = '';
   if (coluna === 'entradas' && canDistribuir) {
     checkboxHtml = `<div class="checkbox-row"><input type="checkbox" class="entrada-check" data-id="${nota.id}" ${selectedEntradas.has(nota.id) ? 'checked' : ''}/> <span style="font-size:11px;color:var(--text-muted)">selecionar</span></div>`;
   } else if (COLUNAS_DISTRIBUIVEIS.includes(coluna) && canDistribuir && coluna === colunaAtribuicaoLoteSelecionada()) {
     checkboxHtml = `<div class="checkbox-row"><input type="checkbox" class="atribuir-lote-check" data-id="${nota.id}" ${selectedAtribuirLote.has(nota.id) ? 'checked' : ''}/> <span style="font-size:11px;color:var(--text-muted)">selecionar p/ atribuição em massa</span></div>`;
-  } else if (canDistribuir) {
+  } else if (canMover) {
     checkboxHtml = `<div class="checkbox-row"><input type="checkbox" class="mover-check" data-id="${nota.id}" ${selectedMover.has(nota.id) ? 'checked' : ''}/> <span style="font-size:11px;color:var(--text-muted)">selecionar p/ mover</span></div>`;
   }
 
@@ -3988,10 +4071,10 @@ function renderCard(nota, coluna) {
   if (coluna !== 'entradas' && coluna !== 'importadas_sienge' && coluna !== 'concluido' && !(precisaHomologar && !nota.homologadoPor) && !precisaXmlCte(nota) && canConcluir) {
     actionsHtml += `<button class="btn small" data-action="concluir" data-id="${nota.id}">Concluir</button>`;
   }
-  if (coluna === 'concluido' && !nota.lancamentoValidadoPor && canDistribuir) {
+  if (coluna === 'concluido' && !nota.lancamentoValidadoPor && pode('validar_lancamento')) {
     actionsHtml += `<button class="btn small" data-action="validar-lancamento" data-id="${nota.id}">Validar lançamento e encerrar</button>`;
   }
-  if (coluna === 'concluido' && canDistribuir) {
+  if (coluna === 'concluido' && canMover) {
     actionsHtml += `<button class="btn secondary small" data-action="reabrir" data-id="${nota.id}">Reabrir</button>`;
   }
   if (precisaHomologar && nota.obra && !nota.homologadoPor && podeHomologar(nota) && !precisaXmlCte(nota)) {
@@ -4000,7 +4083,7 @@ function renderCard(nota, coluna) {
   if (canEscalar) {
     actionsHtml += `<button class="btn secondary small" data-action="escalar" data-id="${nota.id}">Escalar p/ Pendências</button>`;
   }
-  if (coluna !== 'entradas' && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor')) {
+  if (coluna !== 'entradas' && canMover) {
     actionsHtml += `<select class="mini" data-action="mover" data-id="${nota.id}">
         <option value="">Mover para…</option>
         <option value="entradas">Entradas</option>
@@ -4082,7 +4165,7 @@ function renderCard(nota, coluna) {
     if (chkMover.checked) selectedMover.add(nota.id); else selectedMover.delete(nota.id);
     atualizarVisualSelecaoCard(div, nota.id);
   });
-  if (canDistribuir) {
+  if (canMover) {
     div.classList.add('pode-arrastar');
     div.dataset.id = nota.id;
     if (idsSelecionadosParaMover().has(nota.id)) div.classList.add('selecionado');
@@ -4139,7 +4222,7 @@ function atualizarVisualSelecaoCard(div, id) {
 }
 
 function atualizarBarraSelecaoMover() {
-  const podeVer = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor');
+  const podeVer = pode('mover_cards') || pode('distribuir_cards');
   const total = idsSelecionadosParaMover().size;
   const bar = document.getElementById('selecaoMoverBar');
   const dica = document.getElementById('selecaoMoverDica');
@@ -4397,7 +4480,7 @@ function updateSelecaoInfo() {
   // seja só uma) — mantém a tela limpa quando não há nada em seleção.
   const panel = document.getElementById('distribuicaoPanel');
   if (panel) {
-    const podeVer = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor');
+    const podeVer = pode('distribuir_cards');
     panel.classList.toggle('hidden', !(podeVer && selectedEntradas.size >= 1));
   }
 }
@@ -4416,7 +4499,7 @@ function updateSelecaoAtribuicaoLoteInfo() {
   // próprio card.
   const panel = document.getElementById('atribuicaoLotePanel');
   if (panel) {
-    const podeVer = CURRENT_USER && (CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor');
+    const podeVer = pode('distribuir_cards');
     panel.classList.toggle('hidden', !(podeVer && selectedAtribuirLote.size > 1));
   }
 }
@@ -5852,7 +5935,7 @@ function wireComentariosExcluir(notaId) {
 // modal de detalhe e o de edição, já que os dois mostram a mesma lista.
 function podeExcluirAnexoParaNota(nota) {
   return CURRENT_USER.role === 'admin' ||
-    (CURRENT_USER.role === 'supervisor' && (nota.status === 'entradas' || nota.status === 'importadas_sienge' || nota.status === CURRENT_USER.coluna));
+    (CURRENT_USER.role === 'supervisor' && pode('excluir_anexos') && (nota.status === 'entradas' || nota.status === 'importadas_sienge' || nota.status === CURRENT_USER.coluna));
 }
 
 // HTML da seção "Documentos anexados" (+ frete) — fica na coluna principal
@@ -6143,7 +6226,7 @@ async function openEditModal(id) {
     // Operador só edita dados
     // gerais — status e responsável continuam restritos a admin/supervisor,
     // então esses campos nem aparecem no formulário para esse perfil.
-    const podeMudarStatus = CURRENT_USER.role !== 'operador';
+    const podeMudarStatus = CURRENT_USER.role !== 'operador' && pode('mover_cards');
 
     showModal(`
       <h3>Editar ${escapeHtml(rotuloDocumento(nota))}</h3>
@@ -6500,9 +6583,9 @@ function setupUsuarioForm() {
   const papelSel = document.getElementById('uPapel');
   const colunaField = document.getElementById('uColunaField');
   papelSel.addEventListener('change', () => {
-    colunaField.style.display = papelSel.value === 'admin' ? 'none' : '';
+    colunaField.style.display = nivelDoSelectPerfil(papelSel) === 'admin' ? 'none' : '';
     const ac = document.getElementById('uAcessoValidador');
-    if (ac) ac.style.display = papelSel.value === 'admin' ? 'none' : '';
+    if (ac) ac.style.display = nivelDoSelectPerfil(papelSel) === 'admin' ? 'none' : '';
   });
 
   document.getElementById('usuarioForm').addEventListener('submit', async (ev) => {
@@ -6510,22 +6593,26 @@ function setupUsuarioForm() {
     const msg = document.getElementById('usuarioMsg');
     msg.textContent = '';
     const colunaValor = document.getElementById('uColuna').value;
-    if (papelSel.value === 'operador' && !colunaValor) {
+    const nivelNovo = nivelDoSelectPerfil(papelSel);
+    if (nivelNovo === 'operador' && !colunaValor) {
       msg.textContent = 'Selecione a coluna de trabalho do operador.';
       return;
     }
     const body = {
       name: document.getElementById('uNome').value.trim(),
       email: document.getElementById('uEmail').value.trim(),
-      role: papelSel.value,
+      role: nivelNovo,
       coluna: colunaValor || null,
     };
+    const perfilNovo = perfilIdDoSelect(papelSel);
+    if (perfilNovo) body.perfilId = perfilNovo;
     const acessoNovo = lerAcessoValidadorForm('u');
-    if (acessoNovo && papelSel.value !== 'admin') body.validadorAcesso = acessoNovo;
+    if (acessoNovo && nivelNovo !== 'admin') body.validadorAcesso = acessoNovo;
     try {
       await api.post('/api/users', body);
       toast('Usuário vinculado com sucesso.', 'success');
       ev.target.reset();
+      papelSel.dispatchEvent(new Event('change'));
       if (document.getElementById('uAcTodas')) montarAcessoValidadorNovo();
       loadUsuarios();
     } catch (e) {
@@ -6537,19 +6624,20 @@ function setupUsuarioForm() {
 async function loadUsuarios() {
   OPCOES_ACESSO_VALIDADOR = null;
   try {
-    const { users } = await api.get('/api/users');
+    const [{ users }] = await Promise.all([api.get('/api/users'), carregarPerfis()]);
     USERS_CACHE = users;
     const tbody = document.getElementById('usuariosBody');
     const isAdmin = CURRENT_USER.role === 'admin';
+    if (isAdmin) preencherSelectPerfil(document.getElementById('uPapel'), null);
     users.sort((a, b) => (a.role === 'pendente' ? 0 : 1) - (b.role === 'pendente' ? 0 : 1));
     const nPend = users.filter((u) => u.role === 'pendente').length;
     const avisoPend = document.getElementById('usuariosPendentesAviso');
-    if (avisoPend) { avisoPend.style.display = isAdmin && nPend ? '' : 'none'; avisoPend.textContent = `${nPend} cadastro(s) aguardando liberação — clique em "Liberar acesso" para definir o papel e ativar.`; }
+    if (avisoPend) { avisoPend.style.display = isAdmin && nPend ? '' : 'none'; avisoPend.textContent = `${nPend} cadastro(s) aguardando liberação — clique em "Liberar acesso" para definir o perfil e ativar.`; }
     tbody.innerHTML = users.map((u) => `
       <tr${u.role === 'pendente' ? ' style="background: rgba(208, 59, 59, 0.06)"' : ''}>
         <td>${escapeHtml(u.name)}</td>
         <td>${escapeHtml(u.email)}</td>
-        <td><span class="badge role-${u.role}">${ROLE_LABELS[u.role] || u.role}</span></td>
+        <td><span class="badge role-${u.role}">${escapeHtml(u.role === 'pendente' ? ROLE_LABELS.pendente : nomePerfilPorId(u.perfilId, u.role))}</span></td>
         <td>${u.coluna ? COLUNA_LABELS[u.coluna] : '—'}</td>
         <td>${resumoAcessoValidador(u)}</td>
         <td><span class="badge ${u.active ? 'status-active' : 'status-inactive'}">${u.active ? 'Ativo' : 'Inativo'}</span></td>
@@ -6671,7 +6759,7 @@ async function montarAcessoValidador(prefixo, acesso) {
 }
 function montarAcessoValidadorNovo() {
   const box = document.getElementById('uAcessoValidador');
-  if (box) box.style.display = document.getElementById('uPapel').value === 'admin' ? 'none' : '';
+  if (box) box.style.display = nivelDoSelectPerfil(document.getElementById('uPapel')) === 'admin' ? 'none' : '';
   if (!box || box.dataset.montado === '1') {
     if (box && document.getElementById('uAcTodas')) {
       document.getElementById('uAcTodas').checked = false;
@@ -6691,6 +6779,176 @@ function lerAcessoValidadorForm(prefixo) {
   return { todas: todas.checked, cnpjs: marcados('AcEmpresas'), obraIds: marcados('AcObras').map(Number) };
 }
 
+/* ---------- Perfis (aba "Perfis", só administrador) ---------- */
+let PERFIS_CACHE = null;
+async function carregarPerfis(forcar) {
+  if (PERFIS_CACHE && !forcar) return PERFIS_CACHE;
+  try {
+    const { data, error } = await supabaseClient.from('perfis').select('*').order('sistema', { ascending: false }).order('nome');
+    if (error) throw error;
+    PERFIS_CACHE = data || [];
+  } catch (e) {
+    PERFIS_CACHE = []; // sem a tabela de perfis: os selects continuam com os 3 papéis fixos
+  }
+  return PERFIS_CACHE;
+}
+const ORDEM_NIVEL = { admin: 0, supervisor: 1, operador: 2 };
+// Preenche o <select> de perfil (cadastro/edição de usuário). Sem perfis carregados, mantém os 3 papéis fixos.
+function preencherSelectPerfil(sel, perfilId, nivelPadrao) {
+  if (!sel || !PERFIS_CACHE || !PERFIS_CACHE.length) {
+    if (sel && nivelPadrao) sel.value = nivelPadrao;
+    return;
+  }
+  const atual = perfilId || (sel.value && /^\d+$/.test(sel.value) ? Number(sel.value) : null);
+  const lista = [...PERFIS_CACHE].sort((a, b) => (ORDEM_NIVEL[b.nivel] - ORDEM_NIVEL[a.nivel]) || (b.sistema - a.sistema) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  let selecionado = atual && lista.find((p) => Number(p.id) === Number(atual));
+  if (!selecionado) selecionado = lista.find((p) => p.sistema && p.nivel === (nivelPadrao || 'operador')) || lista[0];
+  sel.innerHTML = lista.map((p) => `<option value="${p.id}" data-nivel="${p.nivel}" ${p === selecionado ? 'selected' : ''}>${escapeHtml(p.nome)}${p.sistema ? '' : ' (' + NIVEL_LABELS[p.nivel] + ')'}</option>`).join('');
+  sel.dispatchEvent(new Event('change'));
+}
+function nivelDoSelectPerfil(sel) {
+  if (!sel) return 'operador';
+  const opt = sel.options[sel.selectedIndex];
+  return (opt && opt.dataset.nivel) || sel.value;
+}
+function perfilIdDoSelect(sel) {
+  return sel && /^\d+$/.test(sel.value) ? Number(sel.value) : null;
+}
+function nomePerfilPorId(id, role) {
+  const p = id && PERFIS_CACHE && PERFIS_CACHE.find((x) => Number(x.id) === Number(id));
+  return p ? p.nome : (ROLE_LABELS[role] || role);
+}
+function permissoesHtml(nivel, permissoes) {
+  if (nivel === 'admin') return '<ul class="perfil-perms"><li>✅ Todas as permissões</li></ul>';
+  const tem = new Set(permissoes || []);
+  return `<ul class="perfil-perms">${PERMISSOES.filter((p) => p.niveis.includes(nivel)).map((p) =>
+    `<li class="${tem.has(p.chave) ? '' : 'nao'}" title="${escapeHtml(p.desc)}">${tem.has(p.chave) ? '✅' : '⛔'} ${escapeHtml(p.rotulo)}</li>`).join('')}</ul>`;
+}
+
+async function loadPerfis() {
+  const box = document.getElementById('perfisLista');
+  box.innerHTML = '<p class="legend-note">Carregando perfis…</p>';
+  const btnNovo = document.getElementById('novoPerfilBtn');
+  if (!btnNovo.dataset.ligado) { btnNovo.dataset.ligado = '1'; btnNovo.addEventListener('click', () => openPerfilModal(null)); }
+  const [perfis, usuarios] = await Promise.all([
+    carregarPerfis(true),
+    supabaseClient.from('profiles').select('perfil_id,active').then((r) => r.data || [], () => []),
+  ]);
+  if (!perfis.length) {
+    box.innerHTML = '<p class="error-msg">Não foi possível carregar os perfis (o SQL 20261124_perfis_configuraveis.sql foi aplicado no banco?).</p>';
+    return;
+  }
+  const qtd = {};
+  usuarios.forEach((u) => { if (u.perfil_id) qtd[u.perfil_id] = (qtd[u.perfil_id] || 0) + 1; });
+  const lista = [...perfis].sort((a, b) => (ORDEM_NIVEL[a.nivel] - ORDEM_NIVEL[b.nivel]) || (b.sistema - a.sistema) || a.nome.localeCompare(b.nome, 'pt-BR'));
+  box.innerHTML = lista.map((p) => `
+    <div class="perfil-card">
+      <h3>${escapeHtml(p.nome)}
+        <span class="badge role-${p.nivel}">${NIVEL_LABELS[p.nivel]}</span>
+        ${p.sistema ? '<span class="legend-note">sistema</span>' : ''}
+      </h3>
+      <div class="legend-note">${qtd[p.id] || 0} usuário${(qtd[p.id] || 0) === 1 ? '' : 's'}</div>
+      <p class="perfil-rotina">${p.descricao ? escapeHtml(p.descricao) : '<em>Sem rotina descrita.</em>'}</p>
+      ${permissoesHtml(p.nivel, p.permissoes)}
+      <div class="actions">
+        ${p.nivel === 'admin' ? '' : `<button class="btn secondary small" data-perfil-editar="${p.id}">Editar</button>`}
+        ${p.nivel === 'admin' ? `<button class="btn secondary small" data-perfil-editar="${p.id}">Editar rotina</button>` : ''}
+        <button class="btn secondary small" data-perfil-duplicar="${p.id}">Duplicar</button>
+        ${p.sistema ? '' : `<button class="btn secondary small" data-perfil-excluir="${p.id}" ${qtd[p.id] ? 'disabled title="Mude os usuários deste perfil antes de excluir"' : ''}>Excluir</button>`}
+      </div>
+    </div>`).join('');
+  const achar = (id) => perfis.find((p) => String(p.id) === String(id));
+  box.querySelectorAll('[data-perfil-editar]').forEach((b) => b.addEventListener('click', () => openPerfilModal(achar(b.dataset.perfilEditar))));
+  box.querySelectorAll('[data-perfil-duplicar]').forEach((b) => b.addEventListener('click', () => {
+    const base = achar(b.dataset.perfilDuplicar);
+    openPerfilModal(null, { nome: base.nome + ' (cópia)', nivel: base.nivel === 'admin' ? 'supervisor' : base.nivel, descricao: base.descricao,
+      permissoes: base.nivel === 'admin' ? permissoesDoNivel('supervisor') : base.permissoes });
+  }));
+  box.querySelectorAll('[data-perfil-excluir]').forEach((b) => b.addEventListener('click', async () => {
+    const p = achar(b.dataset.perfilExcluir);
+    if (!confirm(`Excluir o perfil "${p.nome}"?`)) return;
+    const { error } = await supabaseClient.from('perfis').delete().eq('id', p.id);
+    if (error) { toast(/foreign key|violates/i.test(error.message) ? 'Há usuários com este perfil — mude o perfil deles antes de excluir.' : error.message, 'error'); return; }
+    toast('Perfil excluído.', 'success');
+    loadPerfis();
+  }));
+}
+
+// Criar/editar perfil. "modelo" preenche um perfil novo (Duplicar).
+function openPerfilModal(perfil, modelo) {
+  const base = perfil || modelo || { nome: '', nivel: 'operador', descricao: '', permissoes: permissoesDoNivel('operador') };
+  const ehAdmin = base.nivel === 'admin';
+  const nivelFixo = !!(perfil && perfil.sistema);
+  showModal(`
+    <h3>${perfil ? 'Editar perfil' : 'Novo perfil'}</h3>
+    <form id="perfilForm">
+      <div class="field"><label for="pfNome">Nome do perfil *</label>
+        <input type="text" id="pfNome" required maxlength="60" value="${escapeHtml(base.nome || '')}" ${nivelFixo ? 'disabled' : ''} placeholder="Ex.: Comprador, Financeiro, Almoxarife" /></div>
+      <div class="field"><label for="pfNivel">Nível base *</label>
+        <select id="pfNivel" ${nivelFixo ? 'disabled' : ''}>
+          ${ehAdmin ? '<option value="admin" selected>Administrador</option>' : ''}
+          <option value="supervisor" ${base.nivel === 'supervisor' ? 'selected' : ''}>Supervisor — vê a coluna dele (ou todas, sem coluna) e as Entradas</option>
+          <option value="operador" ${base.nivel === 'operador' ? 'selected' : ''}>Operador — vê os cards atribuídos a ele e os que cadastrou</option>
+        </select>
+        ${nivelFixo ? '<span class="legend-note">Perfil do sistema: nome e nível não mudam.</span>' : ''}</div>
+      <div class="field"><label for="pfDescricao">Rotina do perfil</label>
+        <textarea id="pfDescricao" rows="5" maxlength="2000" placeholder="O que esse perfil faz no dia a dia. Ex.: 1) Confere as notas atribuídas pela manhã; 2) Completa vencimento e forma de pagamento; 3) Conclui ou encaminha para Pendências.">${escapeHtml(base.descricao || '')}</textarea></div>
+      <div class="field"><label>Permissões</label><div id="pfPerms"></div></div>
+      <div class="error-msg" id="perfilErro"></div>
+      <div class="form-actions">
+        <button type="button" class="btn secondary" id="perfilCancelar">Cancelar</button>
+        <button type="submit" class="btn">${perfil ? 'Salvar alterações' : 'Criar perfil'}</button>
+      </div>
+    </form>`);
+  const nivelSel = document.getElementById('pfNivel');
+  let marcadas = new Set(base.permissoes || []);
+  const desenhar = () => {
+    const box = document.getElementById('pfPerms');
+    box.querySelectorAll('input[type="checkbox"]').forEach((el) => { if (el.checked) marcadas.add(el.value); else marcadas.delete(el.value); });
+    if (nivelSel.value === 'admin') { box.innerHTML = '<p class="legend-note">O Administrador tem todas as permissões.</p>'; return; }
+    box.innerHTML = PERMISSOES.filter((p) => p.niveis.includes(nivelSel.value)).map((p) => `
+      <label class="perm-opcao"><input type="checkbox" value="${p.chave}" ${marcadas.has(p.chave) ? 'checked' : ''} />
+        <span>${escapeHtml(p.rotulo)}<small>${escapeHtml(p.desc)}</small></span></label>`).join('');
+  };
+  nivelSel.addEventListener('change', desenhar);
+  desenhar();
+  document.getElementById('perfilCancelar').addEventListener('click', closeModal);
+  document.getElementById('perfilForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const erro = document.getElementById('perfilErro');
+    erro.textContent = '';
+    const nivel = nivelSel.value;
+    const linha = {
+      descricao: document.getElementById('pfDescricao').value.trim() || null,
+      permissoes: nivel === 'admin' ? [] : Array.from(document.querySelectorAll('#pfPerms input:checked')).map((el) => el.value),
+    };
+    if (!nivelFixo) { linha.nome = document.getElementById('pfNome').value.trim(); linha.nivel = nivel; }
+    const { error } = perfil
+      ? await supabaseClient.from('perfis').update(linha).eq('id', perfil.id)
+      : await supabaseClient.from('perfis').insert(linha);
+    if (error) { erro.textContent = /perfis_nome_unico|duplicate/i.test(error.message) ? 'Já existe um perfil com este nome.' : error.message; return; }
+    toast(perfil ? 'Perfil atualizado.' : 'Perfil criado.', 'success');
+    closeModal();
+    loadPerfis();
+  });
+}
+
+// "Minha rotina": clicando no nome do perfil, no topo, a pessoa vê a rotina e o que o perfil dela permite.
+function openMinhaRotinaModal() {
+  if (!CURRENT_USER) return;
+  const p = CURRENT_USER.perfil;
+  const nivel = CURRENT_USER.role;
+  showModal(`
+    <h3>Meu perfil: ${escapeHtml(nomePerfilDoUsuario(CURRENT_USER))}</h3>
+    <p class="legend-note">Nível ${escapeHtml(NIVEL_LABELS[nivel] || nivel)}${CURRENT_USER.coluna ? ' · coluna ' + escapeHtml(COLUNA_LABELS[CURRENT_USER.coluna]) : ''}</p>
+    <div class="modal-section-title">Rotina</div>
+    <p class="perfil-rotina" style="white-space:pre-wrap">${p && p.descricao ? escapeHtml(p.descricao) : 'O administrador ainda não descreveu a rotina deste perfil.'}</p>
+    <div class="modal-section-title">O que posso fazer</div>
+    ${permissoesHtml(nivel, p ? p.permissoes : permissoesDoNivel(nivel))}
+    <div class="form-actions"><button type="button" class="btn" id="minhaRotinaOk">Fechar</button></div>`);
+  document.getElementById('minhaRotinaOk').addEventListener('click', closeModal);
+}
+
 // Edição de dados do usuário (nome, papel, coluna) — o e-mail é o campo-chave
 // (identifica a conta/login) e é sempre mostrado como somente leitura aqui,
 // nunca enviado no corpo da requisição de atualização.
@@ -6698,12 +6956,12 @@ function openEditUsuarioModal(usuario, opts) {
   const liberar = !!(opts && opts.liberar);
   showModal(`
     <h3>${liberar ? 'Liberar acesso' : 'Editar usuário'}</h3>
-    ${liberar ? '<p class="legend-note" style="margin-bottom:10px">Cadastro feito pela própria pessoa. Defina o papel (e a coluna, se for operador) — ao salvar, o acesso é liberado.</p>' : ''}
+    ${liberar ? '<p class="legend-note" style="margin-bottom:10px">Cadastro feito pela própria pessoa. Defina o perfil (e a coluna, se for operador) — ao salvar, o acesso é liberado.</p>' : ''}
     <form id="editUsuarioForm">
       <div class="field"><label>E-mail (não pode ser alterado)</label><input type="email" value="${escapeHtml(usuario.email)}" disabled /></div>
       <div class="field"><label for="euNome">Nome *</label><input type="text" id="euNome" required value="${escapeHtml(usuario.name)}" /></div>
       <div class="field">
-        <label for="euPapel">Papel *</label>
+        <label for="euPapel">Perfil *</label>
         <select id="euPapel" required>
           <option value="operador" ${usuario.role === 'operador' || usuario.role === 'pendente' ? 'selected' : ''}>Operador</option>
           <option value="supervisor" ${usuario.role === 'supervisor' ? 'selected' : ''}>Supervisor</option>
@@ -6727,11 +6985,13 @@ function openEditUsuarioModal(usuario, opts) {
     </form>
   `);
   const papelSel = document.getElementById('euPapel');
+  preencherSelectPerfil(papelSel, usuario.role === 'pendente' ? null : usuario.perfilId, usuario.role === 'pendente' ? 'operador' : usuario.role);
   const colunaField = document.getElementById('euColunaField');
   const atualizarColunaField = () => {
-    colunaField.style.display = papelSel.value === 'admin' ? 'none' : '';
+    const nivel = nivelDoSelectPerfil(papelSel);
+    colunaField.style.display = nivel === 'admin' ? 'none' : '';
     const ac = document.getElementById('euAcessoValidador');
-    if (ac) ac.style.display = papelSel.value === 'admin' ? 'none' : '';
+    if (ac) ac.style.display = nivel === 'admin' ? 'none' : '';
   };
   papelSel.addEventListener('change', atualizarColunaField);
   atualizarColunaField();
@@ -6745,22 +7005,25 @@ function openEditUsuarioModal(usuario, opts) {
     const errEl = document.getElementById('editUsuarioError');
     errEl.textContent = '';
     const colunaValor = document.getElementById('euColuna').value;
-    if (papelSel.value === 'operador' && !colunaValor) {
+    const nivelEd = nivelDoSelectPerfil(papelSel);
+    if (nivelEd === 'operador' && !colunaValor) {
       errEl.textContent = 'Selecione a coluna de trabalho do operador.';
       return;
     }
     const body = {
       name: document.getElementById('euNome').value.trim(),
-      role: papelSel.value,
+      role: nivelEd,
     };
-    if (papelSel.value !== 'admin') {
+    const perfilEd = perfilIdDoSelect(papelSel);
+    if (perfilEd) body.perfilId = perfilEd;
+    if (nivelEd !== 'admin') {
       body.coluna = colunaValor || null;
     } else {
       body.coluna = null;
     }
     if (liberar) body.active = true;
     const acessoEditado = lerAcessoValidadorForm('eu');
-    if (acessoEditado && papelSel.value !== 'admin') body.validadorAcesso = acessoEditado;
+    if (acessoEditado && nivelEd !== 'admin') body.validadorAcesso = acessoEditado;
     try {
       await api.put(`/api/users/${usuario.id}`, body);
       toast(liberar ? 'Acesso liberado.' : 'Usuário atualizado com sucesso.', 'success');
