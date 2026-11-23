@@ -3868,11 +3868,10 @@ function renderCard(nota, coluna) {
   div.className = 'card';
   div.dataset.prioridade = nota.prioridade || 'media';
   const canDistribuir = CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor';
-  // Um operador responsável pela validação de recebimento (homologação) da
-  // obra da nota também pode editar os dados gerais dela, mesmo sem ser
-  // formalmente operador da coluna atual — só não pode mudar status/responsável
-  // (isso fica restrito a admin/supervisor, ver PUT /api/notas/:id).
-  const canEditarDados = canDistribuir || (CURRENT_USER.role === 'operador' && podeHomologar(nota));
+  // O operador também edita os dados gerais de qualquer card que enxerga —
+  // só não pode mudar status/responsável (isso fica restrito a
+  // admin/supervisor, ver PUT /api/notas/:id).
+  const canEditarDados = canDistribuir || CURRENT_USER.role === 'operador';
   const canConcluir =
     CURRENT_USER.role === 'admin' ||
     (CURRENT_USER.role === 'supervisor' && CURRENT_USER.coluna === nota.status) ||
@@ -4042,8 +4041,7 @@ function renderCard(nota, coluna) {
       </select>`;
   }
   // Edição de dados gerais: admin/supervisor (que também podem mudar status e
-  // responsável) e, além deles, o operador responsável pela homologação da
-  // obra da nota (só dados gerais — ver canEditarDados).
+  // responsável) e o operador (só dados gerais — ver canEditarDados).
   if (canEditarDados) {
     actionsHtml += `<button class="btn secondary small" data-action="editar" data-id="${nota.id}">Editar</button>`;
   }
@@ -6142,7 +6140,7 @@ async function openEditModal(id) {
     const statusOptions = ['importadas_sienge', 'entradas', 'lancamento', 'financeiro_cx', 'pendencias', 'concluido']
       .map((s) => `<option value="${s}" ${s === nota.status ? 'selected' : ''}>${COLUNA_LABELS[s]}</option>`).join('');
     const formasPagamento = ['Boleto', 'PIX', 'Transferência', 'Cartão', 'Depósito', 'Cheque', 'Outro'];
-    // Operador (habilitado por ser validador da obra da nota) só edita dados
+    // Operador só edita dados
     // gerais — status e responsável continuam restritos a admin/supervisor,
     // então esses campos nem aparecem no formulário para esse perfil.
     const podeMudarStatus = CURRENT_USER.role !== 'operador';
