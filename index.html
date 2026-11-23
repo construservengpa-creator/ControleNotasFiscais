@@ -1975,8 +1975,10 @@ input[type=checkbox]:focus-visible{outline:2px solid #22A35A;outline-offset:2px}
         <div class="panel">
           <h2>Perfis de acesso</h2>
           <p class="desc">
-            Cada usuário tem um perfil. O <strong>nível</strong> do perfil (Supervisor ou Operador) define o que a pessoa
-            enxerga no quadro e as regras de coluna; as <strong>permissões</strong> ligam ou desligam cada ação; e a
+            Cada usuário tem um perfil. As <strong>permissões</strong> ligam ou desligam cada função — todas podem ser dadas a
+            qualquer perfil. O <strong>nível</strong> (Supervisor ou Operador) define o que a pessoa enxerga no quadro: o operador vê
+            só os cards dele, a não ser que tenha "Ver todos os cards da coluna e de Entradas"; quem tem coluna definida só move e
+            distribui para a própria coluna. A
             <strong>rotina</strong> descreve o que esse perfil faz no dia a dia (a pessoa vê clicando no nome do perfil, no topo da tela).
             Os perfis Administrador, Supervisor e Operador são do sistema: não podem ser excluídos, mas as permissões e a rotina de Supervisor e Operador podem ser ajustadas.
           </p>
@@ -2926,7 +2928,7 @@ async function buscarUsuariosVisiveis() {
     const { data } = await supabaseClient.from('profiles').select('*').neq('role', 'admin');
     return data || [];
   }
-  if (CURRENT_USER.role === 'supervisor') {
+  if (CURRENT_USER.role === 'supervisor' || (CURRENT_USER.role === 'operador' && (pode('distribuir_cards') || pode('ver_usuarios')))) {
     const { data } = await supabaseClient.from('profiles').select('*').eq('coluna', CURRENT_USER.coluna).eq('role', 'operador');
     return data || [];
   }
@@ -3228,20 +3230,22 @@ let CURRENT_USER = null;
    o que ele enxerga e as regras de coluna, como o antigo "papel") e permissões liga/desliga. Só valem as
    permissões que existem para o nível; o Administrador tem todas. O banco aplica as mesmas regras
    (SQL 20261124_perfis_configuraveis.sql — tem_permissao / exigir_permissao); aqui elas só escondem os botões. */
+const AMBOS = ['supervisor', 'operador'];
 const PERMISSOES = [
-  { chave: 'cadastrar_nota', rotulo: 'Cadastrar nota', desc: 'Aba "Cadastrar Nota".', niveis: ['supervisor', 'operador'] },
-  { chave: 'editar_card', rotulo: 'Editar dados do card', desc: 'Botão "Editar" (número, fornecedor, valor, obra, vencimento, frete…).', niveis: ['supervisor', 'operador'] },
-  { chave: 'concluir_card', rotulo: 'Concluir card', desc: 'Botão "Concluir" (operador: só nos cards atribuídos a ele, na sua coluna).', niveis: ['supervisor', 'operador'] },
-  { chave: 'escalar_pendencias', rotulo: 'Encaminhar para Pendências', desc: 'Botão "Escalar p/ Pendências" nos cards atribuídos a ele.', niveis: ['operador'] },
-  { chave: 'mover_cards', rotulo: 'Mover cards entre colunas', desc: 'Arrastar cards, "Mover para…", mover em massa e "Reabrir".', niveis: ['supervisor'] },
-  { chave: 'distribuir_cards', rotulo: 'Distribuir e atribuir responsável', desc: 'Distribuição de Entradas, "Atribuir a…" e atribuição em massa.', niveis: ['supervisor'] },
-  { chave: 'alterar_prioridade', rotulo: 'Alterar prioridade', desc: 'Seletor de prioridade nos cards de Entradas / Importadas SIENGE.', niveis: ['supervisor'] },
-  { chave: 'validar_lancamento', rotulo: 'Validar lançamento', desc: '"Validar lançamento e encerrar" na Finalização.', niveis: ['supervisor'] },
-  { chave: 'excluir_anexos', rotulo: 'Excluir anexos de outras pessoas', desc: 'Excluir documentos anexados aos cards.', niveis: ['supervisor'] },
-  { chave: 'importar', rotulo: 'Importar SIENGE e CT-es', desc: 'Aba "Importar SIENGE" e importação de CT-es.', niveis: ['supervisor'] },
-  { chave: 'gerenciar_obras', rotulo: 'Cadastrar e editar obras', desc: 'Aba "Obras".', niveis: ['supervisor'] },
-  { chave: 'ver_usuarios', rotulo: 'Ver a equipe', desc: 'Aba "Usuários" (só consulta — editar usuários é do Administrador).', niveis: ['supervisor'] },
-  { chave: 'ver_auditoria', rotulo: 'Ver auditoria', desc: 'Aba "Auditoria".', niveis: ['supervisor'] },
+  { chave: 'ver_cards_coluna', rotulo: 'Ver todos os cards da coluna e de Entradas', desc: 'Enxerga Entradas, Importadas SIENGE, Finalização e todos os cards da sua coluna (sem isso, só os atribuídos a ele, os que cadastrou e os das obras em que é responsável). Necessário para distribuir e mover.', niveis: ['operador'] },
+  { chave: 'cadastrar_nota', rotulo: 'Cadastrar nota', desc: 'Aba "Cadastrar Nota".', niveis: AMBOS },
+  { chave: 'editar_card', rotulo: 'Editar dados do card', desc: 'Botão "Editar" (número, fornecedor, valor, obra, vencimento, frete…).', niveis: AMBOS },
+  { chave: 'concluir_card', rotulo: 'Concluir card', desc: 'Botão "Concluir" (nos cards atribuídos a ele ou, com "Mover cards", nos da sua coluna).', niveis: AMBOS },
+  { chave: 'escalar_pendencias', rotulo: 'Encaminhar para Pendências', desc: 'Botão "Escalar p/ Pendências" nos cards atribuídos a ele.', niveis: AMBOS },
+  { chave: 'mover_cards', rotulo: 'Mover cards entre colunas', desc: 'Arrastar cards, "Mover para…", mover em massa e "Reabrir" (com coluna definida: só cards que envolvem a coluna dele).', niveis: AMBOS },
+  { chave: 'distribuir_cards', rotulo: 'Distribuir e atribuir responsável', desc: 'Distribuição de Entradas, "Atribuir a…" e atribuição em massa (com coluna definida: só para a coluna dele).', niveis: AMBOS },
+  { chave: 'alterar_prioridade', rotulo: 'Alterar prioridade', desc: 'Seletor de prioridade nos cards de Entradas / Importadas SIENGE.', niveis: AMBOS },
+  { chave: 'validar_lancamento', rotulo: 'Validar lançamento', desc: '"Validar lançamento e encerrar" na Finalização.', niveis: AMBOS },
+  { chave: 'excluir_anexos', rotulo: 'Excluir anexos de outras pessoas', desc: 'Excluir documentos anexados aos cards (cada um sempre pode excluir os que ele mesmo anexou).', niveis: AMBOS },
+  { chave: 'importar', rotulo: 'Importar SIENGE e CT-es', desc: 'Aba "Importar SIENGE" e importação de CT-es.', niveis: AMBOS },
+  { chave: 'gerenciar_obras', rotulo: 'Cadastrar e editar obras', desc: 'Aba "Obras".', niveis: AMBOS },
+  { chave: 'ver_usuarios', rotulo: 'Ver a equipe', desc: 'Aba "Usuários" (só consulta — editar usuários é do Administrador).', niveis: AMBOS },
+  { chave: 'ver_auditoria', rotulo: 'Ver auditoria', desc: 'Aba "Auditoria".', niveis: AMBOS },
 ];
 const NIVEL_LABELS = { admin: 'Administrador', supervisor: 'Supervisor', operador: 'Operador' };
 function permissoesDoNivel(nivel) {
@@ -3274,7 +3278,7 @@ function nomePerfilDoUsuario(u) {
    IMPORTANTE ao editar este arquivo: mude APP_VERSION a cada publicação. A tela compara com a versão do arquivo
    no servidor (a cada 2 min e ao voltar para a aba) e, se mudou, mostra a faixa "Nova versão — Recarregar".
    Assim ninguém fica dias com uma aba antiga rodando lógica velha. */
-const APP_VERSION = '2026-11-23T14:00:00-03:00';
+const APP_VERSION = '2026-11-23T18:00:00-03:00';
 let _versaoAvisoMostrado = false, _versaoUltimaChecagem = 0;
 function iniciarVerificacaoDeVersao() {
   const logo = document.getElementById('appLogo');
@@ -3619,14 +3623,15 @@ function afterLogin(user) {
   document.getElementById('novoUsuarioPanel').classList.toggle('hidden', !isAdmin);
   document.getElementById('novaObraPanel').classList.toggle('hidden', !pode('gerenciar_obras'));
 
-  if (isSupervisor && user.coluna) {
+  const distribuiComoSupervisor = isSupervisor || (user.role === 'operador' && pode('distribuir_cards'));
+  if (distribuiComoSupervisor && user.coluna) {
     const sel = document.getElementById('distribuirColunaSelect');
     sel.innerHTML = `<option value="${user.coluna}">${COLUNA_LABELS[user.coluna]}</option>`;
     const selLote = document.getElementById('atribuirLoteColunaSelect');
     selLote.innerHTML = `<option value="${user.coluna}">${COLUNA_LABELS[user.coluna]}</option>`;
   }
 
-  if (isAdmin || isSupervisor) {
+  if (isAdmin || isSupervisor || pode('distribuir_cards')) {
     atualizarOperadoresDistribuicao();
     atualizarOperadoresAtribuicaoLote();
   }
@@ -3825,7 +3830,7 @@ let AUX_BOARD_TS = 0;
 async function loadBoard(forcarAux = false) {
   BOARD_SEQ += 1; // avisa a atualização automática de que há um carregamento completo em curso
   try {
-    const podeGerenciar = CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor';
+    const podeGerenciar = CURRENT_USER.role === 'admin' || CURRENT_USER.role === 'supervisor' || pode('distribuir_cards') || pode('mover_cards');
     // Também recarrega as obras (com os validadores de recebimento de cada
     // uma) e, para quem pode distribuir, a lista de usuários — usadas para
     // montar corretamente o botão "Homologar recebimento" e o seletor
@@ -3958,7 +3963,8 @@ function renderCard(nota, coluna) {
   const canConcluir = pode('concluir_card') && (
     CURRENT_USER.role === 'admin' ||
     (CURRENT_USER.role === 'supervisor' && CURRENT_USER.coluna === nota.status) ||
-    (CURRENT_USER.role === 'operador' && CURRENT_USER.id === nota.assignedTo));
+    (CURRENT_USER.role === 'operador' && CURRENT_USER.id === nota.assignedTo) ||
+    (CURRENT_USER.role === 'operador' && pode('mover_cards') && CURRENT_USER.coluna === nota.status));
   const canEscalar = pode('escalar_pendencias') &&
     CURRENT_USER.role === 'operador' && CURRENT_USER.id === nota.assignedTo && coluna !== 'entradas' && coluna !== 'pendencias';
   const canEditarPrioridade = (coluna === 'entradas' || coluna === 'importadas_sienge') && pode('alterar_prioridade');
@@ -5935,7 +5941,7 @@ function wireComentariosExcluir(notaId) {
 // modal de detalhe e o de edição, já que os dois mostram a mesma lista.
 function podeExcluirAnexoParaNota(nota) {
   return CURRENT_USER.role === 'admin' ||
-    (CURRENT_USER.role === 'supervisor' && pode('excluir_anexos') && (nota.status === 'entradas' || nota.status === 'importadas_sienge' || nota.status === CURRENT_USER.coluna));
+    ((CURRENT_USER.role === 'supervisor' || CURRENT_USER.role === 'operador') && pode('excluir_anexos') && (nota.status === 'entradas' || nota.status === 'importadas_sienge' || nota.status === CURRENT_USER.coluna));
 }
 
 // HTML da seção "Documentos anexados" (+ frete) — fica na coluna principal
@@ -6226,7 +6232,7 @@ async function openEditModal(id) {
     // Operador só edita dados
     // gerais — status e responsável continuam restritos a admin/supervisor,
     // então esses campos nem aparecem no formulário para esse perfil.
-    const podeMudarStatus = CURRENT_USER.role !== 'operador' && pode('mover_cards');
+    const podeMudarStatus = pode('mover_cards');
 
     showModal(`
       <h3>Editar ${escapeHtml(rotuloDocumento(nota))}</h3>
@@ -6888,7 +6894,7 @@ function openPerfilModal(perfil, modelo) {
         <select id="pfNivel" ${nivelFixo ? 'disabled' : ''}>
           ${ehAdmin ? '<option value="admin" selected>Administrador</option>' : ''}
           <option value="supervisor" ${base.nivel === 'supervisor' ? 'selected' : ''}>Supervisor — vê a coluna dele (ou todas, sem coluna) e as Entradas</option>
-          <option value="operador" ${base.nivel === 'operador' ? 'selected' : ''}>Operador — vê os cards atribuídos a ele e os que cadastrou</option>
+          <option value="operador" ${base.nivel === 'operador' ? 'selected' : ''}>Operador — vê os cards atribuídos a ele (ou a coluna toda, com a 1ª permissão)</option>
         </select>
         ${nivelFixo ? '<span class="legend-note">Perfil do sistema: nome e nível não mudam.</span>' : ''}</div>
       <div class="field"><label for="pfDescricao">Rotina do perfil</label>
